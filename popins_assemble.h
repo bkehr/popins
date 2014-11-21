@@ -16,6 +16,7 @@ using namespace seqan;
 inline void
 removeAssemblyDirectory(CharString const & path)
 {
+    removeFile(path, "contigs.fa");
     removeFile(path, "Graph2");
     removeFile(path, "LastGraph");
     removeFile(path, "Log");
@@ -31,37 +32,37 @@ removeAssemblyDirectory(CharString const & path)
 // ==========================================================================
 
 inline int
-remapping(CharString & fastqFirst,
-          CharString & fastqSecond,
-          CharString & fastqSingle,
+remapping(Triple<CharString> & fastqFilesTemp,
+          Triple<CharString> & fastqFiles,
           CharString const & referenceFile,
           CharString const & workingDirectory,
+          CharString const & tempDir,
           unsigned humanSeqs,
           unsigned threads,
           CharString & memory)
 {
     std::stringstream cmd;
     
-    CharString remappedSam = getFileName(workingDirectory, "remapped.sam");
-    CharString remappedBam = getFileName(workingDirectory, "remapped.bam");
-    CharString remappedUnsortedBam = getFileName(workingDirectory, "remapped_unsorted.bam");
+    CharString remappedSam = getFileName(tempDir, "remapped.sam");
+    CharString remappedBam = getFileName(tempDir, "remapped.bam");
+    CharString remappedUnsortedBam = getFileName(tempDir, "remapped_unsorted.bam");
     
     // Run BWA on unmapped reads (pairs).
     std::cerr << "[" << time(0) << "] Remapping unmapped reads using " << BWA << std::endl;
     cmd.str("");
-    cmd << BWA << " mem -t " << threads << " " << referenceFile << " " << fastqFirst << " " << fastqSecond << " > " << remappedSam;
+    cmd << BWA << " mem -t " << threads << " " << referenceFile << " " << fastqFilesTemp.i1 << " " << fastqFilesTemp.i2 << " > " << remappedSam;
     if (system(cmd.str().c_str()) != 0)
     {
-        std::cerr << "ERROR while running bwa on " << fastqFirst << " and " << fastqSecond << std::endl;
+        std::cerr << "ERROR while running bwa on " << fastqFilesTemp.i1 << " and " << fastqFilesTemp.i2 << std::endl;
         return 1;
     }
     
     // Run BWA on unmapped reads (single end).
     cmd.str("");
-    cmd << BWA << " mem -t " << threads << " " << referenceFile << " " << fastqSingle << " | awk '$1 !~ /@/' >> " << remappedSam;
+    cmd << BWA << " mem -t " << threads << " " << referenceFile << " " << fastqFilesTemp.i3 << " | awk '$1 !~ /@/' >> " << remappedSam;
     if (system(cmd.str().c_str()) != 0)
     {
-        std::cerr << "ERROR while running bwa on " << fastqSingle << std::endl;
+        std::cerr << "ERROR while running bwa on " << fastqFilesTemp.i3 << std::endl;
         return 1;
     }
     
@@ -77,9 +78,9 @@ remapping(CharString & fastqFirst,
     remove(toCString(remappedSam));
     
     // Sort bam file.
-    std::cerr << "[" << time(0) << "] Sorting " << remappedBam << " using " << SAMTOOLS << std::endl;
+    std::cerr << "[" << time(0) << "] Sorting " << remappedUnsortedBam << " using " << SAMTOOLS << std::endl;
     cmd.str("");
-    cmd << SAMTOOLS << " sort -m " << memory << " " << remappedUnsortedBam << " " << workingDirectory << "/remapped";
+    cmd << SAMTOOLS << " sort -m " << memory << " " << remappedUnsortedBam << " " << tempDir << "/remapped";
     if (system(cmd.str().c_str()) != 0)
     {
         std::cerr << "ERROR while sorting BWA output " << remappedUnsortedBam << std::endl;
@@ -88,7 +89,7 @@ remapping(CharString & fastqFirst,
 
     // Crop unmapped and create bam file of remapping.
     std::cerr << "[" << time(0) << "] Cropping unmapped reads from " << remappedBam << std::endl;
-    if (crop_unmapped(fastqFirst, fastqSecond, fastqSingle, remappedUnsortedBam, remappedBam, humanSeqs, NoAdapters()) != 0)
+    if (crop_unmapped(fastqFiles, remappedUnsortedBam, remappedBam, humanSeqs, NoAdapters()) != 0)
         return 1;
     
     // Sort <WD>/remapped.bam by read name.
@@ -334,23 +335,19 @@ merge_and_set_mate(CharString & mergedBam, CharString & nonRefBam, CharString & 
 // ==========================================================================
 
 inline bool
-sickle_filtering(CharString & firstFiltered,
-                 CharString & secondFiltered,
-                 CharString & singleFiltered,
-                 CharString & fastqFirst,
-                 CharString & fastqSecond,
-                 CharString & fastqSingle,
+sickle_filtering(Triple<CharString> & filteredFiles,
+                 Triple<CharString> & fastqFiles,
                  CharString & workingDirectory)
 {
     std::stringstream cmd;
 
     std::cerr << "[" << time(0) << "] " << "Filtering fastq files using " << SICKLE << std::endl;
     cmd.str("");
-    cmd << SICKLE << " pe -q 20 -l 60 -x -n -t sanger -f" << fastqFirst << " -r " << fastqSecond;
-    cmd << " -o " << firstFiltered << " -p " << secondFiltered << " -s " << singleFiltered;
+    cmd << SICKLE << " pe -q 20 -l 60 -x -n -t sanger -f" << fastqFiles.i1 << " -r " << fastqFiles.i2;
+    cmd << " -o " << filteredFiles.i1 << " -p " << filteredFiles.i2 << " -s " << filteredFiles.i3;
     if (system(cmd.str().c_str()) != 0) // runs sickle on paired end reads
     {
-        std::cerr << "ERROR while filtering " << fastqFirst << " and " << fastqSecond;
+        std::cerr << "ERROR while filtering " << fastqFiles.i1 << " and " << fastqFiles.i2;
         std::cerr << " using " << SICKLE << std::endl;
         return 1;
     }
@@ -358,18 +355,18 @@ sickle_filtering(CharString & firstFiltered,
     CharString singleFiltered2 = getFileName(workingDirectory, "filtered.single2.fastq");
     
     cmd.str("");
-    cmd << SICKLE << " se -q 20 -l 60 -x -n -t sanger -f " << fastqSingle << " -o " << singleFiltered2;
+    cmd << SICKLE << " se -q 20 -l 60 -x -n -t sanger -f " << fastqFiles.i3 << " -o " << singleFiltered2;
     if (system(cmd.str().c_str()) != 0) // runs sickle on single end reads
     {
-        std::cerr << "ERROR while filtering " << fastqSingle << " using " << SICKLE << std::endl;
+        std::cerr << "ERROR while filtering " << fastqFiles.i3 << " using " << SICKLE << std::endl;
         return 1;
     }
     
     cmd.str("");
-    cmd << "cat " << singleFiltered2 << " >> " << singleFiltered;
+    cmd << "cat " << singleFiltered2 << " >> " << filteredFiles.i3;
     if (system(cmd.str().c_str()) != 0) // merges the fastq files of single end reads.
     {
-        std::cerr << "ERROR while concatenating " << singleFiltered2 << " to " << singleFiltered << std::endl;
+        std::cerr << "ERROR while concatenating " << singleFiltered2 << " to " << filteredFiles.i3 << std::endl;
         return 1;
     }
     
@@ -383,7 +380,7 @@ sickle_filtering(CharString & firstFiltered,
 // ==========================================================================
 
 inline bool
-velvet_assembly(CharString & firstFiltered, CharString & secondFiltered, CharString & singleFiltered, CharString & workingDirectory, unsigned kmerLength)
+velvet_assembly(Triple<CharString> & filteredFiles, CharString & workingDirectory, unsigned kmerLength)
 {
     std::stringstream cmd;
     
@@ -391,12 +388,12 @@ velvet_assembly(CharString & firstFiltered, CharString & secondFiltered, CharStr
     
     std::cerr << "[" << time(0) << "] " << "Preparing assembly of unmapped reads from filtered fastq files using " << VELVETH << std::endl;
     cmd.str("");
-    cmd << VELVETH << " " << assemblyDirectory << " " << kmerLength << " -short -fastq " << singleFiltered;
-    cmd << " -shortPaired -fastq -separate " << firstFiltered << " " << secondFiltered;
+    cmd << VELVETH << " " << assemblyDirectory << " " << kmerLength << " -short -fastq " << filteredFiles.i3;
+    cmd << " -shortPaired -fastq -separate " << filteredFiles.i1 << " " << filteredFiles.i2;
     if (system(cmd.str().c_str()) != 0) // prepares velvet assembly, use k=47 for longer contigs
     {
         std::cerr << "ERROR while preparing assembly with " << VELVETH << " of ";
-        std::cerr << singleFiltered << ", " << firstFiltered << ", and " << secondFiltered << std::endl;
+        std::cerr << filteredFiles.i3 << ", " << filteredFiles.i1 << ", and " << filteredFiles.i2 << std::endl;
         return 1;
     }
     
@@ -408,12 +405,6 @@ velvet_assembly(CharString & firstFiltered, CharString & secondFiltered, CharStr
         std::cerr << "ERROR while assembling " << assemblyDirectory << " with " << VELVETG << std::endl;
         return 1;
     }
-    
-    CharString contigFileAssembly = getFileName(workingDirectory, "assembly/contigs.fa");
-    CharString contigFile = getFileName(workingDirectory, "contigs.fa");
-
-    rename(toCString(contigFileAssembly), toCString(contigFile));
-    removeAssemblyDirectory(assemblyDirectory);
     
     return 0;
 }
@@ -438,35 +429,54 @@ int popins_assemble(int argc, char const ** argv)
         logMsg += options.workingDirectory;
         std::cerr << "[" << time(0) << "] " << logMsg << std::endl;
     }
+
+    char temp[] = "/tmp/popins_XXXXXXXX";
+    CharString tempDir = mkdtemp(temp);
+    std::cerr << "[" << time(0) << "] Using temporary directory " << tempDir << std::endl;
     
+    CharString matesBam = getFileName(tempDir, "mates.bam");
+
+    CharString fastqFirstTemp = getFileName(tempDir, "paired.1.fastq");
+    CharString fastqSecondTemp = getFileName(tempDir, "paired.2.fastq");
+    CharString fastqSingleTemp = getFileName(tempDir, "single.fastq");
+    CharString nonRefBamTemp = getFileName(tempDir, "non_ref.bam");
+
     CharString fastqFirst = getFileName(options.workingDirectory, "paired.1.fastq");
     CharString fastqSecond = getFileName(options.workingDirectory, "paired.2.fastq");
     CharString fastqSingle = getFileName(options.workingDirectory, "single.fastq");
-    CharString matesBam = getFileName(options.workingDirectory, "mates.bam");
     CharString nonRefBam = getFileName(options.workingDirectory, "non_ref.bam");
+    
+    Triple<CharString> fastqFiles;
+    if (options.referenceFile != "")
+        fastqFiles = Triple<CharString>(fastqFirstTemp, fastqSecondTemp, fastqSingleTemp);
+    else
+        fastqFiles = Triple<CharString>(fastqFirst, fastqSecond, fastqSingle);
 
     // Crop unmapped reads and reads with unreliable mappings from the input bam file.
     std::cerr << "[" << time(0) << "] Cropping unmapped reads from " << options.mappingFile << std::endl;
     if (options.adapters == "HiSeqX")
     {
-        if (crop_unmapped(fastqFirst, fastqSecond, fastqSingle, matesBam, options.mappingFile, options.humanSeqs, HiSeqXAdapters()) != 0)
+        if (crop_unmapped(fastqFiles, matesBam, options.mappingFile, options.humanSeqs, HiSeqXAdapters()) != 0)
             return 1;
     }
     else if (options.adapters == "HiSeq")
     {
-        if (crop_unmapped(fastqFirst, fastqSecond, fastqSingle, matesBam, options.mappingFile, options.humanSeqs, HiSeqAdapters()) != 0)
+        if (crop_unmapped(fastqFiles, matesBam, options.mappingFile, options.humanSeqs, HiSeqAdapters()) != 0)
             return 1;
     }
     else
     {
-        if (crop_unmapped(fastqFirst, fastqSecond, fastqSingle, matesBam, options.mappingFile, options.humanSeqs, NoAdapters()) != 0)
+        if (crop_unmapped(fastqFiles, matesBam, options.mappingFile, options.humanSeqs, NoAdapters()) != 0)
             return 1;
     }
 
     // Sort <WD>/mates.bam by read name.
     std::cerr << "[" << time(0) << "] " << "Sorting " << matesBam << " using " << SAMTOOLS << std::endl;
     std::stringstream cmd;
-    cmd << SAMTOOLS << " sort -n -m " << options.memory << " " << matesBam << " " << options.workingDirectory << "/non_ref";
+    if (options.referenceFile != "")
+        cmd << SAMTOOLS << " sort -n -m " << options.memory << " " << matesBam << " " << tempDir << "/non_ref";
+    else
+        cmd << SAMTOOLS << " sort -n -m " << options.memory << " " << matesBam << " " << options.workingDirectory << "/non_ref";
     if (system(cmd.str().c_str()) != 0)
     {
         std::cerr << "ERROR while sorting " << matesBam << std::endl;
@@ -478,36 +488,52 @@ int popins_assemble(int argc, char const ** argv)
     // Remapping of unmapped with bwa if a fasta reference is given.
     if (options.referenceFile != "")
     {
+        Triple<CharString> fastqFilesTemp = fastqFiles;
+        fastqFiles = Triple<CharString>(fastqFirst, fastqSecond, fastqSingle);
+        
         // Align with bwa, update fastq files of unaligned reads, and sort remaining bam records by read name.
-        CharString remappedBam = getFileName(options.workingDirectory, "remapped.bam");
-        if (remapping(fastqFirst, fastqSecond, fastqSingle,
-                      options.referenceFile, options.workingDirectory,
+        CharString remappedBam = getFileName(tempDir, "remapped.bam");
+        if (remapping(fastqFilesTemp, fastqFiles, options.referenceFile, options.workingDirectory, tempDir,
                       options.humanSeqs, options.threads, options.memory) != 0)
             return 1;
+        remove(toCString(fastqFirstTemp));
+        remove(toCString(fastqSecondTemp));
+        remove(toCString(fastqSingleTemp));
         
         // Set the mate's location and merge non_ref.bam and remapped.bam into a single file.
-        CharString mergedBam = getFileName(options.workingDirectory, "merged.bam");
+        CharString mergedBam = getFileName(options.workingDirectory, "non_ref.bam");
         merge_and_set_mate(mergedBam, nonRefBam, remappedBam);
         remove(toCString(remappedBam));
         remove(toCString(nonRefBam));
-        rename(toCString(mergedBam), toCString(nonRefBam));
     }
     
-    CharString firstFiltered = getFileName(options.workingDirectory, "filtered.paired.1.fastq");
-    CharString secondFiltered = getFileName(options.workingDirectory, "filtered.paired.2.fastq");
-    CharString singleFiltered = getFileName(options.workingDirectory, "filtered.single.fastq");
+    CharString firstFiltered = getFileName(tempDir, "filtered.paired.1.fastq");
+    CharString secondFiltered = getFileName(tempDir, "filtered.paired.2.fastq");
+    CharString singleFiltered = getFileName(tempDir, "filtered.single.fastq");
+    Triple<CharString> filteredFiles(firstFiltered, secondFiltered, singleFiltered);
     
     // Quality filtering/trimming with sickle.
-    if (sickle_filtering(firstFiltered, secondFiltered, singleFiltered,
-                     fastqFirst, fastqSecond, fastqSingle,
-                     options.workingDirectory) != 0) return 1;
+    if (sickle_filtering(filteredFiles, fastqFiles, tempDir) != 0)
+        return 1;
 
     // Assembly with velvet.
-    if (velvet_assembly(firstFiltered, secondFiltered, singleFiltered, options.workingDirectory, options.kmerLength) != 0) return 1;
+    if (velvet_assembly(filteredFiles, tempDir, options.kmerLength) != 0) return 1;
     
+    CharString contigFileAssembly = getFileName(tempDir, "assembly/contigs.fa");
+    CharString contigFile = getFileName(options.workingDirectory, "contigs.fa");
+
+    // Copy contigs file to workingDirectory.
+    std::ifstream src(toCString(contigFileAssembly), std::ios::binary);
+    std::ofstream dst(toCString(contigFile),   std::ios::binary);
+    dst << src.rdbuf();
+
+    removeAssemblyDirectory(getFileName(tempDir, "assembly"));
     remove(toCString(firstFiltered));
     remove(toCString(secondFiltered));
     remove(toCString(singleFiltered));
+    remove(toCString(tempDir));
+    
+    std::cerr << "[" << time(0) << "] " << "Temporary directory " << tempDir << " removed." << std::endl;
     
     return ret;
 }

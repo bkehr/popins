@@ -11,6 +11,8 @@ using namespace seqan;
 
 
 
+/*
+
 // NOTE: This function has been added to newer versions of SeqAn
 
 inline bool
@@ -18,6 +20,8 @@ hasFlagSupplementary(BamAlignmentRecord const & record)
 {
     return (record.flag & 0x800) == 0x800;
 }
+
+*/
 
 
 /**
@@ -205,9 +209,7 @@ writeFastq(CharString & fastqFirst,
 
 template<typename TAdapterTag>
 int
-crop_unmapped(CharString & fastqFirst,
-              CharString & fastqSecond,
-              CharString & fastqSingle,
+crop_unmapped(Triple<CharString> & fastqFiles,
               CharString & unmappedBam,
               CharString const & mappingBam,
               int humanSeqs,
@@ -306,10 +308,10 @@ crop_unmapped(CharString & fastqFirst,
     std::cerr << "[" << time(0) << "] Map of low quality mates has " << otherReads.size() << " records." << std::endl;
     
     // Write the (temporary) fastq files.
-    if (writeFastq(fastqFirst, fastqSecond, fastqSingle, firstReads, secondReads) != 0) return 1;
+    if (writeFastq(fastqFiles.i1, fastqFiles.i2, fastqFiles.i3, firstReads, secondReads) != 0) return 1;
     
     std::cerr << "[" << time(0) << "] Unmapped reads written to ";
-    std::cerr << fastqFirst << ", " << fastqSecond << ", " << fastqSingle << std::endl;
+    std::cerr << fastqFiles.i1 << ", " << fastqFiles.i2 << ", " << fastqFiles.i3 << std::endl;
     
     
     // Find the other read end of the low quality mapping reads and write them to the output bam file. 
