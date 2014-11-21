@@ -20,15 +20,15 @@ PopIns was tested with SeqAn r14774, bwa 0.7.10-r789, velvet 1.2.10, samtools 0.
 Installation
 ------------
 
-1) Download the SeqAn core library and the vcf_io module from the SeqAn extras library.
+1. Download the SeqAn core library and the vcf_io module from the SeqAn extras library.
    You do *not* need to follow the SeqAn install instructions.
    You only need the directory core/include/seqan of SeqAn with all its content.
    In addition, copy the header file vcf_io.h and folder vcf_io/ from extras/include/seqan into this directory.
-2) Install all other prerequisites (bwa, velvet, samtools, and sickle).
+2. Install all other prerequisites (bwa, velvet, samtools, and sickle).
    Compile velvet with a larger k-mer length than the default if desired, e.g. 63 (necessary for default parameters of PopIns).
-3) Set the path to the SeqAn core library by editing the file popins.config.
+3. Set the path to the SeqAn core library by editing the file popins.config.
    Also set the paths to bwa, velveth/velvetg, samtools, and sickle if they are not in your PATH variable.
-4) Run 'make' in the popins directory.
+4. Run 'make' in the popins directory.
 
 If everything is setup correclty, this will create the binary 'popins'.
 
