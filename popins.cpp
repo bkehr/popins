@@ -1,0 +1,72 @@
+#include <iostream>
+#include <ctime>
+#include <stdio.h>
+#include <string.h>
+
+#include "popins_clp.h"
+
+#include "popins_assemble.h"
+#include "popins_merge.h"
+#include "popins_contigmap.h"
+#include "popins_place.h"
+#include "popins_genotype.h"
+
+// ==========================================================================
+
+void printHelp(char const * name)
+{
+    std::cerr << std::endl;
+    std::cerr << "PopIns -- population-scale detection of novel sequence insertions" << std::endl;
+    std::cerr << "Version: " << VERSION << ", Date: " << VERSION_DATE << std::endl;
+    std::cerr << std::endl;
+    std::cerr << "Usage:   " << name << " COMMAND [ OPTIONS ]" << std::endl;
+    std::cerr << std::endl;
+    std::cerr << "COMMAND: assemble   Crop unmapped reads from a bam file and assemble them." << std::endl;
+    std::cerr << "         merge      Merge contigs from assemblies of unmapped reads into supercontigs." << std::endl;
+    std::cerr << "         contigmap  Map unmapped reads to (super-)contigs." << std::endl;
+    std::cerr << "         place      Find position of (super-)contigs in the reference genome." << std::endl;
+    std::cerr << "         genotype   Genotype insertions for an individual." << std::endl;
+    std::cerr << std::endl;
+    std::cerr << "Try `" << name << " COMMAND --help' for more information on each command." << std::endl;
+    std::cerr << std::endl;
+}
+
+// ==========================================================================
+// Function main()
+// ==========================================================================
+
+int main(int argc, char const ** argv)
+{
+    std::time_t start_time = std::time(0);
+    
+    int ret = 0;
+    const char * prog_name = argv[0];    
+    if (argc < 2)
+    {
+        printHelp(prog_name);
+        return 1;
+    }
+
+    const char * command = argv[1];
+    if (strcmp(command,"assemble") == 0) ret = popins_assemble(argc, argv);
+    else if (strcmp(command,"merge") == 0) ret = popins_merge(argc, argv);
+    else if (strcmp(command,"contigmap") == 0) ret = popins_contigmap(argc, argv);
+    else if (strcmp(command,"place") == 0) ret = popins_place(argc, argv);
+    else if (strcmp(command,"genotype") == 0) ret = popins_genotype(argc, argv);
+    else if (strcmp(command, "--help") == 0 || strcmp(command, "-h") == 0)
+    {
+        printHelp(prog_name);
+        return 1;
+    }
+    else
+    {
+        std::cerr << "ERROR: Unknown command: " << command << std::endl;
+        printHelp(prog_name);
+        return 1;
+    }
+
+    if (ret == 0)
+        std::cerr << "[" << time(0) << "] " << "popins " << command << " finished in " << (std::time(0) - start_time) << " seconds." << std::endl;
+    return ret;
+}
+
