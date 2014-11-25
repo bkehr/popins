@@ -52,7 +52,7 @@ struct MergingOptions {
 
     MergingOptions() :
         outputFile("supercontigs.fa"), verbose(false), veryVerbose(false),
-        errorRate(0.05), minimalLength(50), qgramLength(7), matchScore(1), errorPenalty(-5), minScore(90), minTipScore(30)
+        errorRate(0.01), minimalLength(60), qgramLength(47), matchScore(1), errorPenalty(-5), minScore(90), minTipScore(30)
     {} 
 };
 
