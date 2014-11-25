@@ -24,7 +24,8 @@ Installation
    You only need the directory .../include/seqan of the SeqAn core library with all its content.
    If it is not present, copy the header file vcf_io.h and folder vcf_io/ from extras/include/seqan into this directory.
 2. Install all other prerequisites (bwa, velvet, samtools, and sickle).
-   Compile velvet with a larger k-mer length than the default if desired, e.g. 63 (necessary for default parameters of PopIns).
+   Compile velvet with a larger maximum k-mer length than the default if desired, e.g. MAXKMERLENGTH=63.
+   A maximum k-mer length of 47 or higher is necessary for default parameters of PopIns (velvet's default is 31).
 3. Set the path to the SeqAn core library by editing the file popins.config.
    Also set the paths to bwa, velveth/velvetg, samtools, and sickle if they are not in your PATH variable.
 4. Run 'make' in the popins directory.
@@ -46,7 +47,7 @@ PopIns creates and uses a working directory for each sample, which should be spe
 
 ### The assemble command
 
-    Usage: ./popins assemble [OPTIONS] <BAM FILE>
+    ./popins assemble [OPTIONS] <BAM FILE>
 
 The assemble command finds the unmapped reads in a bam files and assembles them using velvet.
 If a reference fasta file is specified, the unmapped reads will be remapped to this reference before assembly using bwa-mem.
@@ -55,7 +56,7 @@ Only reads that remain unmapped in the remapping step are further processed, i.e
 
 ### The merge command
 
-    Usage: ./popins merge [OPTIONS] <FA FILE 1> ... <FA FILE N>
+    ./popins merge [OPTIONS] <FA FILE 1> ... <FA FILE N>
 
 The merge command merges all sequences given in the fasta files into a single set of supercontigs.
 The algorithm first partitions the sequences into sets of similar sequences using the SWIFT filtering approach, and then aligns each set of contigs into a graph of supercontigs.
@@ -63,7 +64,7 @@ The algorithm first partitions the sequences into sets of similar sequences usin
 
 ### The contigmap command
 
-    Usage: ./popins contigmap [OPTIONS] <BAM FILE> <FA FILE>
+    ./popins contigmap [OPTIONS] <BAM FILE> <FA FILE>
 
 The contigmap command aligns the unmapped reads found in fastq files in the working directory to a set of contigs specified in the fasta file using bwa-mem.
 Subsequently, it merges the bwa output file with the file non_ref.bam in the working directory and completes the read mate's information in all bam records.
@@ -71,7 +72,7 @@ Subsequently, it merges the bwa output file with the file non_ref.bam in the wor
 
 ### The place command
 
-    Usage: ./popins place [OPTIONS] <CONTIG FA FILE> <REF FA FILE> <BAM FILE 1> ... <BAM FILE N>
+    ./popins place [OPTIONS] <CONTIG FA FILE> <REF FA FILE> <BAM FILE 1> ... <BAM FILE N>
 
 The place command finds the positions of (super-)contigs in the reference genome.
 If a file with locations does not already exist, it identifies approximate locations based on anchoring read pairs found in the bam files.
@@ -83,7 +84,7 @@ It outputs a vcf and a fa record for each identified position.
 
 ### The genotype command
 
-    Usage: ./popins genotype [OPTIONS] <FA FILE> <BAM FILE> <FA FILE ALT> <BAM FILE ALT> <VCF FILE>
+    ./popins genotype [OPTIONS] <FA FILE> <BAM FILE> <FA FILE ALT> <BAM FILE ALT> <VCF FILE>
 
 The genotype command takes as input a fasta file of the reference genome, a bam file of a single individual, the fasta file with the supercontigs, the bam file of contig mapped and unmapped reads (&lt;WD&gt;/non_ref.bam), and the VCF file with all predicted insertion positions.
 It computes genotype likelihoods by aligning all reads from each insertion location and contig to the reference and to the alternative insertion sequence.
