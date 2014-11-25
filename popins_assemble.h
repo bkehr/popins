@@ -1,4 +1,5 @@
 #include <sstream>
+#include <cerrno>
 
 #include <seqan/file.h>
 #include <seqan/sequence.h>
@@ -429,17 +430,28 @@ int popins_assemble(int argc, char const ** argv)
         logMsg += options.workingDirectory;
         std::cerr << "[" << time(0) << "] " << logMsg << std::endl;
     }
-
-    char temp[] = "/tmp/popins_XXXXXXXX";
-    CharString tempDir = mkdtemp(temp);
-    std::cerr << "[" << time(0) << "] Using temporary directory " << tempDir << std::endl;
     
-    CharString matesBam = getFileName(tempDir, "mates.bam");
+    CharString tmpDir = options.workingDirectory;
+    if (options.tmpDir != "")
+    {
+        errno = 0;
+        char* tempDir = mkdtemp(toCString(options.tmpDir));
+        if (errno != 0)
+        {
+            if (errno == EINVAL) std::cerr << "ERROR: Temporary directory does not end in XXXXXX: " << options.tmpDir << std::endl;
+            else std::cerr << "ERROR: Could not create temporary directory at " << options.tmpDir << std::endl;
+            return 1;
+        }
+        tmpDir = tempDir;
+        std::cerr << "[" << time(0) << "] Using temporary directory " << tempDir << std::endl;
+    }
+    
+    CharString matesBam = getFileName(tmpDir, "mates.bam");
 
-    CharString fastqFirstTemp = getFileName(tempDir, "paired.1.fastq");
-    CharString fastqSecondTemp = getFileName(tempDir, "paired.2.fastq");
-    CharString fastqSingleTemp = getFileName(tempDir, "single.fastq");
-    CharString nonRefBamTemp = getFileName(tempDir, "non_ref.bam");
+    CharString fastqFirstTemp = getFileName(tmpDir, "paired.1.fastq");
+    CharString fastqSecondTemp = getFileName(tmpDir, "paired.2.fastq");
+    CharString fastqSingleTemp = getFileName(tmpDir, "single.fastq");
+    CharString nonRefBamTemp = getFileName(tmpDir, "non_ref.bam");
 
     CharString fastqFirst = getFileName(options.workingDirectory, "paired.1.fastq");
     CharString fastqSecond = getFileName(options.workingDirectory, "paired.2.fastq");
@@ -474,7 +486,7 @@ int popins_assemble(int argc, char const ** argv)
     std::cerr << "[" << time(0) << "] " << "Sorting " << matesBam << " using " << SAMTOOLS << std::endl;
     std::stringstream cmd;
     if (options.referenceFile != "")
-        cmd << SAMTOOLS << " sort -n -m " << options.memory << " " << matesBam << " " << tempDir << "/non_ref";
+        cmd << SAMTOOLS << " sort -n -m " << options.memory << " " << matesBam << " " << tmpDir << "/non_ref";
     else
         cmd << SAMTOOLS << " sort -n -m " << options.memory << " " << matesBam << " " << options.workingDirectory << "/non_ref";
     if (system(cmd.str().c_str()) != 0)
@@ -492,8 +504,8 @@ int popins_assemble(int argc, char const ** argv)
         fastqFiles = Triple<CharString>(fastqFirst, fastqSecond, fastqSingle);
         
         // Align with bwa, update fastq files of unaligned reads, and sort remaining bam records by read name.
-        CharString remappedBam = getFileName(tempDir, "remapped.bam");
-        if (remapping(fastqFilesTemp, fastqFiles, options.referenceFile, options.workingDirectory, tempDir,
+        CharString remappedBam = getFileName(tmpDir, "remapped.bam");
+        if (remapping(fastqFilesTemp, fastqFiles, options.referenceFile, options.workingDirectory, tmpDir,
                       options.humanSeqs, options.threads, options.memory) != 0)
             return 1;
         remove(toCString(fastqFirstTemp));
@@ -507,19 +519,19 @@ int popins_assemble(int argc, char const ** argv)
         remove(toCString(nonRefBam));
     }
     
-    CharString firstFiltered = getFileName(tempDir, "filtered.paired.1.fastq");
-    CharString secondFiltered = getFileName(tempDir, "filtered.paired.2.fastq");
-    CharString singleFiltered = getFileName(tempDir, "filtered.single.fastq");
+    CharString firstFiltered = getFileName(tmpDir, "filtered.paired.1.fastq");
+    CharString secondFiltered = getFileName(tmpDir, "filtered.paired.2.fastq");
+    CharString singleFiltered = getFileName(tmpDir, "filtered.single.fastq");
     Triple<CharString> filteredFiles(firstFiltered, secondFiltered, singleFiltered);
     
     // Quality filtering/trimming with sickle.
-    if (sickle_filtering(filteredFiles, fastqFiles, tempDir) != 0)
+    if (sickle_filtering(filteredFiles, fastqFiles, tmpDir) != 0)
         return 1;
 
     // Assembly with velvet.
-    if (velvet_assembly(filteredFiles, tempDir, options.kmerLength) != 0) return 1;
+    if (velvet_assembly(filteredFiles, tmpDir, options.kmerLength) != 0) return 1;
     
-    CharString contigFileAssembly = getFileName(tempDir, "assembly/contigs.fa");
+    CharString contigFileAssembly = getFileName(tmpDir, "assembly/contigs.fa");
     CharString contigFile = getFileName(options.workingDirectory, "contigs.fa");
 
     // Copy contigs file to workingDirectory.
@@ -527,13 +539,13 @@ int popins_assemble(int argc, char const ** argv)
     std::ofstream dst(toCString(contigFile),   std::ios::binary);
     dst << src.rdbuf();
 
-    removeAssemblyDirectory(getFileName(tempDir, "assembly"));
+    removeAssemblyDirectory(getFileName(tmpDir, "assembly"));
     remove(toCString(firstFiltered));
     remove(toCString(secondFiltered));
     remove(toCString(singleFiltered));
-    remove(toCString(tempDir));
+    remove(toCString(tmpDir));
     
-    std::cerr << "[" << time(0) << "] " << "Temporary directory " << tempDir << " removed." << std::endl;
+    std::cerr << "[" << time(0) << "] " << "Temporary directory " << tmpDir << " removed." << std::endl;
     
     return ret;
 }
