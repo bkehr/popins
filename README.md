@@ -7,23 +7,22 @@ Population-scale detection of novel sequence insertions.
 Prerequisites
 -------------
 
-* SeqAn core library, version 1.4.1 (https://github.com/seqan/seqan)
+* SeqAn core library, version 1.4.2 (https://github.com/seqan/seqan)
 * bwa (https://github.com/lh3/bwa)
 * velvet (https://github.com/dzerbino/velvet)
 * samtools (https://github.com/samtools/samtools)
 * sickle (https://github.com/najoshi/sickle)
 
 PopIns uses the 'bwa mem' alignment algorithm, thus, requires bwa version 0.7.X.
-PopIns was tested with SeqAn r14774, bwa 0.7.10-r789, velvet 1.2.10, samtools 0.1.13 (r926:134), and sickle 1.210.
+PopIns was tested with bwa 0.7.10-r789, velvet 1.2.10, samtools 1.0 and 0.1.13 (r926:134), and sickle 1.210.
 
 
 Installation
 ------------
 
-1. Download the SeqAn core library and the vcf_io module from the SeqAn extras library.
-   You do *not* need to follow the SeqAn install instructions.
-   You only need the directory core/include/seqan of SeqAn with all its content.
-   In addition, copy the header file vcf_io.h and folder vcf_io/ from extras/include/seqan into this directory.
+1. Download the SeqAn library. You do *not* need to follow the SeqAn install instructions.
+   You only need the directory .../include/seqan of the SeqAn core library with all its content.
+   If it is not present, copy the header file vcf_io.h and folder vcf_io/ from extras/include/seqan into this directory.
 2. Install all other prerequisites (bwa, velvet, samtools, and sickle).
    Compile velvet with a larger k-mer length than the default if desired, e.g. 63 (necessary for default parameters of PopIns).
 3. Set the path to the SeqAn core library by editing the file popins.config.
