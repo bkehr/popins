@@ -38,7 +38,7 @@ Usage
 PopIns consists of five commands: assemble, merge, contigmap, place, and genotype.
 For a short description of each command and an overview of arguments and options, run
 
-    ./popins &lt;COMMAND&gt; --help
+    ./popins <COMMAND> --help
 
 When analyzing multiple samples simultaneously, the assemble, contigmap, and genotype commands need to be run for each sample separately, whereas the merge and place commands need to be run only once with input from all samples.
 PopIns creates and uses a working directory for each sample, which should be specified with the -d option of the assemble and contigmap commands.
@@ -46,7 +46,7 @@ PopIns creates and uses a working directory for each sample, which should be spe
 
 ### The assemble command
 
-    Usage: ./popins assemble [OPTIONS] &lt;BAM FILE&gt;
+    Usage: ./popins assemble [OPTIONS] <BAM FILE>
 
 The assemble command finds the unmapped reads in a bam files and assembles them using velvet.
 If a reference fasta file is specified, the unmapped reads will be remapped to this reference before assembly using bwa-mem.
@@ -55,7 +55,7 @@ Only reads that remain unmapped in the remapping step are further processed, i.e
 
 ### The merge command
 
-    Usage: ./popins merge [OPTIONS] &lt;FA FILE 1&gt; ... &lt;FA FILE N&gt;
+    Usage: ./popins merge [OPTIONS] <FA FILE 1> ... <FA FILE N>
 
 The merge command merges all sequences given in the fasta files into a single set of supercontigs.
 The algorithm first partitions the sequences into sets of similar sequences using the SWIFT filtering approach, and then aligns each set of contigs into a graph of supercontigs.
@@ -63,7 +63,7 @@ The algorithm first partitions the sequences into sets of similar sequences usin
 
 ### The contigmap command
 
-    Usage: ./popins contigmap [OPTIONS] &lt;BAM FILE&gt; &lt;FA FILE&gt;
+    Usage: ./popins contigmap [OPTIONS] <BAM FILE> <FA FILE>
 
 The contigmap command aligns the unmapped reads found in fastq files in the working directory to a set of contigs specified in the fasta file using bwa-mem.
 Subsequently, it merges the bwa output file with the file non_ref.bam in the working directory and completes the read mate's information in all bam records.
@@ -71,7 +71,7 @@ Subsequently, it merges the bwa output file with the file non_ref.bam in the wor
 
 ### The place command
 
-    Usage: ./popins place [OPTIONS] &lt;CONTIG FA FILE&gt; &lt;REF FA FILE&gt; &lt;BAM FILE 1&gt; ... &lt;BAM FILE N&gt;
+    Usage: ./popins place [OPTIONS] <CONTIG FA FILE> <REF FA FILE> <BAM FILE 1> ... <BAM FILE N>
 
 The place command finds the positions of (super-)contigs in the reference genome.
 If a file with locations does not already exist, it identifies approximate locations based on anchoring read pairs found in the bam files.
@@ -83,7 +83,7 @@ It outputs a vcf and a fa record for each identified position.
 
 ### The genotype command
 
-    Usage: ./popins genotype [OPTIONS] &lt;FA FILE&gt; &lt;BAM FILE&gt; &lt;FA FILE ALT&gt; &lt;BAM FILE ALT&gt; &lt;VCF FILE&gt;
+    Usage: ./popins genotype [OPTIONS] <FA FILE> <BAM FILE> <FA FILE ALT> <BAM FILE ALT> <VCF FILE>
 
 The genotype command takes as input a fasta file of the reference genome, a bam file of a single individual, the fasta file with the supercontigs, the bam file of contig mapped and unmapped reads (&lt;WD&gt;/non_ref.bam), and the VCF file with all predicted insertion positions.
 It computes genotype likelihoods by aligning all reads from each insertion location and contig to the reference and to the alternative insertion sequence.
