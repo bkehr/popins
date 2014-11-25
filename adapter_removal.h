@@ -16,8 +16,45 @@ struct HiSeqXAdapters_;
 typedef Tag<HiSeqXAdapters_> HiSeqXAdapters;
 
 
+template<typename TTag>
+inline Dna5String
+getUniversal(TTag)
+{
+    return "ATCGGAAGAGCGTCGTGTAGGGAAAGAGTGTAGATCTCGGTGGTCGCCGTATCATT";
+}
+
+inline Dna5String
+getUniversal(HiSeqXAdapters)
+{
+    return "ATCGGAAGAGCGTCGTGTAGGGAAAGAGTGTGCCTCTATGTGTAGATCTCGGTGGTCGCCGTATCATT";
+}
+inline Dna5String
+getTruSeqPrefix(HiSeqAdapters)
+{
+    return "ATCGGAAGAGCACACGTCTGAACTCCAGTCAC";
+}
+
+inline Dna5String
+getTruSeqSuffix(HiSeqAdapters)
+{
+    return "ATCTCGTATGCCGTCTTCTGCTTG";
+}
+
+inline Dna5String
+getTruSeqPrefix(HiSeqXAdapters)
+{
+    return "AATGATACGGCGACCACCGAGATCTACAC";
+}
+
+inline Dna5String
+getTruSeqSuffix(HiSeqXAdapters)
+{
+    return "ACACTCTTTCCCTACACGACGCTCTTCCGATCT";
+}
+
+template<typename TTag>
 inline StringSet<Dna5String>
-complementUniversalOneError()
+complementUniversalOneError(TTag tag)
 {
     typedef Dna5String TSeq;
     typedef Size<TSeq>::Type TSize;
@@ -25,7 +62,7 @@ complementUniversalOneError()
 
     // Append the error-free sequence to sequence set.
     StringSet<TSeq> adaptSeqs;
-    appendValue(adaptSeqs, "AATGATACGGCGACCACCGAGATCTACACTCTTTCCCTACACGACGCTCTTCCGATC");
+    appendValue(adaptSeqs, getUniversal(tag));
 
     complement(adaptSeqs[0]);
 
@@ -44,6 +81,47 @@ complementUniversalOneError()
     return adaptSeqs;
 }
 
+template<typename TSequence>
+bool
+startsWithTruSeq(TSequence & seq, HiSeqXAdapters tag)
+{
+    TSequence truSeqPre = getTruSeqPrefix(tag);
+    int score = globalAlignmentScore(truSeqPre, prefix(seq, length(truSeqPre)), Score<int>(1,0,0), -2, 2);
+    if (score > (int)length(truSeqPre) - 5)
+    {
+        TSequence truSeqSuf = getTruSeqSuffix(tag);
+        score += globalAlignmentScore(truSeqSuf, infix(seq, length(truSeqPre)+8, length(truSeqPre)+8+length(truSeqSuf)), Score<int>(1,0,0), -2, 2);
+        if (score > (int)length(truSeqPre) + (int)length(truSeqSuf) - 10) return 0;
+    }
+    else
+    {
+        truSeqPre = getTruSeqPrefix(HiSeqAdapters());
+        score = globalAlignmentScore(truSeqPre, prefix(seq, length(truSeqPre)), Score<int>(1,0,0), -2, 2);
+        if (score > (int)length(truSeqPre) - 5)
+        {
+            TSequence truSeqSuf = getTruSeqSuffix(HiSeqAdapters());
+            score += globalAlignmentScore(truSeqSuf, infix(seq, length(truSeqPre)+8, length(truSeqPre)+8+length(truSeqSuf)), Score<int>(1,0,0), -2, 2);
+            if (score > (int)length(truSeqPre) + (int)length(truSeqSuf) - 10) return 0;
+        }
+    }
+    return 1;
+}
+
+template<typename TSequence>
+bool
+startsWithTruSeq(TSequence & seq, HiSeqAdapters tag)
+{
+    TSequence truSeqPre = getTruSeqPrefix(tag);
+    int score = globalAlignmentScore(truSeqPre, prefix(seq, length(truSeqPre)), Score<int>(1,0,0), -2, 2);
+    if (score > (int)length(truSeqPre) - 5)
+    {
+        TSequence truSeqSuf = getTruSeqSuffix(tag);
+        score += globalAlignmentScore(truSeqSuf, infix(seq, length(truSeqPre)+8, length(truSeqPre)+8+length(truSeqSuf)), Score<int>(1,0,0), -2, 2);
+        if (score > (int)length(truSeqPre) + (int)length(truSeqSuf) - 10) return 0;
+    }
+    return 1;
+}
+
 
 inline StringSet<Dna5String>
 truSeqs(NoAdapters &)
@@ -51,37 +129,37 @@ truSeqs(NoAdapters &)
     // Nothing to be done.
     return StringSet<Dna5String>();
 }
-    
+
 
 inline StringSet<Dna5String>
 truSeqs(HiSeqAdapters)
 {
     StringSet<Dna5String> adaptSeqs;
     
-    appendValue(adaptSeqs, "AGATCGGAAGAGCACACGTCTGAACTCCAGTCACATCACGATCTCGTATGCCGTCTTCTGCTTG");
-    appendValue(adaptSeqs, "AGATCGGAAGAGCACACGTCTGAACTCCAGTCACCGATGTATCTCGTATGCCGTCTTCTGCTTG");
-    appendValue(adaptSeqs, "AGATCGGAAGAGCACACGTCTGAACTCCAGTCACTTAGGCATCTCGTATGCCGTCTTCTGCTTG");
-    appendValue(adaptSeqs, "AGATCGGAAGAGCACACGTCTGAACTCCAGTCACTGACCAATCTCGTATGCCGTCTTCTGCTTG");
-    appendValue(adaptSeqs, "AGATCGGAAGAGCACACGTCTGAACTCCAGTCACACAGTGATCTCGTATGCCGTCTTCTGCTTG");
-    appendValue(adaptSeqs, "AGATCGGAAGAGCACACGTCTGAACTCCAGTCACGCCAATATCTCGTATGCCGTCTTCTGCTTG");
-    appendValue(adaptSeqs, "AGATCGGAAGAGCACACGTCTGAACTCCAGTCACCAGATCATCTCGTATGCCGTCTTCTGCTTG");
-    appendValue(adaptSeqs, "AGATCGGAAGAGCACACGTCTGAACTCCAGTCACACTTGAATCTCGTATGCCGTCTTCTGCTTG");
-    appendValue(adaptSeqs, "AGATCGGAAGAGCACACGTCTGAACTCCAGTCACGATCAGATCTCGTATGCCGTCTTCTGCTTG");
-    appendValue(adaptSeqs, "AGATCGGAAGAGCACACGTCTGAACTCCAGTCACTAGCTTATCTCGTATGCCGTCTTCTGCTTG");
-    appendValue(adaptSeqs, "AGATCGGAAGAGCACACGTCTGAACTCCAGTCACGGCTACATCTCGTATGCCGTCTTCTGCTTG");
-    appendValue(adaptSeqs, "AGATCGGAAGAGCACACGTCTGAACTCCAGTCACCTTGTAATCTCGTATGCCGTCTTCTGCTTG");
-    appendValue(adaptSeqs, "AGATCGGAAGAGCACACGTCTGAACTCCAGTCACAGTCAACAATCTCGTATGCCGTCTTCTGCTTG");
-    appendValue(adaptSeqs, "AGATCGGAAGAGCACACGTCTGAACTCCAGTCACAGTTCCGTATCTCGTATGCCGTCTTCTGCTTG");
-    appendValue(adaptSeqs, "AGATCGGAAGAGCACACGTCTGAACTCCAGTCACATGTCAGAATCTCGTATGCCGTCTTCTGCTTG");
-    appendValue(adaptSeqs, "AGATCGGAAGAGCACACGTCTGAACTCCAGTCACCCGTCCCGATCTCGTATGCCGTCTTCTGCTTG");
-    appendValue(adaptSeqs, "AGATCGGAAGAGCACACGTCTGAACTCCAGTCACGTCCGCACATCTCGTATGCCGTCTTCTGCTTG");
-    appendValue(adaptSeqs, "AGATCGGAAGAGCACACGTCTGAACTCCAGTCACGTGAAACGATCTCGTATGCCGTCTTCTGCTTG");
-    appendValue(adaptSeqs, "AGATCGGAAGAGCACACGTCTGAACTCCAGTCACGTGGCCTTATCTCGTATGCCGTCTTCTGCTTG");
-    appendValue(adaptSeqs, "AGATCGGAAGAGCACACGTCTGAACTCCAGTCACGTTTCGGAATCTCGTATGCCGTCTTCTGCTTG");
-    appendValue(adaptSeqs, "AGATCGGAAGAGCACACGTCTGAACTCCAGTCACCGTACGTAATCTCGTATGCCGTCTTCTGCTTG");
-    appendValue(adaptSeqs, "AGATCGGAAGAGCACACGTCTGAACTCCAGTCACGAGTGGATATCTCGTATGCCGTCTTCTGCTTG");
-    appendValue(adaptSeqs, "AGATCGGAAGAGCACACGTCTGAACTCCAGTCACACTGATATATCTCGTATGCCGTCTTCTGCTTG");
-    appendValue(adaptSeqs, "AGATCGGAAGAGCACACGTCTGAACTCCAGTCACATTCCTTTATCTCGTATGCCGTCTTCTGCTTG");
+    appendValue(adaptSeqs, "AGATCGGAAGAGCACACGTCTGAACTCCAGTCAC" "ATCACG"   "ATCTCGTATGCCGTCTTCTGCTTG");
+    appendValue(adaptSeqs, "AGATCGGAAGAGCACACGTCTGAACTCCAGTCAC" "CGATGT"   "ATCTCGTATGCCGTCTTCTGCTTG");
+    appendValue(adaptSeqs, "AGATCGGAAGAGCACACGTCTGAACTCCAGTCAC" "TTAGGC"   "ATCTCGTATGCCGTCTTCTGCTTG");
+    appendValue(adaptSeqs, "AGATCGGAAGAGCACACGTCTGAACTCCAGTCAC" "TGACCA"   "ATCTCGTATGCCGTCTTCTGCTTG");
+    appendValue(adaptSeqs, "AGATCGGAAGAGCACACGTCTGAACTCCAGTCAC" "ACAGTG"   "ATCTCGTATGCCGTCTTCTGCTTG");
+    appendValue(adaptSeqs, "AGATCGGAAGAGCACACGTCTGAACTCCAGTCAC" "GCCAAT"   "ATCTCGTATGCCGTCTTCTGCTTG");
+    appendValue(adaptSeqs, "AGATCGGAAGAGCACACGTCTGAACTCCAGTCAC" "CAGATC"   "ATCTCGTATGCCGTCTTCTGCTTG");
+    appendValue(adaptSeqs, "AGATCGGAAGAGCACACGTCTGAACTCCAGTCAC" "ACTTGA"   "ATCTCGTATGCCGTCTTCTGCTTG");
+    appendValue(adaptSeqs, "AGATCGGAAGAGCACACGTCTGAACTCCAGTCAC" "GATCAG"   "ATCTCGTATGCCGTCTTCTGCTTG");
+    appendValue(adaptSeqs, "AGATCGGAAGAGCACACGTCTGAACTCCAGTCAC" "TAGCTT"   "ATCTCGTATGCCGTCTTCTGCTTG");
+    appendValue(adaptSeqs, "AGATCGGAAGAGCACACGTCTGAACTCCAGTCAC" "GGCTAC"   "ATCTCGTATGCCGTCTTCTGCTTG");
+    appendValue(adaptSeqs, "AGATCGGAAGAGCACACGTCTGAACTCCAGTCAC" "CTTGTA"   "ATCTCGTATGCCGTCTTCTGCTTG");
+    appendValue(adaptSeqs, "AGATCGGAAGAGCACACGTCTGAACTCCAGTCAC" "AGTCAACA" "ATCTCGTATGCCGTCTTCTGCTTG");
+    appendValue(adaptSeqs, "AGATCGGAAGAGCACACGTCTGAACTCCAGTCAC" "AGTTCCGT" "ATCTCGTATGCCGTCTTCTGCTTG");
+    appendValue(adaptSeqs, "AGATCGGAAGAGCACACGTCTGAACTCCAGTCAC" "ATGTCAGA" "ATCTCGTATGCCGTCTTCTGCTTG");
+    appendValue(adaptSeqs, "AGATCGGAAGAGCACACGTCTGAACTCCAGTCAC" "CCGTCCCG" "ATCTCGTATGCCGTCTTCTGCTTG");
+    appendValue(adaptSeqs, "AGATCGGAAGAGCACACGTCTGAACTCCAGTCAC" "GTCCGCAC" "ATCTCGTATGCCGTCTTCTGCTTG");
+    appendValue(adaptSeqs, "AGATCGGAAGAGCACACGTCTGAACTCCAGTCAC" "GTGAAACG" "ATCTCGTATGCCGTCTTCTGCTTG");
+    appendValue(adaptSeqs, "AGATCGGAAGAGCACACGTCTGAACTCCAGTCAC" "GTGGCCTT" "ATCTCGTATGCCGTCTTCTGCTTG");
+    appendValue(adaptSeqs, "AGATCGGAAGAGCACACGTCTGAACTCCAGTCAC" "GTTTCGGA" "ATCTCGTATGCCGTCTTCTGCTTG");
+    appendValue(adaptSeqs, "AGATCGGAAGAGCACACGTCTGAACTCCAGTCAC" "CGTACGTA" "ATCTCGTATGCCGTCTTCTGCTTG");
+    appendValue(adaptSeqs, "AGATCGGAAGAGCACACGTCTGAACTCCAGTCAC" "GAGTGGAT" "ATCTCGTATGCCGTCTTCTGCTTG");
+    appendValue(adaptSeqs, "AGATCGGAAGAGCACACGTCTGAACTCCAGTCAC" "ACTGATAT" "ATCTCGTATGCCGTCTTCTGCTTG");
+    appendValue(adaptSeqs, "AGATCGGAAGAGCACACGTCTGAACTCCAGTCAC" "ATTCCTTT" "ATCTCGTATGCCGTCTTCTGCTTG");
     
     return adaptSeqs;
 }
@@ -90,27 +168,28 @@ inline StringSet<Dna5String>
 truSeqs(HiSeqXAdapters)
 {
     StringSet<Dna5String> adaptSeqs;
-    appendValue(adaptSeqs, "AATGATACGGCGACCACCGAGATCTACACTATAGCCTACACTCTTTCCCTACACGACGCTCTTCCGATCT");
-    appendValue(adaptSeqs, "AATGATACGGCGACCACCGAGATCTACACATAGAGGCACACTCTTTCCCTACACGACGCTCTTCCGATCT");
-    appendValue(adaptSeqs, "AATGATACGGCGACCACCGAGATCTACACCCTATCCTACACTCTTTCCCTACACGACGCTCTTCCGATCT");
-    appendValue(adaptSeqs, "AATGATACGGCGACCACCGAGATCTACACGGCTCTGAACACTCTTTCCCTACACGACGCTCTTCCGATCT");
-    appendValue(adaptSeqs, "AATGATACGGCGACCACCGAGATCTACACAGGCGAAGACACTCTTTCCCTACACGACGCTCTTCCGATCT");
-    appendValue(adaptSeqs, "AATGATACGGCGACCACCGAGATCTACACTAATCTTAACACTCTTTCCCTACACGACGCTCTTCCGATCT");
-    appendValue(adaptSeqs, "AATGATACGGCGACCACCGAGATCTACACCAGGACGTACACTCTTTCCCTACACGACGCTCTTCCGATCT");
-    appendValue(adaptSeqs, "AATGATACGGCGACCACCGAGATCTACACGTACTGACACACTCTTTCCCTACACGACGCTCTTCCGATCT");
-    appendValue(adaptSeqs, "GATCGGAAGAGCACACGTCTGAACTCCAGTCACATTACTCGATCTCGTATGCCGTCTTCTGCTTG");
-    appendValue(adaptSeqs, "GATCGGAAGAGCACACGTCTGAACTCCAGTCACTCCGGAGAATCTCGTATGCCGTCTTCTGCTTG");
-    appendValue(adaptSeqs, "GATCGGAAGAGCACACGTCTGAACTCCAGTCACCGCTCATTATCTCGTATGCCGTCTTCTGCTTG");
-    appendValue(adaptSeqs, "GATCGGAAGAGCACACGTCTGAACTCCAGTCACGAGATTCCATCTCGTATGCCGTCTTCTGCTTG");
-    appendValue(adaptSeqs, "GATCGGAAGAGCACACGTCTGAACTCCAGTCACATTCAGAAATCTCGTATGCCGTCTTCTGCTTG");
-    appendValue(adaptSeqs, "GATCGGAAGAGCACACGTCTGAACTCCAGTCACGAATTCGTATCTCGTATGCCGTCTTCTGCTTG");
-    appendValue(adaptSeqs, "GATCGGAAGAGCACACGTCTGAACTCCAGTCACCTGAAGCTATCTCGTATGCCGTCTTCTGCTTG");
-    appendValue(adaptSeqs, "GATCGGAAGAGCACACGTCTGAACTCCAGTCACTAATGCGCATCTCGTATGCCGTCTTCTGCTTG");
-    appendValue(adaptSeqs, "GATCGGAAGAGCACACGTCTGAACTCCAGTCACCGGCTATGATCTCGTATGCCGTCTTCTGCTTG");
-    appendValue(adaptSeqs, "GATCGGAAGAGCACACGTCTGAACTCCAGTCACTCCGCGAAATCTCGTATGCCGTCTTCTGCTTG");
-    appendValue(adaptSeqs, "GATCGGAAGAGCACACGTCTGAACTCCAGTCACTCTCGCGCATCTCGTATGCCGTCTTCTGCTTG");
-    appendValue(adaptSeqs, "GATCGGAAGAGCACACGTCTGAACTCCAGTCACAGCGATAGATCTCGTATGCCGTCTTCTGCTTG");
+    appendValue(adaptSeqs, "AATGATACGGCGACCACCGAGATCTACAC" "TATAGCCT" "ACACTCTTTCCCTACACGACGCTCTTCCGATCT");
+    appendValue(adaptSeqs, "AATGATACGGCGACCACCGAGATCTACAC" "ATAGAGGC" "ACACTCTTTCCCTACACGACGCTCTTCCGATCT");
+    appendValue(adaptSeqs, "AATGATACGGCGACCACCGAGATCTACAC" "CCTATCCT" "ACACTCTTTCCCTACACGACGCTCTTCCGATCT");
+    appendValue(adaptSeqs, "AATGATACGGCGACCACCGAGATCTACAC" "GGCTCTGA" "ACACTCTTTCCCTACACGACGCTCTTCCGATCT");
+    appendValue(adaptSeqs, "AATGATACGGCGACCACCGAGATCTACAC" "AGGCGAAG" "ACACTCTTTCCCTACACGACGCTCTTCCGATCT");
+    appendValue(adaptSeqs, "AATGATACGGCGACCACCGAGATCTACAC" "TAATCTTA" "ACACTCTTTCCCTACACGACGCTCTTCCGATCT");
+    appendValue(adaptSeqs, "AATGATACGGCGACCACCGAGATCTACAC" "CAGGACGT" "ACACTCTTTCCCTACACGACGCTCTTCCGATCT");
+    appendValue(adaptSeqs, "AATGATACGGCGACCACCGAGATCTACAC" "GTACTGAC" "ACACTCTTTCCCTACACGACGCTCTTCCGATCT");
     
+    appendValue(adaptSeqs, "GATCGGAAGAGCACACGTCTGAACTCCAGTCAC" "ATTACTCG" "ATCTCGTATGCCGTCTTCTGCTTG");
+    appendValue(adaptSeqs, "GATCGGAAGAGCACACGTCTGAACTCCAGTCAC" "TCCGGAGA" "ATCTCGTATGCCGTCTTCTGCTTG");
+    appendValue(adaptSeqs, "GATCGGAAGAGCACACGTCTGAACTCCAGTCAC" "CGCTCATT" "ATCTCGTATGCCGTCTTCTGCTTG");
+    appendValue(adaptSeqs, "GATCGGAAGAGCACACGTCTGAACTCCAGTCAC" "GAGATTCC" "ATCTCGTATGCCGTCTTCTGCTTG");
+    appendValue(adaptSeqs, "GATCGGAAGAGCACACGTCTGAACTCCAGTCAC" "ATTCAGAA" "ATCTCGTATGCCGTCTTCTGCTTG");
+    appendValue(adaptSeqs, "GATCGGAAGAGCACACGTCTGAACTCCAGTCAC" "GAATTCGT" "ATCTCGTATGCCGTCTTCTGCTTG");
+    appendValue(adaptSeqs, "GATCGGAAGAGCACACGTCTGAACTCCAGTCAC" "CTGAAGCT" "ATCTCGTATGCCGTCTTCTGCTTG");
+    appendValue(adaptSeqs, "GATCGGAAGAGCACACGTCTGAACTCCAGTCAC" "TAATGCGC" "ATCTCGTATGCCGTCTTCTGCTTG");
+    appendValue(adaptSeqs, "GATCGGAAGAGCACACGTCTGAACTCCAGTCAC" "CGGCTATG" "ATCTCGTATGCCGTCTTCTGCTTG");
+    appendValue(adaptSeqs, "GATCGGAAGAGCACACGTCTGAACTCCAGTCAC" "TCCGCGAA" "ATCTCGTATGCCGTCTTCTGCTTG");
+    appendValue(adaptSeqs, "GATCGGAAGAGCACACGTCTGAACTCCAGTCAC" "TCTCGCGC" "ATCTCGTATGCCGTCTTCTGCTTG");
+    appendValue(adaptSeqs, "GATCGGAAGAGCACACGTCTGAACTCCAGTCAC" "AGCGATAG" "ATCTCGTATGCCGTCTTCTGCTTG");
+
     return adaptSeqs;
 }
 
@@ -257,20 +336,36 @@ removeAdapter(BamAlignmentRecord & record,
               Index<StringSet<TSequence> > & indexUniversal,
               Index<StringSet<TSequence> > & indexTruSeqs,
               unsigned minAdapterLength,
-              TTag)
+              TTag tag)
 {
     typedef typename Size<TSequence>::Type TSize;
     typedef ModifiedString<const TSequence, ModReverse> TRevSequence;
     typedef ModifiedString<const TSequence, ModComplementDna5> TComplSequence;
-    typedef ModifiedString<const TComplSequence, ModReverse> TRevComplSequence;
+//  typedef ModifiedString<const TComplSequence, ModReverse> TRevComplSequence; // TODO: This modifier seems to be buggy!
     
     TSize seqLen = length(record.seq);
     
     if (hasFlagRC(record))
     {
+        TSequence complSeq = record.seq; reverseComplement(complSeq);
+        
+        // Check for adapter at begin of read.
+        if (hasFlagFirst(record))
+        {
+            // Compute alignemnt score to TruSeq (excluding barcode)
+            if (startsWithTruSeq(complSeq, tag) == 0) return 2;
+        }
+        else
+        {
+            // Compute alignment score to reverse complement of Universal
+            TSequence universal = getUniversal(tag);
+            int score = globalAlignmentScore(universal, prefix(complSeq, length(universal)), Score<int>(1,0,0), -2, 2);
+            if (score > (int)length(universal) - 5) return 2;
+        }
+        
         // Search prefex of complemented read in *TruSeq* index.
-        TSequence complSeq = record.seq; reverseComplement(complSeq); reverse(complSeq);
-        //TComplSequence complSeq(record.seq); // TODO: This modifier seems to be buggy!
+        reverse(complSeq);
+        //TComplSequence complSeq(record.seq);
         TSize adaptLen = prefixMatchLength(indexTruSeqs, complSeq);
     
         if (adaptLen == seqLen)
@@ -308,6 +403,20 @@ removeAdapter(BamAlignmentRecord & record,
     }
     else
     {
+        // Check for adapter at begin of read.
+        if (hasFlagFirst(record))
+        {
+            // Compute alignemnt score to TruSeq (excluding barcode)
+            if (startsWithTruSeq(record.seq, tag) == 0) return 2;
+        }
+        else
+        {
+            // Compute alignment score to reverse complement of Universal
+            TSequence universal = getUniversal(tag);
+            int score = globalAlignmentScore(universal, prefix(record.seq, length(universal)), Score<int>(1,0,0), -2, 2);
+            if (score > (int)length(universal) - 5) return 2;
+        }
+
         // Search prefix of reversed read in *TruSeq* index.
         TRevSequence revSeq(record.seq);
         TSize adaptLen = prefixMatchLength(indexTruSeqs, revSeq);

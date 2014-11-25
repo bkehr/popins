@@ -241,7 +241,7 @@ crop_unmapped(CharString & fastqFirst,
     TOtherMap otherReads;
 
     // Retrieve the adapter sequences with up to one error.
-    TStringSet universal = complementUniversalOneError();
+    TStringSet universal = complementUniversalOneError(tag);
     TStringSet truSeqs = reverseTruSeqsOneError(tag);
     
     // Create suffix index of the adapter sequences.
@@ -307,6 +307,8 @@ crop_unmapped(CharString & fastqFirst,
     
     // Write the (temporary) fastq files.
     if (writeFastq(fastqFirst, fastqSecond, fastqSingle, firstReads, secondReads) != 0) return 1;
+    firstReads.clear();
+    secondReads.clear();
     
     std::cerr << "[" << time(0) << "] Unmapped reads written to ";
     std::cerr << fastqFirst << ", " << fastqSecond << ", " << fastqSingle << std::endl;
