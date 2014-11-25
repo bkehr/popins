@@ -78,6 +78,66 @@ hasLowMappingQuality(BamAlignmentRecord & record, int humanSeqs)
     return false;
 }
 
+template<typename TSize_>
+inline bool
+removeLowQuality(BamAlignmentRecord & record, TSize_ qualThresh)
+{
+    typedef Iterator<CharString, Rooted>::Type TIter;
+    typedef Size<CharString>::Type TSize;
+
+    TSize windowSize = std::max(TSize(5), length(record.qual) / 10);
+    TSize windowThresh = qualThresh*windowSize;
+
+    // Initialize windowQual with first windowSize quality values.
+    TSize windowQual = 0; 
+    TIter qualEnd = end(record.qual);
+    TIter windowEnd = begin(record.qual) + std::min(windowSize, length(record.qual));
+    TIter windowBegin = begin(record.qual);
+    for (; windowBegin != windowEnd; ++windowBegin) 
+        windowQual += *windowBegin - 33;
+
+    // Check quality from the left.
+    for (windowBegin = begin(record.qual); windowEnd < qualEnd; ++windowEnd, ++windowBegin)
+    {
+        if (windowQual >= (TSize)windowThresh)
+        {
+            while (*windowBegin < qualThresh) ++windowBegin;
+            record.seq = suffix(record.seq, length(record.seq) - position(windowBegin));
+            record.qual = suffix(record.qual, length(record.qual) - position(windowBegin));
+            break;
+        }
+        
+        windowQual -= *windowBegin - 33;
+        windowQual += *windowEnd - 33;
+    }
+    
+    // Initialize windowQual with last windowSize quality values.
+    windowQual = 0;
+    TIter qualBegin = begin(record.qual);
+    windowEnd = end(record.qual) - 1;
+    windowBegin = windowEnd - std::min(windowSize, length(record.qual));
+    for (; windowEnd != windowBegin; --windowEnd)
+        windowQual += *windowEnd - 33;
+    
+    // Check quality from the right.
+    for (windowEnd = end(record.qual) - 1; windowBegin >= qualBegin; --windowBegin, --windowEnd)
+    {
+        if (windowQual >= (TSize)windowThresh)
+        {
+            while (*windowEnd < qualThresh) --windowEnd;
+            record.seq = prefix(record.seq, position(windowEnd));
+            record.qual = prefix(record.qual, position(windowEnd));
+            break;
+        }
+        
+        windowQual -= *windowEnd - 33;
+        windowQual += *windowBegin -33;
+    }
+
+    if (length(record.seq) < 30) return 1;
+    return 0;
+}
+
 inline void
 setUnmapped(BamAlignmentRecord & record)
 {
@@ -88,7 +148,7 @@ setUnmapped(BamAlignmentRecord & record)
     record.mapQ = 0;
     clear(record.cigar);
     record.tLen = BamAlignmentRecord::INVALID_LEN;
-    //clear(reacord.tags);
+    //clear(record.tags);
 }
 
 inline void
@@ -268,10 +328,9 @@ crop_unmapped(Triple<CharString> & fastqFiles,
         // Check the read's unmapped flag.
         if (hasFlagUnmapped(record))
         {
-            // Remove adapter sequences.
-            if (removeAdapter(record, indexUniversal, indexTruSeqs, 30, tag) != 2)
+            // Remove low-quality and adapter sequences.
+            if (removeLowQuality(record, 20) != 1 && removeAdapter(record, indexUniversal, indexTruSeqs, 30, tag) != 2)
             {
-                //----- writeRecord(unmappedBamStream, record);
                 // Append read to maps of fastq records.
                 appendFastqRecord(firstReads, secondReads, record);
             }
@@ -291,12 +350,11 @@ crop_unmapped(Triple<CharString> & fastqFiles,
         // Check for mapping quality.
         else if (hasLowMappingQuality(record, humanSeqs))
         {
-            // Remove adapter sequences.
-            if (removeAdapter(record, indexUniversal, indexTruSeqs, 30, tag) != 2)
+            // Remove low-quality and adapter sequences.
+            if (removeLowQuality(record, 20) != 1 && removeAdapter(record, indexUniversal, indexTruSeqs, 30, tag) != 2)
             {
                 // Set read unmapped and append to maps of fastq records.
-                setUnmapped(record);
-                //----- writeRecord(unmappedBamStream, record);
+                //setUnmapped(record);
                 appendFastqRecord(firstReads, secondReads, record);
             
                 // Append the read to the list of reads that have a mate mapping elsewhere.
