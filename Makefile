@@ -11,14 +11,14 @@ WARN= -W -Wall
 FLAGS=-DSEQAN_HAS_ZLIB=1 -DVERSION=\"$(GIT_VERSION)\" -DVERSION_DATE=\""$(GIT_DATE)"\"
 
 # Flags for optimization OR for debugging
-RELEASE_FLAGS=-g -O3 -DSEQAN_ENABLE_TESTING=0 -DSEQAN_ENABLE_DEBUG=0
+RELEASE_FLAGS=-O3 -DSEQAN_ENABLE_TESTING=0 -DSEQAN_ENABLE_DEBUG=0
 DEBUG_FLAGS=-g -fno-inline -DDEBUG -DBOUNDS_CHECK -DSEQAN_ENABLE_TESTING=0 -DSEQAN_ENABLE_DEBUG=1
 
 # Replace RELEASE_FLAGS by DEBUG_FLAGS for debugging
 CPPFLAGS = $(WARN) $(RELEASE_FLAGS) $(INCLUDE)
-CC = g++ -fno-merge-constants -std=c++0x -fopenmp
+CC = g++ -fno-merge-constants -std=c++0x
 
-LIBS = -lz -lbz2
+LIBS = -lz -fopenmp
 
 .cpp.o:popins.cpp
 	$(CC) -c $(CPPFLAGS) $(FLAGS) $(TOOLS) $< -o $@
