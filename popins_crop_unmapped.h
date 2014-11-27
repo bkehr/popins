@@ -11,17 +11,6 @@ using namespace seqan;
 
 
 
-/*
-
-// NOTE: This function has been added to newer versions of SeqAn
-
-inline bool
-hasFlagSupplementary(BamAlignmentRecord const & record)
-{
-    return (record.flag & 0x800) == 0x800;
-}
-
-*/
 
 
 /**

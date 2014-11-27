@@ -170,14 +170,6 @@ readRecordAndCorrectRIds(BamAlignmentRecord & record,
 
 // ==========================================================================
 
-struct BamHeaderRecordTypeLess
-{
-    bool operator() (BamHeaderRecord const &a, BamHeaderRecord const &b) const
-    {
-        return a.type < b.type;
-    }
-};
-
 inline void
 mergeHeaders(BamHeader & header,
              StringSet<CharString> & nameStor,
