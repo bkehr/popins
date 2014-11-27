@@ -185,7 +185,7 @@ setupParser(ArgumentParser & parser, AssemblyOptions & options)
     setValidValues(parser, "adapters", "HiSeq HiSeqX");
 
     addOption(parser, ArgParseOption("r", "reference", "Fasta file with reference sequences for remapping. Default: \\fIno remapping\\fP.", ArgParseArgument::INPUTFILE, "FILE"));
-    setValidValues(parser, "reference", "fa fasta");
+    setValidValues(parser, "reference", "fa fna fasta");
     
     addOption(parser, ArgParseOption("f", "filter", "Consider reads with low quality alignments as unmapped only for first INT sequences in the reference file. Requires reference file for remapping to be set.", ArgParseArgument::INTEGER, "INT"));
     
@@ -235,7 +235,7 @@ setupParser(ArgumentParser & parser, MergingOptions & options)
     setMinValue(parser, "l", "3");
     setMinValue(parser, "k", "3");
     setMinValue(parser, "t", "0");
-    setValidValues(parser, "o", "fa fasta");
+    setValidValues(parser, "o", "fa fna fasta");
 
     // Set default values.
     setDefaultValue(parser, "e", options.errorRate);
@@ -308,7 +308,7 @@ setupParser(ArgumentParser & parser, PlacingOptions & options)
     addOption(parser, ArgParseOption("of", "outFa", "Name of output file for insertion sequences.", ArgParseArgument::OUTPUTFILE, "FAFILE"));
     addOption(parser, ArgParseOption("v", "verbose", "Enable verbose output."));
 
-    setValidValues(parser, "of", "fa fasta");
+    setValidValues(parser, "of", "fa fna fasta");
     setValidValues(parser, "ov", "vcf");
     setMinValue(parser, "m", "0");
     setMaxValue(parser, "m", "1");
