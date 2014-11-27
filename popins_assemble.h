@@ -505,10 +505,9 @@ int popins_assemble(int argc, char const ** argv)
         remove(toCString(fastqSingleTemp));
         
         // Set the mate's location and merge non_ref.bam and remapped.bam into a single file.
-        CharString mergedBam = getFileName(options.workingDirectory, "non_ref.bam");
-        merge_and_set_mate(mergedBam, nonRefBam, remappedBam);
+        if (merge_and_set_mate(nonRefBam, nonRefBamTemp, remappedBam) != 0) return 1;
         remove(toCString(remappedBam));
-        remove(toCString(nonRefBam));
+        remove(toCString(nonRefBamTemp));
     }
     
     CharString firstFiltered = getFileName(tmpDir, "filtered.paired.1.fastq");
@@ -528,14 +527,18 @@ int popins_assemble(int argc, char const ** argv)
 
     // Copy contigs file to workingDirectory.
     std::ifstream src(toCString(contigFileAssembly), std::ios::binary);
-    std::ofstream dst(toCString(contigFile),   std::ios::binary);
+    std::ofstream dst(toCString(contigFile), std::ios::binary);
     dst << src.rdbuf();
 
     removeAssemblyDirectory(getFileName(tmpDir, "assembly"));
     remove(toCString(firstFiltered));
     remove(toCString(secondFiltered));
     remove(toCString(singleFiltered));
-    remove(toCString(tmpDir));
+    if (options.tmpDir != "" && remove(toCString(tmpDir)) != 0)
+    {
+        std::cerr << "ERROR: Could not remove temporary directory " << tmpDir << std::endl;
+        return 1;
+    }
     
     std::cerr << "[" << time(0) << "] " << "Temporary directory " << tmpDir << " removed." << std::endl;
     
