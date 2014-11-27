@@ -36,7 +36,6 @@ inline int
 remapping(Triple<CharString> & fastqFilesTemp,
           Triple<CharString> & fastqFiles,
           CharString const & referenceFile,
-          CharString const & workingDirectory,
           CharString const & tempDir,
           unsigned humanSeqs,
           unsigned threads,
@@ -97,7 +96,7 @@ remapping(Triple<CharString> & fastqFilesTemp,
     std::cerr << "[" << time(0) << "] " << "Sorting " << remappedUnsortedBam << " by read name using " << SAMTOOLS << std::endl;
     
     cmd.str("");
-    cmd << SAMTOOLS << " sort -n -m " << memory << " " << remappedUnsortedBam << " " << workingDirectory << "/remapped";
+    cmd << SAMTOOLS << " sort -n -m " << memory << " " << remappedUnsortedBam << " " << tempDir << "/remapped";
     if (system(cmd.str().c_str()) != 0)
     {
         std::cerr << "ERROR while sorting " << remappedUnsortedBam << std::endl;
@@ -497,7 +496,7 @@ int popins_assemble(int argc, char const ** argv)
         
         // Align with bwa, update fastq files of unaligned reads, and sort remaining bam records by read name.
         CharString remappedBam = getFileName(tmpDir, "remapped.bam");
-        if (remapping(fastqFilesTemp, fastqFiles, options.referenceFile, options.workingDirectory, tmpDir,
+        if (remapping(fastqFilesTemp, fastqFiles, options.referenceFile, tmpDir,
                       options.humanSeqs, options.threads, options.memory) != 0)
             return 1;
         remove(toCString(fastqFirstTemp));
