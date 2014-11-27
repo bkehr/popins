@@ -34,6 +34,11 @@ write_fastq(CharString & fastqFirst,
         std::cerr << "ERROR while opening input bam file " << unmappedBam << std::endl;
         return 1;
     }
+
+    // Open the output fastq files.    
+    SequenceStream fastqFirstStream, fastqSecondStream, fastqSingleStream;
+    if (openFastq(fastqFirstStream, fastqFirst) != 0 || openFastq(fastqSecondStream, fastqSecond) != 0 ||
+        openFastq(fastqSingleStream, fastqSingle) != 0) return 1;
     
     // Iterate over bam file and append fastq records.
     BamAlignmentRecord record;
@@ -41,11 +46,11 @@ write_fastq(CharString & fastqFirst,
     {
         readRecord(record, inStream);
         if (hasFlagUnmapped(record))
-            appendFastqRecord(firstReads, secondReads, record);
+            appendFastqRecord(fastqFirstStream, fastqSecondStream, firstReads, secondReads, record);
     }
 
     // Write the fastq files.
-    if (writeFastq(fastqFirst, fastqSecond, fastqSingle, firstReads, secondReads) != 0) return 1;
+    if (writeFastq(fastqFirstStream, fastqSecondStream, fastqSingleStream, firstReads, secondReads) != 0) return 1;
 
     return 0;
 }

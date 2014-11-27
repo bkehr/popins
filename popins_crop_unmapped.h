@@ -89,7 +89,9 @@ setMateUnmapped(BamAlignmentRecord & record)
 
 // Append a read to map of fastq records.
 void
-appendFastqRecord(std::map<CharString, Pair<CharString> > & firstReads,
+appendFastqRecord(SequenceStream & firstStream,
+                  SequenceStream & secondStream,
+                  std::map<CharString, Pair<CharString> > & firstReads,
                   std::map<CharString, Pair<CharString> > & secondReads,
                   BamAlignmentRecord const & record)
 {
@@ -104,52 +106,48 @@ appendFastqRecord(std::map<CharString, Pair<CharString> > & firstReads,
 
     if (hasFlagFirst(record))
     {
-        if (firstReads.count(record.qName) != 0)
+        if (secondReads.count(record.qName) != 0)
         {
-            std::cerr << "[" << time(0) << "] ";
-            std::cerr << "WARNING: Multiple records for read " << record.qName << " in bam file." << std::endl;
+            Pair<CharString> second = secondReads[record.qName];
+            writeRecord(firstStream, record.qName, record.seq, record.qual);
+            writeRecord(secondStream, record.qName, second.i1, second.i2);
+            secondReads.erase(record.qName);
         }
-        firstReads[record.qName] = Pair<CharString>(seq, qual);
+        else firstReads[record.qName] = Pair<CharString>(seq, qual);
     }
     else // hasFlagLast(record)
     {
-        if (secondReads.count(record.qName) != 0)
+        if (firstReads.count(record.qName) != 0)
         {
-            std::cerr << "[" << time(0) << "] ";
-            std::cerr << "WARNING: Multiple records for read " << record.qName << " in bam file." << std::endl;
+            Pair<CharString> first = firstReads[record.qName];
+            writeRecord(firstStream, record.qName, first.i1, first.i2);
+            writeRecord(secondStream, record.qName, record.seq, record.qual);
+            firstReads.erase(record.qName);
         }
-        secondReads[record.qName] = Pair<CharString>(seq, qual);
+        else secondReads[record.qName] = Pair<CharString>(seq, qual);
     }
 }
 
+bool
+openFastq(SequenceStream & stream, CharString & file)
+{
+    open(stream, toCString(file), SequenceStream::WRITE, SequenceStream::FASTQ);
+    if (!isGood(stream))
+    {
+        std::cerr << "ERROR while opening temporary output file " << file << std::endl;
+        return 1;
+    }
+    return 0;
+}
+
 int
-writeFastq(CharString & fastqFirst,
-           CharString & fastqSecond,
-           CharString & fastqSingle,
+writeFastq(SequenceStream & fastqFirst,
+           SequenceStream & fastqSecond,
+           SequenceStream & fastqSingle,
            std::map<CharString, Pair<CharString> > const & firstReads,
            std::map<CharString, Pair<CharString> > const & secondReads)
 {
     typedef std::map<CharString, Pair<CharString> > TFastqMap;
-
-    // Open the output files.
-    SequenceStream fastqFirstStream(toCString(fastqFirst), SequenceStream::WRITE, SequenceStream::FASTQ);
-    if (!isGood(fastqFirstStream))
-    {
-        std::cerr << "ERROR while opening temporary output file " << fastqFirst << std::endl;
-        return 1;
-    }
-    SequenceStream fastqSecondStream(toCString(fastqSecond), SequenceStream::WRITE, SequenceStream::FASTQ);
-    if (!isGood(fastqSecondStream))
-    {
-        std::cerr << "ERROR while opening temporary output file " << fastqFirst << std::endl;
-        return 1;
-    }
-    SequenceStream fastqSingleStream(toCString(fastqSingle), SequenceStream::WRITE, SequenceStream::FASTQ);
-    if (!isGood(fastqSingleStream))
-    {
-        std::cerr << "ERROR while opening temporary output file " << fastqFirst << std::endl;
-        return 1;
-    }
     
     // Initialize iterators over reads in fastq maps.
     TFastqMap::const_iterator firstIt = firstReads.begin();
@@ -162,18 +160,18 @@ writeFastq(CharString & fastqFirst,
     {
         if (firstIt->first < secondIt->first)
         {
-            writeRecord(fastqSingleStream, firstIt->first, firstIt->second.i1, firstIt->second.i2);
+            writeRecord(fastqSingle, firstIt->first, firstIt->second.i1, firstIt->second.i2);
             ++firstIt;
         }
         else if (firstIt->first == secondIt->first)
         {
-            writeRecord(fastqFirstStream, firstIt->first, firstIt->second.i1, firstIt->second.i2);
-            writeRecord(fastqSecondStream, secondIt->first, secondIt->second.i1, secondIt->second.i2);
+            writeRecord(fastqFirst, firstIt->first, firstIt->second.i1, firstIt->second.i2);
+            writeRecord(fastqSecond, secondIt->first, secondIt->second.i1, secondIt->second.i2);
             ++firstIt; ++secondIt;
         }
         else // firstIt->first > secondIt->first
         {
-            writeRecord(fastqSingleStream, secondIt->first, secondIt->second.i1, secondIt->second.i2);
+            writeRecord(fastqSingle, secondIt->first, secondIt->second.i1, secondIt->second.i2);
             ++secondIt;
         }
     }
@@ -181,12 +179,12 @@ writeFastq(CharString & fastqFirst,
     // Iterate over remaining reads and output to single.fastq.
     while (firstIt != firstEnd)
     {
-        writeRecord(fastqSingleStream, firstIt->first, firstIt->second.i1, firstIt->second.i2);
+        writeRecord(fastqSingle, firstIt->first, firstIt->second.i1, firstIt->second.i2);
         ++firstIt;
     }
     while (secondIt != secondEnd)
     {
-        writeRecord(fastqSingleStream, secondIt->first, secondIt->second.i1, secondIt->second.i2);
+        writeRecord(fastqSingle, secondIt->first, secondIt->second.i1, secondIt->second.i2);
         ++secondIt;
     }
 
@@ -230,6 +228,11 @@ crop_unmapped(CharString & fastqFirst,
     TFastqMap firstReads, secondReads;
     TOtherMap otherReads;
 
+    // Open the output fastq files.    
+    SequenceStream fastqFirstStream, fastqSecondStream, fastqSingleStream;
+    if (openFastq(fastqFirstStream, fastqFirst) != 0 || openFastq(fastqSecondStream, fastqSecond) != 0 ||
+        openFastq(fastqSingleStream, fastqSingle) != 0) return 1;
+
     // Retrieve the adapter sequences with up to one error.
     TStringSet universal = complementUniversalOneError(tag);
     TStringSet truSeqs = reverseTruSeqsOneError(tag);
@@ -237,7 +240,7 @@ crop_unmapped(CharString & fastqFirst,
     // Create suffix index of the adapter sequences.
     Index<TStringSet> indexUniversal(universal);
     Index<TStringSet> indexTruSeqs(truSeqs);
-    
+
     // Iterate over the input file.
     BamAlignmentRecord record;
     while (!atEnd(inStream))
@@ -261,7 +264,7 @@ crop_unmapped(CharString & fastqFirst,
             {
                 //----- writeRecord(unmappedBamStream, record);
                 // Append read to maps of fastq records.
-                appendFastqRecord(firstReads, secondReads, record);
+                appendFastqRecord(fastqFirstStream, fastqSecondStream, firstReads, secondReads, record);
             }
         }
 
@@ -285,7 +288,7 @@ crop_unmapped(CharString & fastqFirst,
                 // Set read unmapped and append to maps of fastq records.
                 setUnmapped(record);
                 //----- writeRecord(unmappedBamStream, record);
-                appendFastqRecord(firstReads, secondReads, record);
+                appendFastqRecord(fastqFirstStream, fastqSecondStream, firstReads, secondReads, record);
             
                 // Append the read to the list of reads that have a mate mapping elsewhere.
                 otherReads[Pair<TPos>(record.rNextId, record.pNext)] = Pair<CharString, bool>(record.qName, hasFlagFirst(record));
@@ -295,8 +298,8 @@ crop_unmapped(CharString & fastqFirst,
     
     std::cerr << "[" << time(0) << "] Map of low quality mates has " << otherReads.size() << " records." << std::endl;
     
-    // Write the (temporary) fastq files.
-    if (writeFastq(fastqFirst, fastqSecond, fastqSingle, firstReads, secondReads) != 0) return 1;
+    // Write the remaining records to (temporary) fastq files.
+    if (writeFastq(fastqFirstStream, fastqSecondStream, fastqSingleStream, firstReads, secondReads) != 0) return 1;
     firstReads.clear();
     secondReads.clear();
     
