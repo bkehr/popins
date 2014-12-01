@@ -642,6 +642,8 @@ addSequencesToGraph(ComponentGraph<TSeq1> & compGraph,
     {
         String<TPath> paths;
         enumeratePaths(paths, compGraph);
+        
+        if (length(paths) > 30) return false;
 
         TScoreValue maxScore = minValue<TScoreValue>();
         TPath bestPath;
@@ -694,7 +696,8 @@ mergeSequences(String<TSeq1> & mergedSeqs,
     typedef typename Size<String<TPath> >::Type TSize;
 
     TGraph compGraph(seqs[0]);
-    bool ret = addSequencesToGraph(compGraph, seqs, minBranchLen, matchScore, errorPenalty, qgramLength);
+    if (!addSequencesToGraph(compGraph, seqs, minBranchLen, matchScore, errorPenalty, qgramLength))
+        return false;
 
     String<TPath> finalPaths;
     enumeratePaths(finalPaths, compGraph);
@@ -712,7 +715,7 @@ mergeSequences(String<TSeq1> & mergedSeqs,
     for (TSize i = 0; i < length(finalPaths); ++i)
         appendValue(mergedSeqs, finalPaths[i].seq);
 
-    return ret;
+    return true;
 }
 
 // ==========================================================================
@@ -756,6 +759,8 @@ int popins_merge(int argc, char const ** argv)
 
     unsigned numSingleton = 0;
     unsigned numBranching = 0;
+    unsigned numVeryBranching = 0;
+    unsigned numTooLarge = 0;
     
     // Iterate over the set of components.
     unsigned pos = 0;
@@ -765,6 +770,13 @@ int popins_merge(int argc, char const ** argv)
 
         // Sort the contigs for merging.
         getSeqsByAlignOrder(component, contigs, contigIds);
+        
+        if (length(component.contigs) > 10 * length(options.contigFiles))
+        {
+            if (options.verbose) std::cout << "COMPONENT_" << pos << " size:" << length(component.contigs) << " skipped." << std::endl;
+            ++numTooLarge;
+            continue;
+        }
 
         // Output component if consisting of a single contig.
         if (length(component.contigs) == 1)
@@ -790,9 +802,15 @@ int popins_merge(int argc, char const ** argv)
         //        std::cout << component.ids[i] << std::endl;
         //}
         
-        mergeSequences(mergedSeqs, component.contigs,
-                       options.minTipScore, options.matchScore, options.errorPenalty, options.qgramLength,
-                       options.verbose);
+        if (!mergeSequences(mergedSeqs, component.contigs,
+                            options.minTipScore, options.matchScore, options.errorPenalty, options.qgramLength,
+                            options.verbose))
+        {
+            if (options.verbose) std::cout << "COMPONENT_" << pos << " size:" << length(component.contigs) << " given up." << std::endl;
+            ++numVeryBranching;
+            ++numBranching;
+            continue;
+        }
 
         if (length(mergedSeqs) > 1) ++numBranching;
 
@@ -826,7 +844,8 @@ int popins_merge(int argc, char const ** argv)
     {
         std::cerr << "[" << time(0) << "] " << length(components)-numSingleton << " components are merged from several contigs." << std::endl;
         std::cerr << "[" << time(0) << "] " << numSingleton << " contigs did not align with any other contig." << std::endl;
-        std::cerr << "[" << time(0) << "] " << numBranching << " components are branching." << std::endl;
+        std::cerr << "[" << time(0) << "] " << numBranching << " components are branching, given up on " << numVeryBranching << " of them." << std::endl;
+        std::cerr << "[" << time(0) << "] " << numTooLarge << " components exceeded the maximum number of contigs for merging." << std::endl;
     }
 
     return 0;
