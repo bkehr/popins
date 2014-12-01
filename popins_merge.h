@@ -591,7 +591,7 @@ bool mergeSeqWithGraph(ComponentGraph<TSeq1> & compGraph,
 
     if (alignBeginSeq > 0)
     {
-        TPos uPos = path.positionMap.lower_bound(alignBeginPath)->first;
+        TPos uPos = path.positionMap.upper_bound(alignBeginPath)->first;
         TVertexDescriptor u = path.positionMap[uPos];
         
         if (alignBeginPath == 0)
