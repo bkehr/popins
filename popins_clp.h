@@ -62,6 +62,7 @@ struct ContigMapOptions {
     CharString contigFile;
     CharString remappedFile;
     CharString workingDirectory;
+    CharString tmpDir;
     
     ContigMapOptions() {}
 };
@@ -267,7 +268,10 @@ setupParser(ArgumentParser & parser, ContigMapOptions &)
 
     // Setup the option.
     addOption(parser, ArgParseOption("d", "directory", "Path to working directory.", ArgParseArgument::STRING, "PATH"));
-    setDefaultValue(parser, "directory", "current directory");    
+    setDefaultValue(parser, "directory", "current directory");
+
+    addOption(parser, ArgParseOption("tmp", "tmpdir", "Path to a temporary directory ending with XXXXXX.", ArgParseArgument::STRING, "PATH"));
+    setDefaultValue(parser, "tmpdir", "same as working directory");
 }
 
 void
@@ -463,6 +467,8 @@ getOptionValues(ContigMapOptions & options, ArgumentParser & parser)
     
     if (isSet(parser, "directory"))
         getOptionValue(options.workingDirectory, parser, "directory");
+    if (isSet(parser, "tmpdir"))
+        getOptionValue(options.tmpDir, parser, "tmpdir");
 
     return 0;
 }
