@@ -126,6 +126,7 @@ int popins_contigmap(int argc, char const ** argv)
     if (parseCommandLine(options, argc, argv) != 0)
         return 1;
 
+    // Check for input files to exist.
     CharString fastqFirst = getFileName(options.workingDirectory, "paired.1.fastq");
     CharString fastqSecond = getFileName(options.workingDirectory, "paired.2.fastq");
     CharString fastqSingle = getFileName(options.workingDirectory, "single.fastq");
@@ -134,14 +135,34 @@ int popins_contigmap(int argc, char const ** argv)
     if (!exists(fastqFirst) || !exists(fastqSecond) || !exists(fastqSingle) || !exists(nonRefBam))
     {
         std::cerr << "ERROR: Could not find all input files ";
-        std::cerr << fastqFirst << ", " << fastqSecond << ", " << fastqSingle << ", or " << nonRefBam << std::endl;
+        std::cerr << fastqFirst << ", " << fastqSecond << ", " << fastqSingle << ", and " << nonRefBam << std::endl;
         return 1;
     }
+    
+    // Create temporary directory.
+    if (options.tmpDir == "")
+    {
+        options.tmpDir = options.workingDirectory;
+    }
+    else
+    {
+        errno = 0;
+        char* tempDir = mkdtemp(toCString(options.tmpDir));
+        if (errno != 0)
+        {
+            if (errno == EINVAL) std::cerr << "ERROR: Temporary directory does not end in XXXXXX: " << options.tmpDir << std::endl;
+            else std::cerr << "ERROR: Could not create temporary directory at " << options.tmpDir << std::endl;
+            return 1;
+        }
+        options.tmpDir = tempDir;
+        std::cerr << "[" << time(0) << "] Using temporary directory " << tempDir << std::endl;
+    }
 
-    CharString mappedSam = getFileName(options.workingDirectory, "contig_mapped_unsorted.sam");
-    CharString mappedBamUnsorted = getFileName(options.workingDirectory, "contig_mapped_unsorted.bam");
-    CharString mappedBam = getFileName(options.workingDirectory, "contig_mapped.bam");
-    CharString mergedBam = getFileName(options.workingDirectory, "merged.bam");
+    // Create names of temporary files.
+    CharString mappedSam = getFileName(options.tmpDir, "contig_mapped_unsorted.sam");
+    CharString mappedBamUnsorted = getFileName(options.tmpDir, "contig_mapped_unsorted.bam");
+    CharString mappedBam = getFileName(options.tmpDir, "contig_mapped.bam");
+    CharString mergedBam = getFileName(options.tmpDir, "merged.bam");
 
     // Remapping to contigs with bwa.
     std::cerr << "[" << time(0) << "] Mapping reads to contigs using " << BWA << std::endl;
@@ -195,30 +216,41 @@ int popins_contigmap(int argc, char const ** argv)
     }
     remove(toCString(mappedBamUnsorted));
     
+    // Merge non_ref.bam with contig_mapped and set the mates.
     merge_and_set_mate(mergedBam, nonRefBam, mappedBam);
     remove(toCString(mappedBam));
-    remove(toCString(nonRefBam));
+    //remove(toCString(nonRefBam));
 
     // Sort <WD>/merged.bam by beginPos, output is <WD>/non_ref.bam.
     std::cerr << "[" << time(0) << "] " << "Sorting " << mergedBam << " using " << SAMTOOLS << std::endl;
     cmd.str("");
-    cmd << SAMTOOLS << " sort " << mergedBam << " " << options.workingDirectory << "/non_ref";
+    cmd << SAMTOOLS << " sort " << mergedBam << " " << options.workingDirectory << "/non_ref_new";
     if (system(cmd.str().c_str()) != 0)
     {
         std::cerr << "ERROR while sorting " << mergedBam << " by beginPos using " << SAMTOOLS << std::endl;
         return 1;
     }
-    
     remove(toCString(mergedBam));
     
     // Index <WD>/non_ref.bam.
-    std::cerr << "[" << time(0) << "] " << "Indexing " << nonRefBam << " by beginPos using " << SAMTOOLS << std::endl;
+    std::cerr << "[" << time(0) << "] " << "Indexing " << options.workingDirectory << "/non_ref_new.bam by beginPos using " << SAMTOOLS << std::endl;
     cmd.str("");
-    cmd << SAMTOOLS << " index " << nonRefBam;
+    cmd << SAMTOOLS << " index " << options.workingDirectory << "/non_ref_new.bam";
     if (system(cmd.str().c_str()) != 0)
     {
-        std::cerr << "ERROR while indexing " << nonRefBam << " using " << SAMTOOLS << std::endl;
+        std::cerr << "ERROR while indexing " << options.workingDirectory << "/non_ref_new.bam using " << SAMTOOLS << std::endl;
         return 1;
+    }
+    
+    // Remove temporary directory.
+    if (options.tmpDir != options.workingDirectory)
+    {
+        if (remove(toCString(options.tmpDir)) != 0)
+        {
+            std::cerr << "ERROR: Could not remove temporary directory " << options.tmpDir << std::endl;
+            return 1;
+        }
+        std::cerr << "[" << time(0) << "] " << "Temporary directory " << options.tmpDir << " removed." << std::endl;
     }
     
     return 0;
