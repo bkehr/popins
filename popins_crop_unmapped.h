@@ -393,8 +393,8 @@ crop_unmapped(Triple<CharString> & fastqFiles,
 
     // Open the output fastq files.    
     SequenceStream fastqFirstStream, fastqSecondStream, fastqSingleStream;
-    if (openFastq(fastqFirstStream, fastqFirst) != 0 || openFastq(fastqSecondStream, fastqSecond) != 0 ||
-        openFastq(fastqSingleStream, fastqSingle) != 0) return 1;
+    if (openFastq(fastqFirstStream, fastqFiles.i1) != 0 || openFastq(fastqSecondStream, fastqFiles.i2) != 0 ||
+        openFastq(fastqSingleStream, fastqFiles.i3) != 0) return 1;
 
     // Retrieve the adapter sequences with up to one error and create indices.
     TStringSet universal = complementUniversalOneError(tag);
