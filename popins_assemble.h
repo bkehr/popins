@@ -15,7 +15,7 @@ using namespace seqan;
 // ==========================================================================
 
 inline void
-removeAssemblyDirectory(CharString const & path)
+removeAssemblyDirectory(CharString & path)
 {
     removeFile(path, "contigs.fa");
     removeFile(path, "Graph2");
@@ -25,7 +25,7 @@ removeAssemblyDirectory(CharString const & path)
     removeFile(path, "Roadmaps");
     removeFile(path, "Sequences");
     removeFile(path, "stats.txt");
-    remove(toCString(path));
+    rmdir(toCString(path));
 }
 
 // ==========================================================================
@@ -45,6 +45,7 @@ remapping(Triple<CharString> & fastqFilesTemp,
 
     CharString remappedSam = getFileName(tempDir, "remapped.sam");
     CharString remappedBam = getFileName(tempDir, "remapped.bam");
+    CharString remappedBai = getFileName(tempDir, "remapped.bam.bai");
     CharString remappedUnsortedBam = getFileName(tempDir, "remapped_unsorted.bam");
 
     // Run BWA on unmapped reads (pairs).
@@ -91,11 +92,22 @@ remapping(Triple<CharString> & fastqFilesTemp,
         std::cerr << "ERROR while sorting BWA output " << remappedUnsortedBam << std::endl;
         return 1;
     }
+    
+    // Index bam file.
+    std::cerr << "[" << time(0) << "] Indexing " << remappedBam << " using " << SAMTOOLS << std::endl;
+    cmd.str("");
+    cmd << SAMTOOLS << " index " << remappedBam;
+    if (system(cmd.str().c_str()) != 0)
+    {
+        std::cerr << "ERROR while indexing BWA output " << remappedBam << std::endl;
+        return 1;
+    }
 
     // Crop unmapped and create bam file of remapping.
     std::cerr << "[" << time(0) << "] Cropping unmapped reads from " << remappedBam << std::endl;
     if (crop_unmapped(fastqFiles, remappedUnsortedBam, remappedBam, humanSeqs, NoAdapters()) != 0)
         return 1;
+    remove(toCString(remappedBai));
 
     // Sort <WD>/remapped.bam by read name.
     std::cerr << "[" << time(0) << "] " << "Sorting " << remappedUnsortedBam << " by read name using " << SAMTOOLS << std::endl;
@@ -377,11 +389,9 @@ sickle_filtering(Triple<CharString> & filteredFiles,
 // ==========================================================================
 
 inline bool
-velvet_assembly(Triple<CharString> & filteredFiles, CharString & workingDirectory, unsigned kmerLength)
+velvet_assembly(Triple<CharString> & filteredFiles, CharString & assemblyDirectory, unsigned kmerLength)
 {
     std::stringstream cmd;
-
-    CharString assemblyDirectory = getFileName(workingDirectory, "assembly");
 
     std::cerr << "[" << time(0) << "] " << "Preparing assembly of unmapped reads from filtered fastq files using " << VELVETH << std::endl;
     cmd.str("");
@@ -521,9 +531,10 @@ int popins_assemble(int argc, char const ** argv)
         return 1;
 
     // Assembly with velvet.
-    if (velvet_assembly(filteredFiles, tmpDir, options.kmerLength) != 0) return 1;
+    CharString assemblyDirectory = getFileName(tmpDir, "assembly");
+    if (velvet_assembly(filteredFiles, assemblyDirectory, options.kmerLength) != 0) return 1;
 
-    CharString contigFileAssembly = getFileName(tmpDir, "assembly/contigs.fa");
+    CharString contigFileAssembly = getFileName(assemblyDirectory, "contigs.fa");
     CharString contigFile = getFileName(options.workingDirectory, "contigs.fa");
 
     // Copy contigs file to workingDirectory.
@@ -531,7 +542,7 @@ int popins_assemble(int argc, char const ** argv)
     std::ofstream dst(toCString(contigFile), std::ios::binary);
     dst << src.rdbuf();
 
-    removeAssemblyDirectory(getFileName(tmpDir, "assembly"));
+    removeAssemblyDirectory(assemblyDirectory);
     remove(toCString(firstFiltered));
     remove(toCString(secondFiltered));
     remove(toCString(singleFiltered));
