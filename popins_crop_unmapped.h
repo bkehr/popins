@@ -46,7 +46,7 @@ hasLowMappingQuality(BamAlignmentRecord & record, int humanSeqs)
         if ((*it).operation == 'M') matches += (*it).count;
     if (matches < 50) return true;
 
-    // Check for soft-clipping at BOTH ENDS by more than 9 bp.
+    // Check for soft-clipping at BOTH ENDS by more than 24 bp.
     if (record.cigar[0].operation == 'S' &&
         record.cigar[0].count > 24 &&
         record.cigar[length(record.cigar)-1].operation == 'S' &&
@@ -90,15 +90,16 @@ removeLowQuality(BamAlignmentRecord & record, TSize_ qualThresh)
     {
         if (windowQual >= (TSize)windowThresh)
         {
-            while (*windowBegin < qualThresh) ++windowBegin;
-            record.seq = suffix(record.seq, length(record.seq) - position(windowBegin));
-            record.qual = suffix(record.qual, length(record.qual) - position(windowBegin));
+            while (*windowBegin - 33 < qualThresh) ++windowBegin;
+            record.seq = suffix(record.seq, position(windowBegin));
+            record.qual = suffix(record.qual, position(windowBegin));
             break;
         }
         
         windowQual -= *windowBegin - 33;
         windowQual += *windowEnd - 33;
     }
+    if (windowEnd == qualEnd) return 1;
     
     // Initialize windowQual with last windowSize quality values.
     windowQual = 0;
@@ -113,9 +114,9 @@ removeLowQuality(BamAlignmentRecord & record, TSize_ qualThresh)
     {
         if (windowQual >= (TSize)windowThresh)
         {
-            while (*windowEnd < qualThresh) --windowEnd;
-            record.seq = prefix(record.seq, position(windowEnd));
-            record.qual = prefix(record.qual, position(windowEnd));
+            while (*windowEnd - 33 < qualThresh) --windowEnd;
+            record.seq = prefix(record.seq, position(windowEnd) + 1);
+            record.qual = prefix(record.qual, position(windowEnd) + 1);
             break;
         }
         
@@ -256,14 +257,11 @@ writeFastq(CharString & fastqFirst,
     return 0;
 }
 
-template<typename TPos, typename TStringSet, typename TAdapterTag>
+template<typename TPos>
 int
-findOtherReads(BamStream & unmappedBamStream,
+findOtherReads(BamStream & matesStream,
                std::map<Pair<TPos>, Pair<CharString, bool> > & otherReads,
-               CharString const & mappingBam,
-               Index<TStringSet> & indexUniversal,
-               Index<TStringSet> & indexTruSeqs,
-               TAdapterTag tag)
+               CharString const & mappingBam)
 {
     typedef std::map<Pair<TPos>, Pair<CharString, bool> > TOtherMap;
     
@@ -287,15 +285,8 @@ findOtherReads(BamStream & unmappedBamStream,
         return -1;
     }
 
-    // Read the first record.
-    BamAlignmentRecord record;
-    if (readRecord(record, inStream) != 0)
-    {
-        std::cerr << "ERROR while reading bam record from " << mappingBam << std::endl;
-        return -1;
-    }
-    
     __int32 rID = BamAlignmentRecord::INVALID_REFID;
+    BamAlignmentRecord record;
 
     typename TOtherMap::const_iterator itEnd = otherReads.end();
     for (typename TOtherMap::const_iterator it = otherReads.begin(); it != itEnd; ++it)
@@ -306,6 +297,11 @@ findOtherReads(BamStream & unmappedBamStream,
             rID = it->first.i1;
             bool hasAligns;
             jumpToRegion(inStream, hasAligns, rID, it->first.i2, maxValue<TPos>(), bamIndex);
+            if (readRecord(record, inStream) != 0)
+            {
+                std::cerr << "ERROR while reading bam record from " << mappingBam << std::endl;
+                return -1;
+            }
         }
 
         // Skip reads not in list.
@@ -323,14 +319,13 @@ findOtherReads(BamStream & unmappedBamStream,
         if (!atEnd(inStream) &&
             record.qName == it->second.i1 && record.rID == it->first.i1 && record.beginPos == it->first.i2)
         {
-            if (otherReads.count(Pair<TPos>(record.rNextId, record.pNext)) == 0 &&
-                removeAdapter(record, indexUniversal, indexTruSeqs, 30, tag) != 2)
+            if (otherReads.count(Pair<TPos>(record.rNextId, record.pNext)) == 0)
             {
                 // Set mate flags and location as unmapped and write record to output bam file.
                 setMateUnmapped(record);
-                writeRecord(unmappedBamStream, record);
-                ++numFound;
+                writeRecord(matesStream, record);
             }
+            ++numFound;
         }
     }
 
@@ -341,7 +336,7 @@ findOtherReads(BamStream & unmappedBamStream,
 template<typename TAdapterTag>
 int
 crop_unmapped(Triple<CharString> & fastqFiles,
-              CharString & unmappedBam,
+              CharString & matesBam,
               CharString const & mappingBam,
               int humanSeqs,
               TAdapterTag tag)
@@ -360,13 +355,13 @@ crop_unmapped(Triple<CharString> & fastqFiles,
     }
     
     // Open the bam output file and copy the header from the input file.
-    BamStream unmappedBamStream(toCString(unmappedBam), BamStream::WRITE);
-    if (!isGood(unmappedBamStream))
+    BamStream matesStream(toCString(matesBam), BamStream::WRITE);
+    if (!isGood(matesStream))
     {
-        std::cerr << "ERROR while opening output bam file " << unmappedBam << std::endl;
+        std::cerr << "ERROR while opening output bam file " << matesBam << std::endl;
         return 1;
     }
-    unmappedBamStream.header = inStream.header;
+    matesStream.header = inStream.header;
     
     // Create maps for fastq records (first read in pair and second read in pair) and bam records without mate.
     TFastqMap firstReads, secondReads;
@@ -399,13 +394,6 @@ crop_unmapped(Triple<CharString> & fastqFiles,
             if (removeLowQuality(record, 20) != 1 && removeAdapter(record, indexUniversal, indexTruSeqs, 30, tag) != 2)
                 appendFastqRecord(firstReads, secondReads, record);
         }
-
-        // Check the mate's unmapped flag.
-        else if (hasFlagNextUnmapped(record))
-        {
-            if (removeAdapter(record, indexUniversal, indexTruSeqs, 30, tag) != 2)
-                writeRecord(unmappedBamStream, record);
-        }
         
         // Check for low mapping quality.
         else if (hasLowMappingQuality(record, humanSeqs))
@@ -415,6 +403,12 @@ crop_unmapped(Triple<CharString> & fastqFiles,
                 appendFastqRecord(firstReads, secondReads, record);
                 otherReads[Pair<TPos>(record.rNextId, record.pNext)] = Pair<CharString, bool>(record.qName, hasFlagFirst(record));
             }
+        }
+
+        // Check the mate's unmapped flag.
+        else if (hasFlagNextUnmapped(record))
+        {
+            writeRecord(matesStream, record);
         }
     }
     
@@ -428,10 +422,10 @@ crop_unmapped(Triple<CharString> & fastqFiles,
     
     
     // Find the other read end of the low quality mapping reads and write them to the output bam file. 
-    int found = findOtherReads(unmappedBamStream, otherReads, mappingBam, indexUniversal, indexTruSeqs, tag);
+    int found = findOtherReads(matesStream, otherReads, mappingBam);
     if (found == -1) return 1;
     
-    std::cerr << "[" << time(0) << "] Mapped mates of unmapped reads written to " << unmappedBam << " , ";
+    std::cerr << "[" << time(0) << "] Mapped mates of unmapped reads written to " << matesBam << " , ";
     std::cerr << found << " found in second pass" << std::endl;
     
     return 0;
