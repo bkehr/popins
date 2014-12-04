@@ -167,7 +167,7 @@ setMateUnmapped(BamAlignmentRecord & record)
 // --------------------------------------------------------------------------
 
 // Append a read to map of fastq records.
-void
+bool
 appendFastqRecord(SequenceStream & firstStream,
                   SequenceStream & secondStream,
                   std::map<CharString, Pair<CharString> > & firstReads,
@@ -191,8 +191,13 @@ appendFastqRecord(SequenceStream & firstStream,
             writeRecord(firstStream, record.qName, record.seq, record.qual);
             writeRecord(secondStream, record.qName, second.i1, second.i2);
             secondReads.erase(record.qName);
+            return 1;
         }
-        else firstReads[record.qName] = Pair<CharString>(seq, qual);
+        else
+        {
+            firstReads[record.qName] = Pair<CharString>(seq, qual);
+            return 0;
+        }
     }
     else // hasFlagLast(record)
     {
@@ -202,8 +207,13 @@ appendFastqRecord(SequenceStream & firstStream,
             writeRecord(firstStream, record.qName, first.i1, first.i2);
             writeRecord(secondStream, record.qName, record.seq, record.qual);
             firstReads.erase(record.qName);
+            return 1;
         }
-        else secondReads[record.qName] = Pair<CharString>(seq, qual);
+        else
+        {
+            secondReads[record.qName] = Pair<CharString>(seq, qual);
+            return 0;
+        }
     }
 }
 
@@ -429,8 +439,8 @@ crop_unmapped(Triple<CharString> & fastqFiles,
         {
             if (removeLowQuality(record, 20) != 1 && removeAdapter(record, indexUniversal, indexTruSeqs, 30, tag) != 2)
             {
-                appendFastqRecord(fastqFirstStream, fastqSecondStream, firstReads, secondReads, record);
-                otherReads[Pair<TPos>(record.rNextId, record.pNext)] = Pair<CharString, bool>(record.qName, hasFlagFirst(record));
+                if (appendFastqRecord(fastqFirstStream, fastqSecondStream, firstReads, secondReads, record) == 0)
+                    otherReads[Pair<TPos>(record.rNextId, record.pNext)] = Pair<CharString, bool>(record.qName, hasFlagFirst(record));
             }
         }
 

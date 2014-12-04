@@ -25,7 +25,7 @@ removeAssemblyDirectory(CharString & path)
     removeFile(path, "Roadmaps");
     removeFile(path, "Sequences");
     removeFile(path, "stats.txt");
-    rmdir(toCString(path));
+    remove(toCString(path));
 }
 
 // ==========================================================================
@@ -162,6 +162,8 @@ setMates(BamAlignmentRecord & record1, BamAlignmentRecord & record2)
     record2.flag |= BAM_FLAG_MULTIPLE;
 }
 
+// ==========================================================================
+
 // Correct the reference ids of a BamAlignmentRecord for the concatenated header.
 template<typename TNameStore>
 inline void
@@ -216,6 +218,8 @@ mergeHeaders(BamHeader & header,
         }
     }
 }
+
+// ==========================================================================
 
 int
 compare_qName(CharString & a, CharString & b)
@@ -457,7 +461,7 @@ int popins_assemble(int argc, char const ** argv)
     CharString fastqFirstTemp = getFileName(tmpDir, "paired.1.fastq");
     CharString fastqSecondTemp = getFileName(tmpDir, "paired.2.fastq");
     CharString fastqSingleTemp = getFileName(tmpDir, "single.fastq");
-    CharString nonRefBamTemp = getFileName(tmpDir, "non_ref.bam");
+    CharString nonRefBamTemp = getFileName(tmpDir, "non_ref_tmp.bam");
 
     CharString fastqFirst = getFileName(options.workingDirectory, "paired.1.fastq");
     CharString fastqSecond = getFileName(options.workingDirectory, "paired.2.fastq");
@@ -492,7 +496,7 @@ int popins_assemble(int argc, char const ** argv)
     std::cerr << "[" << time(0) << "] " << "Sorting " << matesBam << " using " << SAMTOOLS << std::endl;
     std::stringstream cmd;
     if (options.referenceFile != "")
-        cmd << SAMTOOLS << " sort -n -m " << options.memory << " " << matesBam << " " << tmpDir << "/non_ref";
+        cmd << SAMTOOLS << " sort -n -m " << options.memory << " " << matesBam << " " << tmpDir << "/non_ref_tmp";
     else
         cmd << SAMTOOLS << " sort -n -m " << options.memory << " " << matesBam << " " << options.workingDirectory << "/non_ref";
     if (system(cmd.str().c_str()) != 0)
@@ -518,7 +522,7 @@ int popins_assemble(int argc, char const ** argv)
         // Set the mate's location and merge non_ref.bam and remapped.bam into a single file.
         if (merge_and_set_mate(nonRefBam, nonRefBamTemp, remappedBam) != 0) return 1;
         remove(toCString(remappedBam));
-        if (options.tmpDir != "") remove(toCString(nonRefBamTemp));
+        remove(toCString(nonRefBamTemp));
     }
 
     CharString firstFiltered = getFileName(tmpDir, "filtered.paired.1.fastq");
@@ -533,19 +537,22 @@ int popins_assemble(int argc, char const ** argv)
     // Assembly with velvet.
     CharString assemblyDirectory = getFileName(tmpDir, "assembly");
     if (velvet_assembly(filteredFiles, assemblyDirectory, options.kmerLength) != 0) return 1;
-
-    CharString contigFileAssembly = getFileName(assemblyDirectory, "contigs.fa");
-    CharString contigFile = getFileName(options.workingDirectory, "contigs.fa");
-
-    // Copy contigs file to workingDirectory.
-    std::ifstream src(toCString(contigFileAssembly), std::ios::binary);
-    std::ofstream dst(toCString(contigFile), std::ios::binary);
-    dst << src.rdbuf();
-
-    removeAssemblyDirectory(assemblyDirectory);
+    
     remove(toCString(firstFiltered));
     remove(toCString(secondFiltered));
     remove(toCString(singleFiltered));
+
+    // Copy contigs file to workingDirectory.
+    CharString contigFileAssembly = getFileName(assemblyDirectory, "contigs.fa");
+    CharString contigFile = getFileName(options.workingDirectory, "contigs.fa");
+    std::ifstream src(toCString(contigFileAssembly), std::ios::binary);
+    std::ofstream dst(toCString(contigFile), std::ios::binary);
+    dst << src.rdbuf();
+    src.close();
+    dst.close();
+
+    removeAssemblyDirectory(assemblyDirectory);
+
     if (options.tmpDir != "")
     {
         if (remove(toCString(tmpDir)) != 0)
