@@ -60,19 +60,25 @@ write_fastq(CharString & fastqFirst,
 // ==========================================================================
 
 bool
-fill_sequences(BamStream & outStream, BamStream & inStream)
+fill_sequences(CharString & outFile, CharString & inFile)
 {
     typedef Position<Dna5String>::Type TPos;
 
+    BamStream inStream(toCString(inFile));
+    if (!isGood(inStream))
+    {
+        std::cerr << "ERROR: Could bwa output file " << inFile << "" << std::endl;
+        return 1;
+    }
+    BamStream outStream(toCString(outFile), BamStream::WRITE);
+    if (!isGood(outStream))
+    {
+        std::cerr << "ERROR: Could not open output file " << outFile << "" << std::endl;
+        return 1;
+    }
+    outStream.header = inStream.header;
+
     BamAlignmentRecord firstRecord, nextRecord;
-    
-    // read the first record from bam file
-//    if (!atEnd(inStream))
-//    {
-//        readRecord(nextRecord, inStream);
-//        writeRecord(outStream, nextRecord);
-//    }
-        
     while (!atEnd(inStream))
     {
         readRecord(nextRecord, inStream);
@@ -116,6 +122,26 @@ fill_sequences(BamStream & outStream, BamStream & inStream)
         
         writeRecord(outStream, nextRecord);
     }
+
+    close(outStream);
+    clear(outStream.header);
+    clear(inStream.header);
+
+    return 0;
+}
+
+inline int
+removeTmpDir(CharString & tmpDir, CharString & workingDir)
+{
+    if (tmpDir != workingDir)
+    {
+        if (remove(toCString(tmpDir)) != 0)
+        {
+            std::cerr << "ERROR: Could not remove temporary directory " << tmpDir << std::endl;
+            return 1;
+        }
+        std::cerr << "[" << time(0) << "] " << "Temporary directory " << tmpDir << " removed." << std::endl;
+    }
     return 0;
 }
 
@@ -143,7 +169,7 @@ int popins_contigmap(int argc, char const ** argv)
         std::cerr << fastqFirst << ", " << fastqSecond << ", " << fastqSingle << ", and " << nonRefBam << std::endl;
         return 1;
     }
-    
+
     // Create temporary directory.
     if (options.tmpDir == "")
     {
@@ -173,70 +199,72 @@ int popins_contigmap(int argc, char const ** argv)
     std::cerr << "[" << time(0) << "] Mapping reads to contigs using " << BWA << std::endl;
     std::stringstream cmd;
     cmd.str("");
-    cmd << BWA << " mem -a " << options.contigFile << " " << fastqFirst << " " << fastqSecond << " > " << mappedSam;
+    if (options.allAlignment) cmd << BWA << " mem -a ";
+    else cmd << BWA << " mem ";
+    cmd << "-t " << options.threads << " " << options.contigFile << " " << fastqFirst << " " << fastqSecond << " > " << mappedSam;
     if (system(cmd.str().c_str()) != 0)
     {
         std::cerr << "ERROR while running bwa on " << fastqFirst << " and " << fastqSecond << std::endl;
+        removeTmpDir(options.tmpDir, options.workingDirectory);
         return 1;
     }
     //remove(toCString(fastqFirst));
     //remove(toCString(fastqSecond));
 
     cmd.str("");
-    cmd << BWA << " mem -a " << options.contigFile << " " << fastqSingle << " | awk '$1 !~ /@/' >> " << mappedSam;
+    if (options.allAlignment) cmd << BWA << " mem -a ";
+    else cmd << BWA << " mem ";
+    cmd << "-t " << options.threads << " " << options.contigFile << " " << fastqSingle << " | awk '$1 !~ /@/' >> " << mappedSam;
     if (system(cmd.str().c_str()) != 0)
     {
         std::cerr << "ERROR while running bwa on " << fastqSingle << std::endl;
+        removeTmpDir(options.tmpDir, options.workingDirectory);
         return 1;
     }
     //remove(toCString(fastqSingle));
 
     // Fill in sequences in bwa output.
     std::cerr << "[" << time(0) << "] Filling in sequences of secondary records in bwa output" << std::endl;
-    BamStream samStream(toCString(mappedSam));
-    if (!isGood(samStream))
+    if (fill_sequences(mappedBamUnsorted, mappedSam) != 0)
     {
-        std::cerr << "ERROR: Could bwa output file " << mappedSam << "" << std::endl;
+        removeTmpDir(options.tmpDir, options.workingDirectory);
         return 1;
     }
-    BamStream bamStream(toCString(mappedBamUnsorted), BamStream::WRITE);
-    if (!isGood(bamStream))
-    {
-        std::cerr << "ERROR: Could not open output file " << mappedBamUnsorted << "" << std::endl;
-        return 1;
-    }
-    bamStream.header = samStream.header;
-    fill_sequences(bamStream, samStream);
-    close(bamStream);
     remove(toCString(mappedSam));
 
     // Sort <WD>/contig_mapped.bam by read name
     std::cerr << "[" << time(0) << "] " << "Sorting " << mappedBamUnsorted << " by read name using " << SAMTOOLS << std::endl;
     cmd.str("");
-    cmd << SAMTOOLS << " sort -n " << mappedBamUnsorted << " " << options.workingDirectory << "/contig_mapped";
+    cmd << SAMTOOLS << " sort -n -m " << options.memory << " " << mappedBamUnsorted << " " << options.tmpDir << "/contig_mapped";
     if (system(cmd.str().c_str()) != 0)
     {
         std::cerr << "ERROR while sorting " << mappedBamUnsorted << " by read name using " << SAMTOOLS << std::endl;
+        removeTmpDir(options.tmpDir, options.workingDirectory);
         return 1;
     }
     remove(toCString(mappedBamUnsorted));
-    
+
     // Merge non_ref.bam with contig_mapped and set the mates.
-    merge_and_set_mate(mergedBam, nonRefBam, mappedBam);
+    if (merge_and_set_mate(mergedBam, nonRefBam, mappedBam) != 0)
+    {
+        removeTmpDir(options.tmpDir, options.workingDirectory);
+        return 1;
+    }
     remove(toCString(mappedBam));
     //remove(toCString(nonRefBam));
 
     // Sort <WD>/merged.bam by beginPos, output is <WD>/non_ref.bam.
     std::cerr << "[" << time(0) << "] " << "Sorting " << mergedBam << " using " << SAMTOOLS << std::endl;
     cmd.str("");
-    cmd << SAMTOOLS << " sort " << mergedBam << " " << options.workingDirectory << "/non_ref_new";
+    cmd << SAMTOOLS << " sort -m " << options.memory << " " << mergedBam << " " << options.workingDirectory << "/non_ref_new";
     if (system(cmd.str().c_str()) != 0)
     {
         std::cerr << "ERROR while sorting " << mergedBam << " by beginPos using " << SAMTOOLS << std::endl;
+        removeTmpDir(options.tmpDir, options.workingDirectory);
         return 1;
     }
     remove(toCString(mergedBam));
-    
+
     // Index <WD>/non_ref.bam.
     std::cerr << "[" << time(0) << "] " << "Indexing " << options.workingDirectory << "/non_ref_new.bam by beginPos using " << SAMTOOLS << std::endl;
     cmd.str("");
@@ -244,20 +272,14 @@ int popins_contigmap(int argc, char const ** argv)
     if (system(cmd.str().c_str()) != 0)
     {
         std::cerr << "ERROR while indexing " << options.workingDirectory << "/non_ref_new.bam using " << SAMTOOLS << std::endl;
+        removeTmpDir(options.tmpDir, options.workingDirectory);
         return 1;
     }
     
     // Remove temporary directory.
-    if (options.tmpDir != options.workingDirectory)
-    {
-        if (remove(toCString(options.tmpDir)) != 0)
-        {
-            std::cerr << "ERROR: Could not remove temporary directory " << options.tmpDir << std::endl;
-            return 1;
-        }
-        std::cerr << "[" << time(0) << "] " << "Temporary directory " << options.tmpDir << " removed." << std::endl;
-    }
-    
+    if (removeTmpDir(options.tmpDir, options.workingDirectory) != 0)
+        return 1;
+
     return 0;
 }
 

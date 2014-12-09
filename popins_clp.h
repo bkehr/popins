@@ -58,13 +58,17 @@ struct MergingOptions {
 };
 
 struct ContigMapOptions {
-    CharString unmappedFile;
     CharString contigFile;
     CharString remappedFile;
     CharString workingDirectory;
+    unsigned threads;
+    CharString memory;
     CharString tmpDir;
+    bool allAlignment;
     
-    ContigMapOptions() {}
+    ContigMapOptions() :
+        threads(1), memory("500000000"), allAlignment(false)
+    {}
 };
 
 struct PlacingOptions {
@@ -189,7 +193,7 @@ setupParser(ArgumentParser & parser, AssemblyOptions & options)
     setValidValues(parser, "reference", "fa fna fasta");
     
     addOption(parser, ArgParseOption("f", "filter", "Consider reads with low quality alignments as unmapped only for first INT sequences in the reference file. Requires reference file for remapping to be set.", ArgParseArgument::INTEGER, "INT"));
-    
+
     addOption(parser, ArgParseOption("t", "threads", "Number of threads to use for bwa.", ArgParseArgument::INTEGER, "INT"));
     setDefaultValue(parser, "threads", options.threads);
     setMinValue(parser, "threads", "1");
@@ -250,28 +254,38 @@ setupParser(ArgumentParser & parser, MergingOptions & options)
 }
 
 void
-setupParser(ArgumentParser & parser, ContigMapOptions &)
+setupParser(ArgumentParser & parser, ContigMapOptions & options)
 {
     setShortDescription(parser, "Alignment of unmapped reads to assembled contigs.");
     setVersion(parser, VERSION);
     setDate(parser, VERSION_DATE); 
     
     // Define usage line and long description.
-    addUsageLine(parser, "[\\fIOPTIONS\\fP] \\fIBAM FILE\\fP \\fIFA FILE\\fP");
+    addUsageLine(parser, "[\\fIOPTIONS\\fP] \\fIFA FILE\\fP");
     addDescription(parser, "Aligns unmapped reads from fastq files in working directory to a set of contigs specified "
                            "in the fasta file using bwa-mem. Merges the bwa output file with the file non_ref.bam in "
-                           "the working directory and sets the read mate's information in all bam records.");
+                           "the working directory and sets the read mate's information in all bam records. Note that "
+                           "the fasta file needs to be indexed for alignment with bwa-mem.");
 
-    // Require a bam file and a fasta file as arguments.
-    addArgument(parser, ArgParseArgument(ArgParseArgument::INPUTFILE, "BAMFILE"));
+    // Require a fasta file as argument.
     addArgument(parser, ArgParseArgument(ArgParseArgument::INPUTFILE, "FAFILE"));
 
     // Setup the option.
     addOption(parser, ArgParseOption("d", "directory", "Path to working directory.", ArgParseArgument::STRING, "PATH"));
-    setDefaultValue(parser, "directory", "current directory");
+    setDefaultValue(parser, "directory", "current directory"); 
 
     addOption(parser, ArgParseOption("tmp", "tmpdir", "Path to a temporary directory ending with XXXXXX.", ArgParseArgument::STRING, "PATH"));
     setDefaultValue(parser, "tmpdir", "same as working directory");
+
+    addOption(parser, ArgParseOption("t", "threads", "Number of threads to use for bwa.", ArgParseArgument::INTEGER, "INT"));
+    setDefaultValue(parser, "threads", options.threads);
+    setMinValue(parser, "threads", "1");
+    
+    addOption(parser, ArgParseOption("m", "memory", "Maximum memory for samtools sort.", ArgParseArgument::STRING, "STR"));
+    setDefaultValue(parser, "memory", options.memory);
+
+    addOption(parser, ArgParseOption("a", "all", "Use bwa-mem's -a option to output all alignments of a read."));
+    setDefaultValue(parser, "all", "false");
 }
 
 void
@@ -462,13 +476,18 @@ getOptionValues(MergingOptions & options, ArgumentParser & parser)
 int
 getOptionValues(ContigMapOptions & options, ArgumentParser & parser)
 {
-    getArgumentValue(options.unmappedFile, parser, 0);
-    getArgumentValue(options.contigFile, parser, 1);
+    getArgumentValue(options.contigFile, parser, 0);
     
     if (isSet(parser, "directory"))
         getOptionValue(options.workingDirectory, parser, "directory");
     if (isSet(parser, "tmpdir"))
         getOptionValue(options.tmpDir, parser, "tmpdir");
+    if (isSet(parser, "all"))
+        options.allAlignment = true;
+    if (isSet(parser, "threads"))
+        getOptionValue(options.threads, parser, "threads");
+    if (isSet(parser, "memory"))
+        getOptionValue(options.memory, parser, "memory");
 
     return 0;
 }
