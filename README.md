@@ -64,7 +64,7 @@ The algorithm first partitions the sequences into sets of similar sequences usin
 
 ### The contigmap command
 
-    ./popins contigmap [OPTIONS] <BAM FILE> <FA FILE>
+    ./popins contigmap [OPTIONS] <FA FILE>
 
 The contigmap command aligns the unmapped reads found in fastq files in the working directory to a set of contigs specified in the fasta file using bwa-mem.
 Subsequently, it merges the bwa output file with the file non_ref.bam in the working directory and completes the read mate's information in all bam records.
