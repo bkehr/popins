@@ -142,13 +142,15 @@ setMates(BamAlignmentRecord & record1, BamAlignmentRecord & record2)
     record2.pNext = record1.beginPos;
 
     // Fix the next unmapped flag.
-    record1.flag &= ~BAM_FLAG_NEXT_UNMAPPED;
-    record2.flag &= ~BAM_FLAG_NEXT_UNMAPPED;
+    if (hasFlagUnmapped(record2)) record1.flag |= BAM_FLAG_NEXT_UNMAPPED;
+    else record1.flag &= ~BAM_FLAG_NEXT_UNMAPPED;
+    if (hasFlagUnmapped(record1)) record2.flag |= BAM_FLAG_NEXT_UNMAPPED;
+    else record2.flag &= ~BAM_FLAG_NEXT_UNMAPPED;
 
     // Fix the next reversed flag.
-    if (hasFlagNextRC(record2)) record1.flag |= BAM_FLAG_NEXT_RC;
+    if (hasFlagRC(record2)) record1.flag |= BAM_FLAG_NEXT_RC;
     else record1.flag &= ~BAM_FLAG_NEXT_RC;
-    if (hasFlagNextRC(record1)) record2.flag |= BAM_FLAG_NEXT_RC;
+    if (hasFlagRC(record1)) record2.flag |= BAM_FLAG_NEXT_RC;
     else record2.flag &= ~BAM_FLAG_NEXT_RC;
 
     // Fix first/second in pair flags.
