@@ -44,7 +44,6 @@ For a short description of each command and an overview of arguments and options
 When analyzing multiple samples simultaneously, the assemble, contigmap, and genotype commands need to be run for each sample separately, whereas the merge and place commands need to be run only once with input from all samples.
 PopIns creates and uses a working directory for each sample, which should be specified with the -d option of the assemble and contigmap commands.
 
-
 ### The assemble command
 
     ./popins assemble [OPTIONS] <BAM FILE>
@@ -68,17 +67,18 @@ The algorithm first partitions the sequences into sets of similar sequences usin
 
 The contigmap command aligns the unmapped reads found in fastq files in the working directory to a set of contigs specified in the fasta file using bwa-mem.
 Subsequently, it merges the bwa output file with the file non_ref.bam in the working directory and completes the read mate's information in all bam records.
+Finally, it determines approximate insertion locations for contigs with anchoring read pairs.
 
 
 ### The place command
 
-    ./popins place [OPTIONS] <CONTIG FA FILE> <REF FA FILE> <BAM FILE 1> ... <BAM FILE N>
+    ./popins place [OPTIONS] <CONTIG FA FILE> <REF FA FILE>
 
-The place command finds the positions of (super-)contigs in the reference genome.
-If a file with locations does not already exist, it identifies approximate locations based on anchoring read pairs found in the bam files.
+The place command identifies the positions of (super-)contigs in the reference genome.
+If a file with merged locations (-ml option) does not already exist, it requires the -l option to be set and merges locations files.
 If bam files with all reads of the individuals are specified, it determines exact positions of insertions from split read alignments for each contig end.
 Both steps can be run separately or in a single program call.
-The split alignment can be done in batches (e.g. 100 locations per batch) if the approximate locations have been computed before.
+The split alignment can be done in batches (e.g. 100 locations per batch) if the locations files have been merged before.
 It outputs a vcf and a fa record for each identified position.
 
 

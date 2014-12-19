@@ -73,6 +73,17 @@ artificialReferences(String<Pair<TSeq> > & concatRefs,
     TLocsIter locsEnd = end(locations);
     for (TLocsIter loc = begin(locations); loc != locsEnd; ++loc)
     {
+        if (contigs.count((*loc).contig) == 0)
+        {
+            std::cerr << "ERROR: Could not find record for " << (*loc).contig << " in contigs file " << contigFile << std::endl;
+            return 1;
+        }
+        if (genome.count((*loc).chr) == 0)
+        {
+            std::cerr << "ERROR: Could not find record for " << (*loc).chr << " in file of reference genome " << referenceFile << std::endl;
+            return 1;
+        }
+
         TSeq contig = contigs[(*loc).contig];
         if ((*loc).contigOri == (*loc).chrOri) reverseComplement(contig);
 
@@ -94,12 +105,14 @@ artificialReferences(String<Pair<TSeq> > & concatRefs,
 // ==========================================================================
 
 bool
-readBamFileNames(String<CharString> & bamFiles, CharString const & bamFilesFile)
+readFileNames(String<CharString> & files, CharString const & filenameFile)
 {
-    std::fstream stream(toCString(bamFilesFile), std::fstream::in);
+    if (filenameFile == "") return 0;
+
+    std::fstream stream(toCString(filenameFile), std::fstream::in);
     if (!stream.is_open())
     {
-        std::cerr << "ERROR: Could not open file listing bam files " << bamFilesFile << std::endl;
+        std::cerr << "ERROR: Could not open file listing files " << filenameFile << std::endl;
         return 1;
     }
     
@@ -111,10 +124,10 @@ readBamFileNames(String<CharString> & bamFiles, CharString const & bamFilesFile)
         int res = readLine(file, reader);
         if (res != 0)
         {
-            std::cerr << "ERROR while reading line from " << bamFilesFile << std::endl;
+            std::cerr << "ERROR while reading line from " << filenameFile << std::endl;
             return 1;
         }
-        appendValue(bamFiles, file);
+        appendValue(files, file);
     }
     
     return 0;
@@ -223,6 +236,7 @@ splitAlign(Pair<TPos> & refPos, Pair<TSequence> & ref, BamAlignmentRecord & reco
     // Position on the reference infix and contig.
     refPos = Pair<TPos>(toSourcePosition(row(left, 1), clippedEndPosition(row(left, 1))),
                         toSourcePosition(row(right, 1), 0));
+
     if (chrOri)
     {
         // Move the split position to the rightmost possible position.
@@ -233,6 +247,7 @@ splitAlign(Pair<TPos> & refPos, Pair<TSequence> & ref, BamAlignmentRecord & reco
             ++refPos.i2;
         }
     }
+    
     if (refPos.i1 > length(ref.i1)-5 || refPos.i2 < 5) return 1;
 
     return 0;
@@ -307,7 +322,7 @@ writeVcf(TStream & vcfStream,
     
     // Create ID for alternative haplotype.
     std::stringstream altId;
-    altId << "alt_" << chr << "_" << chrPos << "_" << contig << (contigOri ? "f" : "r");
+    altId << "alt_" << chr << "_" << chrPos << "_" << contig << (contigOri!=chrOri ? "f" : "r");
     record.id = altId.str();
     
     // Create the ALT field.
@@ -354,9 +369,20 @@ int popins_place(int argc, char const ** argv)
 
     if (!exists(options.locationsFile))
     {
-        // Find approximate locations and write them to a file.
-        if (options.verbose) std::cerr << "[" << time(0) << "] " << "Computing locations from bam files." << std::endl;
-        findLocations(locations, options.nonRefFiles);
+        String<CharString> locationsFiles;
+        if (readFileNames(locationsFiles, options.locationsFilesFile) != 0) return 1;
+        if (length(locationsFiles) == 0)
+        {
+            std::cerr << "ERROR: Locations file " << options.locationsFile << "does not exist. Specify -l option to create it." << std::endl;
+            return 1;
+        }
+
+        // Merge approximate locations and write them to a file.
+        if (options.verbose) std::cerr << "[" << time(0) << "] " << "Merging locations files." << std::endl;
+        if (mergeLocations(locations, locationsFiles) != 0) return 1;
+        if (options.verbose) std::cerr << "[" << time(0) << "] " << "Sorting locations." << std::endl;
+        LocationPosLess less;
+        std::stable_sort(begin(locations, Standard()), end(locations, Standard()), less);
         if (options.verbose) std::cerr << "[" << time(0) << "] " << "Scoring locations." << std::endl;
         scoreLocations(locations);
         if (options.verbose) std::cerr << "[" << time(0) << "] " << "Writing locations to " << options.locationsFile << std::endl;
@@ -368,7 +394,7 @@ int popins_place(int argc, char const ** argv)
     }
     
     String<CharString> bamFiles;
-    if (readBamFileNames(bamFiles, options.bamFilesFile) != 0) return 1;
+    if (readFileNames(bamFiles, options.bamFilesFile) != 0) return 1;
     if (length(bamFiles) == 0) 
     {
         if (options.verbose) std::cerr << "[" << time(0) << "] " << "No split mapping. Specify -b option for split mapping." << std::endl;
@@ -378,17 +404,27 @@ int popins_place(int argc, char const ** argv)
     // Read the locations file.
     if (length(locations) == 0)
     {
-        if (options.verbose) std::cerr << "[" << time(0) << "] " << "Reading locations from " << options.locationsFile << std::endl;
+        if (options.verbose) std::cerr << "[" << time(0) << "] " << "Reading " << options.batchSize << " locations from " << options.locationsFile << std::endl;
         if (readLocations(locations, options.locationsFile, options.batchSize, options.batchIndex) != 0) return 1;
     }
 
-    // Discard locations with score below options.minLocScore
+    // Discard locations with score below options.minLocScore or OTHER or longer than 2*maxInsertSize
     unsigned i = 0;
     while (i < length(locations))
     {
-        if (locations[i].score < options.minLocScore) replace(locations, i, i+1, TLocations());
+        if (locations[i].score < options.minLocScore || locations[i].chr == "OTHER" ||
+            locations[i].chrEnd - locations[i].chrStart > 2*options.maxInsertSize)
+            replace(locations, i, i+1, TLocations());
         else ++i;
     }
+    
+    if (length(locations) == 0)
+    {
+        std::cerr << "[" << time(0) << "] " << "No locations on genome left after filtering for score >= " << options.minLocScore << std::endl;
+        return 0;
+    }
+    
+    
     if (options.verbose)
         std::cerr << "[" << time(0) << "] " << "Keeping " << length(locations) << " locations with score >= " << options.minLocScore << std::endl;
     
@@ -397,23 +433,26 @@ int popins_place(int argc, char const ** argv)
         std::cerr << "[" << time(0) << "] " << "Collecting contig and location sequences from "
                                             << options.referenceFile << " and " << options.supercontigFile << std::endl;
     String<Pair<Dna5String> > artificialRefs;
-    artificialReferences(artificialRefs, locations,
-                         options.referenceFile, options.supercontigFile,
-                         options.readLength, options.maxInsertSize);
+    if (artificialReferences(artificialRefs, locations,
+                             options.referenceFile, options.supercontigFile,
+                             options.readLength, options.maxInsertSize) != 0) return 1;
 
     // Split alignment per individual.
     BamStream bamStream;
     BamIndex<Bai> bamIndex;
+
+    unsigned discardedLocs = 0;
     
     String<std::map<Pair<TPos>, unsigned> > splitPosMaps;
     resize(splitPosMaps, length(locations));
-    
-    if (options.verbose) std::cerr << "[" << time(0) << "] " << "Started split alignment of reads." << std::endl;
+
     Iterator<String<CharString> >::Type filesEnd = end(bamFiles);
     for (Iterator<String<CharString> >::Type file = begin(bamFiles); file != filesEnd; ++file)
     {
         if (openBamLoadBai(bamStream, bamIndex, *file) != 0) return 1;
 
+        if (options.verbose) std::cerr << "[" << time(0) << "] " << "Split aligning reads from " << *file << std::endl;
+        
         for (unsigned i = 0; i < length(locations); ++i)
         {
             // Jump to the location in bam file.
@@ -424,26 +463,28 @@ int popins_place(int argc, char const ** argv)
             
             unsigned readCount = 0;
             bool highCoverage = false;
+            
+//            std::cout << "Jumped to " << locations[i].chr << ":" << locations[i].chrStart << " " << locations[i].contig << std::endl;
 
             // Read and split align reads.
             BamAlignmentRecord record;
             record.beginPos = minValue<TPos>();
             while (!atEnd(bamStream) && (TPos)record.beginPos < locEnd)
             {
-                ++readCount;
-                if (readCount > 100 * (locations[i].chrEnd - locations[i].chrStart))
+                if (readCount * options.readLength > 100 * (locEnd - locStart + options.readLength))
                 {
                     highCoverage = true;
                     break;
                 }
-                
                 if (readRecord(record, bamStream) != 0)
                 {
                     std::cerr << "ERROR while reading bam alignment record from " << *file << std::endl;
                     return 1;
                 }
-                if ((TPos)record.beginPos < locStart || length(record.cigar) == 1) continue;
-
+                if ((TPos)record.beginPos < locStart) continue;
+                ++readCount;
+                if (length(record.cigar) == 1) continue;
+                
                 Pair<TPos> refPos;
                 if (splitAlign(refPos, artificialRefs[i], record, locations[i].chrOri) != 0) continue;
 
@@ -456,7 +497,7 @@ int popins_place(int argc, char const ** argv)
                 {
                     TPos help = refPos.i1;
                     refPos.i1 = refPos.i2 + locations[i].chrStart - options.maxInsertSize;
-                    refPos.i2 += help;
+                    refPos.i2 = help;
                 }
 
                 if (splitPosMaps[i].count(refPos) == 0) splitPosMaps[i][refPos] = 1;
@@ -467,9 +508,14 @@ int popins_place(int argc, char const ** argv)
             if (highCoverage)
             {
                 replace(locations, i, i+1, TLocations());
+                replace(artificialRefs, i, i+1, String<Pair<Dna5String> >());
+                replace(splitPosMaps, i, i+1, String<std::map<Pair<TPos>, unsigned> >());
+                ++discardedLocs;
                 --i;
             }
         }
+        if (file == begin(bamFiles) && options.verbose)
+            std::cerr << "[" << time(0) << "] " << "Discarded " << discardedLocs << " locations because of high coverage." << std::endl;
     }
         
     // Find the best split positions in sets and write the output.
