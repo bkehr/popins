@@ -25,54 +25,6 @@ struct AnchoringRecord
 
     CharString contig;
     bool contigOri;
-    
-    unsigned bamStreamIndex;
-};
-
-// ==========================================================================
-
-struct Greater : public ::std::binary_function <AnchoringRecord, AnchoringRecord, bool> 
-{
-    Greater() {}
-    
-    inline int compare (AnchoringRecord const & a, AnchoringRecord const & b) const
-    {
-        if (std::isdigit(a.chr[0]) && std::isdigit(b.chr[0]))
-        {
-            int chrA, chrB;
-            lexicalCast2<int>(chrA, a.chr);
-            lexicalCast2<int>(chrB, b.chr);
-            if (chrA > chrB) return -1;
-            if (chrA < chrB) return 1;
-        }
-        else
-        {
-            if (a.chr > b.chr) return -1;
-            if (a.chr < b.chr) return 1;
-        }
-
-        if (a.chrStart > b.chrStart) return -1;
-        if (a.chrStart < b.chrStart) return 1;
-        
-        if (a.chrEnd > b.chrEnd) return -1;
-        if (a.chrEnd < b.chrEnd) return 1;
-        
-        if (a.chrOri > b.chrOri) return -1;
-        if (a.chrOri < b.chrOri) return 1;
-        
-        if (a.contig > b.contig) return -1;
-        if (a.contig < b.contig) return 1;
-        
-        if (a.contigOri > b.contigOri) return -1;
-        if (a.contigOri < b.contigOri) return 1;
-        
-        return 0;
-    }
-    
-    inline bool operator() (AnchoringRecord const & a, AnchoringRecord const & b) const
-    {
-        return compare(a, b) == -1;
-    }
 };
 
 // ==========================================================================
@@ -94,7 +46,13 @@ struct Location
     unsigned numReads;
     double score;
     
+    unsigned fileIndex;
+    
     Location () {}
+    
+    Location (CharString h, TPos hs, TPos he, bool ho, CharString c, bool co, unsigned n, double s) :
+        chr(h), chrStart(hs), chrEnd(he), chrOri(ho), contig(c), contigOri(co), numReads(n), score(s)
+    {}
     
     Location (AnchoringRecord const & r) :
         chr(r.chr), chrStart(r.chrStart), chrEnd(r.chrEnd), chrOri(r.chrOri),
@@ -105,19 +63,183 @@ struct Location
 
 // ==========================================================================
 
-bool
+struct LocationPosLess : public std::binary_function<Location, Location, bool>
+{
+    LocationPosLess() {}
+    
+    inline int compare(Location const & a, Location const & b) const
+    {
+        bool chrADigit = std::isdigit(a.chr[0]);
+        bool chrBDigit = std::isdigit(b.chr[0]);
+        if (chrADigit && chrBDigit)
+        {
+            int chrA, chrB;
+            lexicalCast2<int>(chrA, a.chr);
+            lexicalCast2<int>(chrB, b.chr);
+            if (chrA > chrB) return -1;
+            if (chrA < chrB) return 1;
+        }
+        else if (!chrADigit && !chrBDigit)
+        {
+            if (a.chr > b.chr) return -1;
+            if (a.chr < b.chr) return 1;
+        }
+        else if (chrADigit && !chrBDigit) return 1;
+        else if (!chrADigit && chrBDigit) return -1;
+        
+        if (a.chrStart > b.chrStart) return -1;
+        if (a.chrStart < b.chrStart) return 1;
+        
+        if (a.contig > b.contig) return -1;
+        if (a.contig < b.contig) return 1;
+        
+        if (a.chrOri && !b.chrOri) return -1;
+        if (!a.chrOri && b.chrOri) return 1;
+        
+        if (a.contigOri && !b.contigOri) return -1;
+        if (!a.contigOri && b.contigOri) return 1;
+        
+        if (a.chrEnd > b.chrEnd) return -1;
+        if (a.chrEnd < b.chrEnd) return 1;
+        
+        return 0;
+    }
+    
+    inline bool operator() (Location const & a, Location const & b) const
+    {
+        return compare(a, b) == 1;
+    }
+};
+
+// ==========================================================================
+
+struct LocationTypeLess : public std::binary_function<Location, Location, bool> 
+{
+    LocationTypeLess() {}
+    
+    inline int compare(Location const & a, Location const & b) const
+    {
+        if (a.contig > b.contig) return -1;
+        if (a.contig < b.contig) return 1;
+        
+        if (a.contigOri && !b.contigOri) return -1;
+        if (!a.contigOri && b.contigOri) return 1;
+        
+        bool chrADigit = std::isdigit(a.chr[0]);
+        bool chrBDigit = std::isdigit(b.chr[0]);
+        if (chrADigit && chrBDigit)
+        {
+            int chrA, chrB;
+            lexicalCast2<int>(chrA, a.chr);
+            lexicalCast2<int>(chrB, b.chr);
+            if (chrA > chrB) return -1;
+            if (chrA < chrB) return 1;
+        }
+        else if (!chrADigit && !chrBDigit)
+        {
+            if (a.chr > b.chr) return -1;
+            if (a.chr < b.chr) return 1;
+        }
+        else if (chrADigit && !chrBDigit) return 1;
+        else if (!chrADigit && chrBDigit) return -1;
+        
+        if (a.chrStart > b.chrStart) return -1;
+        if (a.chrStart < b.chrStart) return 1;
+        
+        if (a.chrOri && !b.chrOri) return -1;
+        if (!a.chrOri && b.chrOri) return 1;
+        
+        if (a.chrEnd > b.chrEnd) return -1;
+        if (a.chrEnd < b.chrEnd) return 1;
+        
+        return 0;
+    }
+    
+    inline bool operator() (Location const & a, Location const & b) const
+    {
+        return compare(a, b) == 1;
+    }
+};
+
+// ==========================================================================
+
+struct LocationTypeGreater : public std::binary_function <Location, Location, bool> 
+{
+    LocationTypeGreater() {}
+    
+    inline int compare(Location const & a, Location const & b) const
+    {
+        if (a.contig > b.contig) return -1;
+        if (a.contig < b.contig) return 1;
+        
+        if (a.contigOri && !b.contigOri) return -1;
+        if (!a.contigOri && b.contigOri) return 1;
+        
+        bool chrADigit = std::isdigit(a.chr[0]);
+        bool chrBDigit = std::isdigit(b.chr[0]);
+        if (chrADigit && chrBDigit)
+        {
+            int chrA, chrB;
+            lexicalCast2<int>(chrA, a.chr);
+            lexicalCast2<int>(chrB, b.chr);
+            if (chrA > chrB) return -1;
+            if (chrA < chrB) return 1;
+        }
+        else if (!chrADigit && !chrBDigit)
+        {
+            if (a.chr > b.chr) return -1;
+            if (a.chr < b.chr) return 1;
+        }
+        else if (chrADigit && !chrBDigit) return 1;
+        else if (!chrADigit && chrBDigit) return -1;
+        
+        if (a.chrStart > b.chrStart) return -1;
+        if (a.chrStart < b.chrStart) return 1;
+        
+        if (a.chrOri && !b.chrOri) return -1;
+        if (!a.chrOri && b.chrOri) return 1;
+        
+        if (a.chrEnd > b.chrEnd) return -1;
+        if (a.chrEnd < b.chrEnd) return 1;
+        
+        return 0;
+    }
+    
+    inline bool operator() (Location const & a, Location const & b) const
+    {
+        return compare(a, b) == -1;
+    }
+};
+
+// ==========================================================================
+
+inline bool
 isComponentOrNode(CharString & name)
 {
     typedef Position<CharString>::Type TPos;
 
-    if (prefix(name, 4) == "COMP")
+    TPos i = 0;
+    while (i < length(name) && isdigit(name[i]))
+    {
+        ++i;
+        if (i < length(name) && name[i] == '.') ++i;
+    }
+
+    if (i < length(name)-4 && (infix(name, i, i+4) == "NODE" || infix(name, i, i+4) == "COMP"))
         return true;
 
+    return false;
+}
+
+inline bool
+isChromosome(CharString & name) // TODO: Allow user to specify sequence names.
+{
+    typedef Position<CharString>::Type TPos;
     TPos i = 0;
-    for (; i < length(name); ++i)
-        if (name[i] == '.') break;
-    ++i;
-    if (i < length(name)-4 && infix(name, i, i+4) == "NODE")
+    if (length(name) > 3 && prefix(name, 3) == "chr") i = 3;
+    
+    if ((length(name) == i+1 && (isdigit(name[i]) || name[i] == 'X' || name[i] == 'Y')) ||
+        (length(name) == i+2 && isdigit(name[i]) && isdigit(name[i+1])))
         return true;
 
     return false;
@@ -125,7 +247,7 @@ isComponentOrNode(CharString & name)
 
 // ==========================================================================
 
-Pair<CigarElement<>::TCount>
+inline Pair<CigarElement<>::TCount>
 mappedInterval(String<CigarElement<> > & cigar)
 {
     typedef CigarElement<>::TCount TSize;
@@ -159,7 +281,7 @@ mappedInterval(String<CigarElement<> > & cigar)
 
 // ==========================================================================
 
-double
+inline double
 avgQuality(CharString & qual, Pair<CigarElement<>::TCount> & interval)
 {
     if (interval.i1 >= interval.i2) return 0;
@@ -198,11 +320,9 @@ alignmentScore(BamAlignmentRecord & record)
 
 // ==========================================================================
 
-int
-readAnchoringRecord(AnchoringRecord & record, BamStream & stream, unsigned bamStreamIndex)
+inline int
+readAnchoringRecord(AnchoringRecord & record, BamStream & stream, StringSet<CharString> & names)//, unsigned bamStreamIndex)
 {
-    StringSet<CharString> names = nameStore(stream.bamIOContext);
-
     BamAlignmentRecord r;
     while (!atEnd(stream))
     {
@@ -214,8 +334,7 @@ readAnchoringRecord(AnchoringRecord & record, BamStream & stream, unsigned bamSt
         
         if (r.rID == r.rNextId || r.rNextId == -1 || r.rID == -1) continue;
         
-        if (!isComponentOrNode(names[r.rID]) &&    // rId is not NODE or COMP
-            isComponentOrNode(names[r.rNextId]))   // rNextId is NODE or COMP
+        if (isComponentOrNode(names[r.rNextId]))   // rNextId is NODE or COMP
         {
             Pair<CigarElement<>::TCount> interval = mappedInterval(r.cigar);
             if (interval.i2 - interval.i1 >= 50 && interval.i2 - interval.i1 >= length(r.seq) / 2 &&
@@ -228,7 +347,7 @@ readAnchoringRecord(AnchoringRecord & record, BamStream & stream, unsigned bamSt
                 record.chrOri = !hasFlagRC(r);
                 record.contig = names[r.rNextId];
                 record.contigOri = !hasFlagNextRC(r);
-                record.bamStreamIndex = bamStreamIndex;
+                //record.bamStreamIndex = bamStreamIndex;
                 return 0;
             }
         }
@@ -238,23 +357,31 @@ readAnchoringRecord(AnchoringRecord & record, BamStream & stream, unsigned bamSt
 
 // ==========================================================================
 
-void
-addRead(Location & loc, String<Location> & locations, AnchoringRecord & record)
+bool
+addReadToLocs(String<Location> & locs, AnchoringRecord & record)
 {
-    if (loc.chr == "")
+    typedef Iterator<String<Location> >::Type TIter;
+
+    TIter beginIt = begin(locs);
+    TIter it = end(locs);
+    if (it != beginIt)
     {
-        loc = Location(record);
+        it--;
+        while (it >= beginIt && record.chr == (*it).chr && record.chrStart < (*it).chrEnd + 1000)
+        {
+            if (record.contig == (*it).contig)
+            {
+                if (record.chrStart < (*it).chrStart) (*it).chrStart = record.chrStart;
+                if (record.chrEnd > (*it).chrEnd) (*it).chrEnd = record.chrEnd;
+                ++(*it).numReads;
+                return 0;
+            }
+            --it;
+        }
     }
-    else if (record.contig != loc.contig || record.chr != loc.chr || record.chrStart > loc.chrStart + 1000)
-    {
-        appendValue(locations, loc);
-        loc = Location(record);
-    }
-    else
-    {
-        ++loc.numReads;
-        loc.chrEnd = std::max(loc.chrEnd, record.chrEnd);
-    }
+    appendValue(locs, Location(record));
+    
+    return 0;
 }
 
 // ==========================================================================
@@ -262,62 +389,57 @@ addRead(Location & loc, String<Location> & locations, AnchoringRecord & record)
 // ==========================================================================
 
 int
-findLocations(String<Location> & locations, String<CharString> & nonRefFiles)
+findLocations(String<Location> & locations, CharString & nonRefFile)
 {
-    Location forwardForward, forwardReverse, reverseForward, reverseReverse;
+    typedef Iterator<String<CharString> >::Type TIter;
+    typedef Pair<CharString, unsigned> TContigEnd;
+    typedef std::map<TContigEnd, unsigned> TMap;
+    typedef TMap::iterator TMapIter;
 
-    // define min heap of AnchoringRecord
-    std::priority_queue<AnchoringRecord, std::vector<AnchoringRecord>, Greater> heap;
-    
-    AnchoringRecord record;
-
-    // Open non ref files and store String of stream pointers
-    String<BamStream *> streamPtr;
-    resize(streamPtr, length(nonRefFiles));
-
-    for (unsigned i = 0; i < length(nonRefFiles); ++i)
+    BamStream inStream(toCString(nonRefFile), BamStream::READ);
+    if (!isGood(inStream))
     {
-        streamPtr[i] = new BamStream(toCString(nonRefFiles[i]), BamStream::READ);
-        if (!isGood(*streamPtr[i]))
-        {
-            std::cerr << "ERROR: Could not open input bam file " << nonRefFiles[i] << std::endl;
-            delete streamPtr[i]; // TODO: delete for all i?
-            return 1;
-        }
-        
-        // Read the first anchoring read record and push it to min heap
-        int res = readAnchoringRecord(record, *streamPtr[i], i);
-        if (res == 0) heap.push(record);
-        else if (res == 1) return 1;
+        std::cerr << "ERROR: Could not open input bam file " << nonRefFile << std::endl;
+        return 1;
     }
+    StringSet<CharString> names = nameStore(inStream.bamIOContext);
 
-    while (!heap.empty())
+    String<String<Location> > locs;
+    resize(locs, 4);
+    TMap anchorsToOther;
+
+    unsigned i = 0;
+    AnchoringRecord record;
+    while (!atEnd(inStream))
     {
-        record = heap.top();
-        
-        // Append and reset location if smallest record doesn't support the current location with corresponding
-        // orientation. Otherwise add it to location.
+        readAnchoringRecord(record, inStream, names);
         if (record.chrOri)
         {
-            if (record.contigOri) addRead(forwardForward, locations, record);
-            else addRead(forwardReverse, locations, record);
+            if (record.contigOri) i = 0;
+            else i = 1;
         }
         else
         {
-            if (record.contigOri) addRead(reverseForward, locations, record);
-            else addRead(reverseReverse, locations, record);
+            if (record.contigOri) i = 2;
+            else i = 3;
         }
-        
-        heap.pop();
-        unsigned i = record.bamStreamIndex;
-        int res = readAnchoringRecord(record, *streamPtr[i], i);
-        if (res == 0) heap.push(record);
-        else if (res == 1) return 1;
+        if (!isChromosome(record.chr) || addReadToLocs(locs[i], record) == 1)
+            ++anchorsToOther[TContigEnd(record.contig, i%2)];
     }
     
-    for (unsigned i = 0; i < length(nonRefFiles); ++i)
-        delete streamPtr[i];
-
+    for (unsigned i = 0; i < length(locs); ++i)
+    {
+        append(locations, locs[i]);
+        clear(locs[i]);
+    }
+    TMapIter endMap = anchorsToOther.end();
+    for (TMapIter it = anchorsToOther.begin(); it != endMap; ++it)
+        append(locations, Location("OTHER", 0, 0, true,
+                                   (it->first).i1, ((it->first).i2 == 0 ? true : false), it->second, 0));
+                                  
+    // Sort locations by contig, contigOri, chr, chrStart, chrOri.
+    LocationTypeLess less;
+    std::stable_sort(begin(locations, Standard()), end(locations, Standard()), less);
     return 0;
 }
 
@@ -342,13 +464,98 @@ scoreLocations(String<Location> & locations)
         else
             readsPerContig[c] += (*it).numReads;
     }
-    
+
     // Compute the score for each location.
     for (TIterator it = begin(locations); it != itEnd; ++it)
     {
         Pair<CharString, bool> c((*it).contig, (*it).contigOri);
         (*it).score = (*it).numReads/(double)readsPerContig[c];
     }
+}
+
+// --------------------------------------------------------------------------
+// Function readLocation()
+// --------------------------------------------------------------------------
+
+bool
+readLocation(Location & loc, RecordReader<std::fstream, SinglePass<> > & reader, CharString & locationsFile)
+{
+    CharString buffer;
+
+    if (readUntilOneOf(loc.chr, reader, ':', '\t', ' ') != 0)
+    {
+        std::cerr << "ERROR: Reading CHR from locations file " << locationsFile << " failed." << std::endl;
+        return 1;
+    }
+
+    if (value(reader) == ':')
+    {
+        skipChar(reader, ':');
+
+        if (readUntilChar(buffer, reader, '-') != 0)
+        {
+            std::cerr << "ERROR: Reading CHR_START from locations file " << locationsFile << " failed." << std::endl;
+            return 1;
+        }
+        lexicalCast2<Location::TPos>(loc.chrStart, buffer);
+        skipChar(reader, '-');
+
+        clear(buffer);
+        if (readDigits(buffer, reader) != 0)
+        {
+            std::cerr << "ERROR: Reading CHR_END from locations file " << locationsFile << " failed." << std::endl;
+            return 1;
+        }
+        lexicalCast2<Location::TPos>(loc.chrEnd, buffer);
+    }
+    skipWhitespaces(reader);
+
+    if (value(reader) == '+') loc.chrOri = true;
+    else if (value(reader) == '-') loc.chrOri = false;
+    else
+    {
+        std::cerr << "ERROR: Reading CHR_ORI from locations file " << locationsFile << " failed." << std::endl;
+        return 1;
+    }
+    skipNChars(reader, 1);
+    skipWhitespaces(reader);
+
+    if (readUntilWhitespace(loc.contig, reader) != 0)
+    {
+        std::cerr << "ERROR: Reading CONTIG from locations file " << locationsFile << " failed." << std::endl;
+        return 1;
+    }
+    skipWhitespaces(reader);
+
+    if (value(reader) == '+') loc.contigOri = true;
+    else if (value(reader) == '-') loc.contigOri = false;
+    else
+    {
+        std::cerr << "ERROR: Reading CONTIG_ORI from locations file " << locationsFile << " failed." << std::endl;
+        return 1;
+    }
+    skipNChars(reader, 1);
+    skipWhitespaces(reader);
+
+    clear(buffer);
+    if (readDigits(buffer, reader) != 0)
+    {
+        std::cerr << "ERROR: Reading NUM_READS from locations file " << locationsFile << " failed." << std::endl;
+        return 1;
+    }
+    lexicalCast2<unsigned>(loc.numReads, buffer);
+    skipWhitespaces(reader);
+
+    clear(buffer);
+    if (readUntilWhitespace(buffer, reader) != 0)
+    {
+        std::cerr << "ERROR: Reading SCORE from line locations file " << locationsFile << " failed." << std::endl;
+        return 1;
+    }
+    lexicalCast2<double>(loc.score, buffer);
+    skipLine(reader);
+
+    return 0;
 }
 
 // ==========================================================================
@@ -365,7 +572,7 @@ readLocations(String<Location> & locations, CharString & locationsFile, unsigned
         return 1;
     }
     RecordReader<std::fstream, SinglePass<> > reader(stream);
-    
+
     for (unsigned line = 0; !atEnd(reader); ++line)
     {
         if (batchSize != maxValue<unsigned>() && line < batchIndex*batchSize)
@@ -375,81 +582,98 @@ readLocations(String<Location> & locations, CharString & locationsFile, unsigned
         }
 
         if (line >= batchIndex*batchSize+batchSize) break;
-        
-        Location loc;
-        
-        if (readUntilChar(loc.chr, reader, ':') != 0)
-        {
-            std::cerr << "ERROR: Reading CHR from line " << line << " of locations file " << locationsFile << " failed." << std::endl;
-            return 1;
-        }
-        skipChar(reader, ':');
-        
-        CharString buffer;
-        if (readDigits(buffer, reader) != 0)
-        {
-            std::cerr << "ERROR: Reading CHR_START from line " << line << " of locations file " << locationsFile << " failed." << std::endl;
-            return 1;
-        }
-        lexicalCast2<Location::TPos>(loc.chrStart, buffer);
-        skipChar(reader, '-');
-        
-        clear(buffer);
-        if (readDigits(buffer, reader) != 0)
-        {
-            std::cerr << "ERROR: Reading CHR_END from line " << line << " of locations file " << locationsFile << " failed." << std::endl;
-            return 1;
-        }
-        lexicalCast2<Location::TPos>(loc.chrEnd, buffer);
-        skipWhitespaces(reader);
-        
-        if (value(reader) == '+') loc.chrOri = true;
-        else if (value(reader) == '-') loc.chrOri = false;
-        else
-        {
-            std::cerr << "ERROR: Reading CHR_ORI from line " << line << " of locations file " << locationsFile << " failed." << std::endl;
-            return 1;
-        }
-        skipNChars(reader, 1);
-        skipWhitespaces(reader);
-        
-        if (readUntilWhitespace(loc.contig, reader) != 0)
-        {
-            std::cerr << "ERROR: Reading CONTIG from line " << line << " of locations file " << locationsFile << " failed." << std::endl;
-            return 1;
-        }
-        skipWhitespaces(reader);
 
-        if (value(reader) == '+') loc.contigOri = true;
-        else if (value(reader) == '-') loc.contigOri = false;
-        else
-        {
-            std::cerr << "ERROR: Reading CONTIG_ORI from line " << line << " of locations file " << locationsFile << " failed." << std::endl;
-            return 1;
-        }
-        skipNChars(reader, 1);
-        skipWhitespaces(reader);
-        
-        clear(buffer);
-        if (readDigits(buffer, reader) != 0)
-        {
-            std::cerr << "ERROR: Reading NUM_READS from line " << line << " of locations file " << locationsFile << " failed." << std::endl;
-            return 1;
-        }
-        lexicalCast2<unsigned>(loc.numReads, buffer);
-        skipWhitespaces(reader);
-        
-        clear(buffer);
-        if (readUntilWhitespace(buffer, reader) != 0)
-        {
-            std::cerr << "ERROR: Reading SCORE from line " << line << " of locations file " << locationsFile << " failed." << std::endl;
-            return 1;
-        }
-        lexicalCast2<double>(loc.score, buffer);
-        skipLine(reader);
-        
+        Location loc;
+        if (readLocation(loc, reader, locationsFile) != 0) return 1;
         appendValue(locations, loc);
     }
+    return 0;
+}
+
+// --------------------------------------------------------------------------
+// addLocation()
+// --------------------------------------------------------------------------
+
+void
+addLocation(Location & prevLoc, String<Location> & locations, Location & loc)
+{
+    if (prevLoc.chr == "")
+    {
+        prevLoc = loc;
+    }
+    else if (prevLoc.chr != loc.chr || prevLoc.chrEnd + 1000 < loc.chrStart)
+    {
+        appendValue(locations, prevLoc);
+        prevLoc = loc;
+    }
+    else
+    {
+        prevLoc.chrEnd = std::max(prevLoc.chrEnd, loc.chrEnd);
+        prevLoc.numReads += loc.numReads;
+    }
+}
+
+// ==========================================================================
+// Function mergeLocations()
+// ==========================================================================
+
+int
+mergeLocations(String<Location> & locations, String<CharString> & locationsFiles)
+{
+    typedef RecordReader<std::fstream, SinglePass<> > TReader;
+    typedef Pair<std::fstream *, TReader *> TPtrPair;
+
+    Location forwardForward, forwardReverse, reverseForward, reverseReverse;
+
+    // define min heap of Locations
+    std::priority_queue<Location, std::vector<Location>, LocationTypeGreater> heap;
+    
+    // Open location files and store String of reader pointers.
+    String<TPtrPair> readerPtr;
+    resize(readerPtr, length(locationsFiles));
+    for (unsigned i = 0; i < length(locationsFiles); ++i)
+    {
+        std::fstream * stream = new std::fstream(toCString(locationsFiles[i]), std::ios::in);
+        if (!(*stream).good())
+        {
+            std::cerr << "ERROR: Could not open locations file " << locationsFiles[i] << std::endl;
+            return 1;
+        }
+        readerPtr[i] = TPtrPair(stream, new TReader(*stream));
+        
+        // Read the first location record and push it to min heap.
+        Location loc;
+        if (readLocation(loc, *readerPtr[i].i2, locationsFiles[i]) != 0) return 1;
+        loc.fileIndex = i;
+        heap.push(loc);
+    }
+
+    while (!heap.empty())
+    {
+        Location loc = heap.top();
+
+        if (loc.chrOri)
+        {
+            if (loc.contigOri) addLocation(forwardForward, locations, loc);
+            else addLocation(forwardReverse, locations, loc);
+        }
+        else
+        {
+            if (loc.contigOri) addLocation(reverseForward, locations, loc);
+            else addLocation(reverseReverse, locations, loc);
+        }
+        
+        heap.pop();
+        unsigned i = loc.fileIndex;
+        if (!atEnd(*readerPtr[i].i2))
+        {
+            Location nextLoc;
+            if (readLocation(nextLoc, *readerPtr[i].i2, locationsFiles[i]) != 0) return 1;
+            nextLoc.fileIndex = i;
+            heap.push(nextLoc);
+        }
+    }
+
     return 0;
 }
 
@@ -474,9 +698,14 @@ writeLocations(CharString & locationsFile, String<Location> & locations)
     TIterator itEnd = end(locations);
     for (TIterator it = begin(locations); it != itEnd; ++it)
     {
-        stream << (*it).chr << ":";
-        stream << (*it).chrStart << "-";
-        stream << (*it).chrEnd << "\t";
+        stream << (*it).chr;
+        if ((*it).chr != "OTHER")
+        {
+            stream << ":";
+            stream << (*it).chrStart << "-";
+            stream << (*it).chrEnd;
+        }
+        stream << "\t";
         stream << ((*it).chrOri ? "+" : "-") << "\t";
         stream << (*it).contig << "\t";
         stream << ((*it).contigOri ? "+" : "-") << "\t";

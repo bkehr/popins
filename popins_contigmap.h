@@ -9,6 +9,7 @@
 
 #include "popins_clp.h"
 #include "popins_crop_unmapped.h"
+#include "popins_location.h"
 
 using namespace seqan;
 
@@ -162,6 +163,8 @@ int popins_contigmap(int argc, char const ** argv)
     CharString fastqSecond = getFileName(options.workingDirectory, "paired.2.fastq");
     CharString fastqSingle = getFileName(options.workingDirectory, "single.fastq");
     CharString nonRefBam = getFileName(options.workingDirectory, "non_ref.bam");
+    CharString nonRefNew = getFileName(options.workingDirectory, "non_ref_new.bam");
+    CharString locationsFile = getFileName(options.workingDirectory, "locations.txt");
 
     if (!exists(fastqFirst) || !exists(fastqSecond) || !exists(fastqSingle) || !exists(nonRefBam))
     {
@@ -265,13 +268,13 @@ int popins_contigmap(int argc, char const ** argv)
     }
     remove(toCString(mergedBam));
 
-    // Index <WD>/non_ref.bam.
-    std::cerr << "[" << time(0) << "] " << "Indexing " << options.workingDirectory << "/non_ref_new.bam by beginPos using " << SAMTOOLS << std::endl;
+    // Index <WD>/non_ref_new.bam.
+    std::cerr << "[" << time(0) << "] " << "Indexing " << nonRefNew << " by beginPos using " << SAMTOOLS << std::endl;
     cmd.str("");
-    cmd << SAMTOOLS << " index " << options.workingDirectory << "/non_ref_new.bam";
+    cmd << SAMTOOLS << " index " << nonRefNew;
     if (system(cmd.str().c_str()) != 0)
     {
-        std::cerr << "ERROR while indexing " << options.workingDirectory << "/non_ref_new.bam using " << SAMTOOLS << std::endl;
+        std::cerr << "ERROR while indexing " << nonRefNew << " using " << SAMTOOLS << std::endl;
         removeTmpDir(options.tmpDir, options.workingDirectory);
         return 1;
     }
@@ -279,6 +282,13 @@ int popins_contigmap(int argc, char const ** argv)
     // Remove temporary directory.
     if (removeTmpDir(options.tmpDir, options.workingDirectory) != 0)
         return 1;
+
+    // Find anchoring locations of contigs for this individual.
+    std::cerr << "[" << time(0) << "] " << "Computing contig locations from anchoring reads in " << nonRefNew << std::endl;
+    String<Location> locations;
+    findLocations(locations, nonRefNew);
+    scoreLocations(locations);
+    if (writeLocations(locationsFile, locations) != 0) return 1;
 
     return 0;
 }

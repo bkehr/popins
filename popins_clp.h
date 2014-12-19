@@ -74,11 +74,11 @@ struct ContigMapOptions {
 struct PlacingOptions {
     CharString supercontigFile;
     CharString referenceFile;
-    String<CharString> nonRefFiles;
     
     CharString bamFilesFile;
 
-    CharString locationsFile;
+    CharString locationsFile;          // merged from all individuals
+    CharString locationsFilesFile;
     CharString vcfInsertionsFile;
     CharString faInsertionsFile;
     
@@ -296,22 +296,21 @@ setupParser(ArgumentParser & parser, PlacingOptions & options)
     setDate(parser, VERSION_DATE); 
     
     addUsageLine(parser, "[\\fIOPTIONS\\fP] \\fICONTIGFILE\\fP \\fIREFFILE\\fP \\fIBAM FILE 1\\fP ... \\fIBAM FILE N\\fP");
-    addDescription(parser, "Finds the positions of (super-)contigs in the reference genome. Identifies approximate "
-                           "locations based on anchoring read pairs found in the bam files if a file with locations "
-                           "does not already exist. Determines exact positions of insertions using SplazerS for split "
-                           "read alignment for each contig end if bam files with all reads of the individuals are "
-                           "specified. Outputs a vcf and fa record for each identified position. The split alignment "
-                           "can be done in batches (e.g. 100 locations per batch) if the approximate locations have "
-                           "been computed before.");
+    addDescription(parser, "Finds the positions of (super-)contigs in the reference genome. Merges files with "
+                           "approximate locations computed from anchoring read pairs if a file with locations does not "
+                           "already exist. Determines exact positions of insertions by split aligning reads at each "
+                           "contig end if bam files with all reads of the individuals are specified. Outputs a vcf and "
+                           "fa record for each identified position. The split alignment  can be done in batches (e.g. "
+                           "100 locations per batch) if the approximate locations have been computed before.");
     
     // Require fasta file with merged contigs as arguments.
     addArgument(parser, ArgParseArgument(ArgParseArgument::INPUTFILE, "CONTIGFILE"));
     addArgument(parser, ArgParseArgument(ArgParseArgument::INPUTFILE, "REFFILE"));
-    addArgument(parser, ArgParseArgument(ArgParseArgument::INPUTFILE, "BAMFILE", true));
     
     // Setup (input) options.
     addSection(parser, "Main options");
-    addOption(parser, ArgParseOption("l", "locations", "Name of file with approximate insertion locations. Computed if not exists.", ArgParseArgument::STRING, "LOCATIONFILE"));
+    addOption(parser, ArgParseOption("l", "locationsFiles", "Name of file listing locations files for individuals, one per line.", ArgParseArgument::INPUTFILE, "FILE"));
+    addOption(parser, ArgParseOption("ml", "locations", "Name of file with approximate insertion locations merged from all individuals. Computed if not exists.", ArgParseArgument::INPUTFILE, "LOCATIONFILE"));
     addOption(parser, ArgParseOption("m", "minScore", "Minimal score of a location to be passed to split mapping.", ArgParseArgument::DOUBLE, "FLOAT"));
     addOption(parser, ArgParseOption("b", "bamFiles", "File listing original, full bam files of individuals, one per line. Specify to determine exact insertion positions from split reads.", ArgParseArgument::INPUTFILE, "FILE"));
     addOption(parser, ArgParseOption("s", "batchSize", "Number of locations per batch. Specify to split computation into smaller batches. Requires locations file to exist, bam files, and batch number.", ArgParseArgument::INTEGER, "INT"));
@@ -332,7 +331,7 @@ setupParser(ArgumentParser & parser, PlacingOptions & options)
     setMaxValue(parser, "m", "1");
     
     // Set default values.
-    setDefaultValue(parser, "l", options.locationsFile);
+    setDefaultValue(parser, "ml", options.locationsFile);
     setDefaultValue(parser, "m", options.minLocScore);
     setDefaultValue(parser, "r", options.readLength);
     setDefaultValue(parser, "e", options.maxInsertSize);
@@ -497,7 +496,9 @@ getOptionValues(PlacingOptions & options, ArgumentParser & parser)
 {
     getArgumentValue(options.supercontigFile, parser, 0);
     getArgumentValue(options.referenceFile, parser, 1);
-    options.nonRefFiles = getArgumentValues(parser, 2);
+    
+    if (isSet(parser, "locationsFiles"))
+        getOptionValue(options.locationsFilesFile, parser, "locationsFiles");
     
     if (isSet(parser, "locations"))
         getOptionValue(options.locationsFile, parser, "locations");
