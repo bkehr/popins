@@ -69,7 +69,7 @@ trimReadEnds( T& seq, CharString& qual, int bpQclip, bool verbose)
   return 1;
 }
 
-void parseComponent( CharString& altR, bool verbose, component_dir& cdir, CharString& componentName, int& beginPos, int& endPos )
+void parseComponent( CharString& altR, bool verbose, component_dir& cdir, CharString& componentName, bool compIsPlaced, int& beginPos, int& endPos )
 {
   /* BUG:  assumes that the length of the variant is 1, this is not the case for general variants 
    */
@@ -81,6 +81,16 @@ void parseComponent( CharString& altR, bool verbose, component_dir& cdir, CharSt
 	cNameEnd = i;
       }
     }
+    if( cNameEnd == 1 ){
+      cNameEnd = length( altR )-2;
+      endPos = COMPONENT_HAS_NO_END;
+      compIsPlaced = false;
+    }else{
+      CharString endPosChar = infix( altR, cNameEnd+1, length( altR )-2 );
+      endPos = atoi( toCString( endPosChar ) );
+      compIsPlaced = true;
+    }
+    beginPos = COMPONENT_HAS_NO_END;
     componentName = infix( altR, 1, (cNameEnd-1) );
     // Need to make sure the indexing is correct
     if( altR[cNameEnd-1] == 'f' or altR[cNameEnd-1] == 'F' ){
@@ -90,15 +100,21 @@ void parseComponent( CharString& altR, bool verbose, component_dir& cdir, CharSt
     }else{
       if( verbose ) std::cout  << "Incorrect component name format " << altR[cNameEnd-1] << " " << cNameEnd << std::endl;
     }
-    beginPos = COMPONENT_HAS_NO_END;
-    CharString endPosChar = infix( altR, cNameEnd+1, length( altR )-2 );
-    endPos = atoi( toCString( endPosChar ) );
   }else if( altR[1] == '[' ){
     int cNameEnd = 2;
     for( unsigned i = 2; i < length( altR ); i++ ){
       if( altR[i] == ':' ){
 	cNameEnd = i;
       }
+    }
+    if( cNameEnd == 2 ){
+      cNameEnd = length( altR )-1;
+      beginPos = COMPONENT_HAS_NO_END;
+      compIsPlaced = false;
+    }else{
+      CharString beginPosChar = infix( altR, (cNameEnd+1), length(altR)-1 );
+      beginPos = atoi( toCString( beginPosChar ) );
+      compIsPlaced = true;
     }
     componentName = infix( altR, 2, cNameEnd-1 );
     if( altR[cNameEnd-1] == 'f' or altR[cNameEnd-1] == 'F' ){
@@ -109,9 +125,9 @@ void parseComponent( CharString& altR, bool verbose, component_dir& cdir, CharSt
       if( verbose ) std::cout  << "Incorrect component name format " << altR[cNameEnd-1] << " " << cNameEnd << std::endl;
     }
     endPos = COMPONENT_HAS_NO_END;
-    CharString beginPosChar = infix( altR, (cNameEnd+1), length(altR)-1 );
-    beginPos = atoi( toCString( beginPosChar ) );
   }else{
+    // BUG: Not clear how well this works
+    compIsPlaced = false;  // Not clear if this is the correct assignment
     componentName = infix( altR, 1, length( altR )-1 );
     if( altR[length(altR)-1] == 'f' or altR[length(altR)-1] == 'F' )
       cdir = both_dir_forward;
@@ -386,7 +402,7 @@ int addBARPairToVC( barPairType barPT, double minReadProb, std::vector< double>&
 void
 parseInfoField( CharString& infoField, bool verbose, int& refDl, int& refDr ){
   refDl = 0;
-  refDr = -1;
+  refDr = 0;
   for( unsigned i = 0; i < length( infoField ); i++ ){
     if (infoField[i] == '=' and i >= 4 and infoField[i-1] == 'D' and infoField[i-2] == 'F' and infoField[i-3] == 'E' and infoField[i-4] == 'R'){
       unsigned j = i+1;
@@ -485,12 +501,13 @@ int variantCallRegion(VcfRecord & variant, VcfHeader & vcfH,
 
     CharString componentName;
     component_dir componentDir;
+    bool compIsPlaced = true;
     int beginPosC, endPosC;
-    parseComponent( variant.alt, options.verbose, componentDir, componentName, beginPosC, endPosC );
+    parseComponent( variant.alt, options.verbose, componentDir, componentName, compIsPlaced, beginPosC, endPosC );
 
     int devL, devR;
     parseInfoField( variant.info, options.verbose, devL, devR );
-    if( devR >= 0 || options.callBoth ){
+    if( not compIsPlaced || options.callBoth ){
         if( options.verbose ) std::cout << "variantCallRegionReadPair " << devL << " " << devR << " " << std::endl; 
         variantCallRegionReadPair( chrom, componentName, variant.beginPos, devL, devR, componentDir, baiI, bamS, hN, baiIAlt, bamSAlt, hNAlt, options, vC);
         if( not options.callBoth ){
