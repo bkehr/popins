@@ -200,7 +200,7 @@ mergeHeaders(BamHeader & header,
     header = header1;
     for (unsigned i = 0; i < length(header2.records); ++i)
     {
-        if (header1.records[i].type == 1)
+        if (header2.records[i].type == 1)
             appendValue(header.records, header2.records[i]);
     }
     BamHeaderRecordTypeLess less;
