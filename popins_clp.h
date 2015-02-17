@@ -15,6 +15,37 @@ inline bool exists(CharString const & filename)
 }
 
 // ==========================================================================
+
+bool
+readFileNames(String<CharString> & files, CharString const & filenameFile)
+{
+    if (filenameFile == "") return 0;
+
+    std::fstream stream(toCString(filenameFile), std::fstream::in);
+    if (!stream.is_open())
+    {
+        std::cerr << "ERROR: Could not open file listing files " << filenameFile << std::endl;
+        return 1;
+    }
+    
+    RecordReader<std::fstream, SinglePass<> > reader(stream);
+    
+    while (!atEnd(reader))
+    {
+        CharString file;
+        int res = readLine(file, reader);
+        if (res != 0)
+        {
+            std::cerr << "ERROR while reading line from " << filenameFile << std::endl;
+            return 1;
+        }
+        appendValue(files, file);
+    }
+    
+    return 0;
+}
+
+// ==========================================================================
 // struct <Command>Options
 // ==========================================================================
 
@@ -37,11 +68,15 @@ struct AssemblyOptions {
 
 struct MergingOptions {
     String<CharString> contigFiles;
+    String<CharString> componentFiles;
 
     CharString outputFile;
     std::fstream outputStream;
     bool verbose;
     bool veryVerbose;
+
+    int partitioningBatchIndex;
+    int partitioningBatches;
     
     double errorRate;
     int minimalLength;
@@ -52,7 +87,7 @@ struct MergingOptions {
     int minTipScore;
 
     MergingOptions() :
-        outputFile("supercontigs.fa"), verbose(false), veryVerbose(false),
+        outputFile("supercontigs.fa"), verbose(false), veryVerbose(false), partitioningBatchIndex(0),partitioningBatches(1),
         errorRate(0.01), minimalLength(60), qgramLength(47), matchScore(1), errorPenalty(-5), minScore(90), minTipScore(30)
     {} 
 };
@@ -75,10 +110,10 @@ struct PlacingOptions {
     CharString supercontigFile;
     CharString referenceFile;
     
-    CharString bamFilesFile;
+    String<CharString> bamFiles;
 
     CharString locationsFile;          // merged from all individuals
-    CharString locationsFilesFile;
+    String<CharString> locationsFiles; // one file per individual
     CharString vcfInsertionsFile;
     CharString faInsertionsFile;
     
@@ -228,11 +263,25 @@ setupParser(ArgumentParser & parser, MergingOptions & options)
     addOption(parser, ArgParseOption("s", "minScore", "Minimal score for Smith-Waterman alignment.", ArgParseArgument::INTEGER, "INT"));
     addOption(parser, ArgParseOption("t", "minTipScore", "Minimal score for tips in supercontig graph.", ArgParseArgument::INTEGER, "INT"));
     
+    // Program mode options
+    addSection(parser, "Program mode options");
+    addOption(parser, ArgParseOption("pb", "partitioningBatches", "Total number of batches for the partitioning step. If > 1, then only partitioning step is performed.", ArgParseArgument::INTEGER, "INT"));
+    addOption(parser, ArgParseOption("pi", "partitioningBatchIndex", "Batch number for the partitioning step.", ArgParseArgument::INTEGER, "INT"));
+    addOption(parser, ArgParseOption("c", "componentFiles", "List of files written by the partioning step. Either the name of a single file that lists one component filename per line, or multiple names of component files, i.e. -c <FILE1> -c <FILE2> ...", ArgParseArgument::INPUTFILE, "FILE", true));
+    
     // Output file options.
     addSection(parser, "Output options");
-    addOption(parser, ArgParseOption("o", "outFile", "Name of output fasta file for the supercontigs.", ArgParseArgument::OUTPUTFILE, "CONTIGFILE"));
+    addOption(parser, ArgParseOption("o", "outFile", "Name of output file. Either in text format for components or fasta format for the supercontigs.", ArgParseArgument::OUTPUTFILE, "OUTPUTFILE"));
     addOption(parser, ArgParseOption("v", "verbose", "Enable verbose screen output."));
     addOption(parser, ArgParseOption("vv", "veryVerbose", "Enable very verbose screen output."));
+
+    // Note on usage.
+    addSection(parser, "Note");
+    addText(parser, "When merging a large total number of contigs, the q-gram index in the partitioning step might not "
+                    "fit into memory. In this case, split the merging into several program calls using the different "
+                    "program modes: First, generate a set of component files by running 'popins merge' with the -pb "
+                    "and -pi options. Afterwards, combine the component files and generate the supercontigs in a "
+                    "seperate call to 'popins merge' by specifying the -c option.");
 
     // Set minimal/maximal/lists of valid values.
     setMinValue(parser, "e", "0");
@@ -240,7 +289,7 @@ setupParser(ArgumentParser & parser, MergingOptions & options)
     setMinValue(parser, "l", "3");
     setMinValue(parser, "k", "3");
     setMinValue(parser, "t", "0");
-    setValidValues(parser, "o", "fa fna fasta");
+    setValidValues(parser, "o", "txt fa fna fasta");
 
     // Set default values.
     setDefaultValue(parser, "e", options.errorRate);
@@ -250,7 +299,9 @@ setupParser(ArgumentParser & parser, MergingOptions & options)
     setDefaultValue(parser, "p", options.errorPenalty);
     setDefaultValue(parser, "s", options.minScore);
     setDefaultValue(parser, "t", options.minTipScore);
-    setDefaultValue(parser, "o", options.outputFile);
+    setDefaultValue(parser, "pb", options.partitioningBatches);
+    setDefaultValue(parser, "pi", options.partitioningBatchIndex);
+    setDefaultValue(parser, "o", "supercontigs.fa or components_<BATCH INDEX>.txt");
 }
 
 void
@@ -295,7 +346,7 @@ setupParser(ArgumentParser & parser, PlacingOptions & options)
     setVersion(parser, VERSION);
     setDate(parser, VERSION_DATE); 
     
-    addUsageLine(parser, "[\\fIOPTIONS\\fP] \\fICONTIGFILE\\fP \\fIREFFILE\\fP \\fIBAM FILE 1\\fP ... \\fIBAM FILE N\\fP");
+    addUsageLine(parser, "[\\fIOPTIONS\\fP] \\fICONTIGFILE\\fP \\fIREFFILE\\fP");
     addDescription(parser, "Finds the positions of (super-)contigs in the reference genome. Merges files with "
                            "approximate locations computed from anchoring read pairs if a file with locations does not "
                            "already exist. Determines exact positions of insertions by split aligning reads at each "
@@ -457,6 +508,40 @@ getOptionValues(MergingOptions & options, ArgumentParser & parser)
         getOptionValue(options.errorPenalty, parser, "penalty");
     if (isSet(parser, "minTipScore"))
         getOptionValue(options.minTipScore, parser, "minTipScore");
+    
+    // Get program mode options.
+    if (isSet(parser, "partitioningBatchIndex") && isSet(parser, "partitioningBatches"))
+    {
+        getOptionValue(options.partitioningBatchIndex, parser, "partitioningBatchIndex");
+        getOptionValue(options.partitioningBatches, parser, "partitioningBatches");
+        if (options.partitioningBatches <= options.partitioningBatchIndex)
+        {
+            std::cerr << "ERROR: Please specify batch index smaller than number of batches." << std::endl;
+            return 1;
+        }
+        if (options.partitioningBatches > 1)
+        {
+            std::stringstream filename;
+            filename << "components_" << options.partitioningBatchIndex << ".txt";
+            options.outputFile = filename.str();
+        }
+    }
+    else if (isSet(parser, "partitioningBatchIndex") || isSet(parser, "partitioningBatches"))
+    {
+        std::cerr << "ERROR: Please specify both options --partitioningBatchIndex and --partitioningBatches." << std::endl;
+        return 1;
+    }
+    
+    if (isSet(parser, "componentFiles"))
+    {
+        options.componentFiles = getOptionValues(parser, "componentFiles");
+        if (length(options.componentFiles) == 1)
+        {
+            CharString filenamesFile = options.componentFiles[0];
+            clear(options.componentFiles);
+            if (readFileNames(options.componentFiles, filenamesFile) != 0) return 1;
+        }
+    }
 
     // Get output options.
     if (isSet(parser, "outFile"))
@@ -498,7 +583,11 @@ getOptionValues(PlacingOptions & options, ArgumentParser & parser)
     getArgumentValue(options.referenceFile, parser, 1);
     
     if (isSet(parser, "locationsFiles"))
-        getOptionValue(options.locationsFilesFile, parser, "locationsFiles");
+    {
+        CharString locationsFilesFile;
+        getOptionValue(locationsFilesFile, parser, "locationsFiles");
+        if (readFileNames(options.locationsFiles, locationsFilesFile) != 0) return 1;
+    }
     
     if (isSet(parser, "locations"))
         getOptionValue(options.locationsFile, parser, "locations");
@@ -512,7 +601,11 @@ getOptionValues(PlacingOptions & options, ArgumentParser & parser)
         getOptionValue(options.minLocScore, parser, "minScore");
 
     if (isSet(parser, "bamFiles"))
-        getOptionValue(options.bamFilesFile, parser, "bamFiles");
+    {
+        CharString bamFilesFile;
+        getOptionValue(bamFilesFile, parser, "bamFiles");
+        if (readFileNames(options.bamFiles, bamFilesFile) != 0) return 1;
+    }
     if (!isSet(parser, "bamFiles") && (isSet(parser, "batchIndex") || isSet(parser, "batchSize")))
     {
         std::cerr << "ERROR: Bam files with all reads of individuals not specified." << std::endl;
@@ -621,7 +714,8 @@ int parseCommandLine(TOptions & options, int argc, char const ** argv)
         return 1;
     
     // Collect the option values.
-    getOptionValues(options, parser);
+    if (getOptionValues(options, parser) != 0)
+        return 1;
 
     return 0;
 }

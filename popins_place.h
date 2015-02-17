@@ -105,37 +105,6 @@ artificialReferences(String<Pair<TSeq> > & concatRefs,
 // ==========================================================================
 
 bool
-readFileNames(String<CharString> & files, CharString const & filenameFile)
-{
-    if (filenameFile == "") return 0;
-
-    std::fstream stream(toCString(filenameFile), std::fstream::in);
-    if (!stream.is_open())
-    {
-        std::cerr << "ERROR: Could not open file listing files " << filenameFile << std::endl;
-        return 1;
-    }
-    
-    RecordReader<std::fstream, SinglePass<> > reader(stream);
-    
-    while (!atEnd(reader))
-    {
-        CharString file;
-        int res = readLine(file, reader);
-        if (res != 0)
-        {
-            std::cerr << "ERROR while reading line from " << filenameFile << std::endl;
-            return 1;
-        }
-        appendValue(files, file);
-    }
-    
-    return 0;
-}
-
-// ==========================================================================
-
-bool
 openBamLoadBai(BamStream & bamStream, BamIndex<Bai> & bamIndex, CharString & filename)
 {
     // Open bam file.
@@ -369,9 +338,7 @@ int popins_place(int argc, char const ** argv)
 
     if (!exists(options.locationsFile))
     {
-        String<CharString> locationsFiles;
-        if (readFileNames(locationsFiles, options.locationsFilesFile) != 0) return 1;
-        if (length(locationsFiles) == 0)
+        if (length(options.locationsFiles) == 0)
         {
             std::cerr << "ERROR: Locations file " << options.locationsFile << "does not exist. Specify -l option to create it." << std::endl;
             return 1;
@@ -379,7 +346,7 @@ int popins_place(int argc, char const ** argv)
 
         // Merge approximate locations and write them to a file.
         if (options.verbose) std::cerr << "[" << time(0) << "] " << "Merging locations files." << std::endl;
-        if (mergeLocations(locations, locationsFiles) != 0) return 1;
+        if (mergeLocations(locations, options.locationsFiles) != 0) return 1;
         if (options.verbose) std::cerr << "[" << time(0) << "] " << "Sorting locations." << std::endl;
         LocationPosLess less;
         std::stable_sort(begin(locations, Standard()), end(locations, Standard()), less);
@@ -392,10 +359,8 @@ int popins_place(int argc, char const ** argv)
     {
         if (options.verbose) std::cerr << "[" << time(0) << "] " << "Locations file exists." << std::endl;
     }
-    
-    String<CharString> bamFiles;
-    if (readFileNames(bamFiles, options.bamFilesFile) != 0) return 1;
-    if (length(bamFiles) == 0) 
+
+    if (length(options.bamFiles) == 0)
     {
         if (options.verbose) std::cerr << "[" << time(0) << "] " << "No split mapping. Specify -b option for split mapping." << std::endl;
         return 0;
@@ -446,8 +411,8 @@ int popins_place(int argc, char const ** argv)
     String<std::map<Pair<TPos>, unsigned> > splitPosMaps;
     resize(splitPosMaps, length(locations));
 
-    Iterator<String<CharString> >::Type filesEnd = end(bamFiles);
-    for (Iterator<String<CharString> >::Type file = begin(bamFiles); file != filesEnd; ++file)
+    Iterator<String<CharString> >::Type filesEnd = end(options.bamFiles);
+    for (Iterator<String<CharString> >::Type file = begin(options.bamFiles); file != filesEnd; ++file)
     {
         if (openBamLoadBai(bamStream, bamIndex, *file) != 0) return 1;
 
@@ -514,7 +479,7 @@ int popins_place(int argc, char const ** argv)
                 --i;
             }
         }
-        if (file == begin(bamFiles) && options.verbose)
+        if (file == begin(options.bamFiles) && options.verbose)
             std::cerr << "[" << time(0) << "] " << "Discarded " << discardedLocs << " locations because of high coverage." << std::endl;
     }
         
