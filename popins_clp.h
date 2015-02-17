@@ -277,8 +277,8 @@ setupParser(ArgumentParser & parser, MergingOptions & options)
 
     // Note on usage.
     addSection(parser, "Note");
-    addText(parser, "When merging a large total number of contigs, the q-gram index in the partitioning step might not "
-                    "fit into memory. In this case, split the merging into several program calls using the different "
+    addText(parser, "When merging a large number of contigs, the q-gram index in the partitioning step might not fit "
+                    "into memory. In this case, split the merging into several program calls using the different "
                     "program modes: First, generate a set of component files by running 'popins merge' with the -pb "
                     "and -pi options. Afterwards, combine the component files and generate the supercontigs in a "
                     "seperate call to 'popins merge' by specifying the -c option.");

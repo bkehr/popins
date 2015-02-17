@@ -211,32 +211,17 @@ getSeqsByAlignOrder(ContigComponent<TSeq> & component, StringSet<TSeq, TSpec> & 
     }
 }
 
+// --------------------------------------------------------------------------
+// Function computeOrReadContigComponents()
+// --------------------------------------------------------------------------
 
-// ==========================================================================
-// Function popins_merge()
-// ==========================================================================
-
-// TODO clp: option for batch size for merging components
-// TODO clp: option for batch number for merging components
-
-int popins_merge(int argc, char const ** argv)
+template<typename TSequence>
+bool
+computeOrReadContigComponents(std::map<ContigId, ContigComponent<TSequence> > & components,
+                              StringSet<TSequence, Owner<> > & contigs,
+                              StringSet<ContigId, Owner<> > & contigIds,
+                              MergingOptions & options)
 {
-    typedef Dna5String TSequence;
-    typedef Size<TSequence>::Type TSize;
-    typedef Position<TSequence>::Type TPosition;
-    typedef std::map<ContigId, ContigComponent<TSequence> > TComponents;
-
-    // Parse the command line to get option values.
-    MergingOptions options;
-    if (parseCommandLine(options, argc, argv) != 0)
-        return 1;
-
-    // Read contigs from file.
-    StringSet<TSequence, Owner<> > contigs;
-    StringSet<ContigId, Owner<> > contigIds;
-    if (readContigs(contigs, contigIds, options.contigFiles, options.verbose) != 0) return 1;
-
-    TComponents components;
     if (length(options.componentFiles) == 0)
     {
         if (options.partitioningBatches > 1) {
@@ -251,7 +236,7 @@ int popins_merge(int argc, char const ** argv)
             std::cerr << "[" << time(0) << "] " << "Partitioning sets of contigs, batch "
                       << options.partitioningBatchIndex << "/" << options.partitioningBatches << std::endl;
 
-            // *** Partition contigs into sets of similar contigs (components) by computing pairwise alignments. ***
+            // --- PARTITION CONTIGS into sets of similar contigs (components) by computing pairwise alignments. ---
             partitionContigs(components, contigs, contigIds, contigSubset, contigIdSubset, offset, options.errorRate, options.minimalLength,
                              options.qgramLength, options.matchScore, options.errorPenalty, options.minScore, options.verbose);
 
@@ -267,7 +252,7 @@ int popins_merge(int argc, char const ** argv)
 
             std::cerr << "[" << time(0) << "] " << "Partitioning sets of contigs" << std::endl;
 
-            // *** Partition contigs into sets of similar contigs (components) by computing pairwise alignments. ***
+            // --- PARTITION CONTIGS into sets of similar contigs (components) by computing pairwise alignments. ---
             partitionContigs(components, contigs, contigIds, options.errorRate, options.minimalLength,
                              options.qgramLength, options.matchScore, options.errorPenalty, options.minScore, options.verbose);
         }
@@ -281,13 +266,51 @@ int popins_merge(int argc, char const ** argv)
         if (readAndMergeComponents(components, options.componentFiles, contigIds, options.verbose) != 0) return 1;
     }
 
-    // Prepare the output file.
-    options.outputStream.open(toCString(options.outputFile), std::ios_base::out);
-    if (!options.outputStream.is_open())
+    return 0;
+}
+
+// --------------------------------------------------------------------------
+
+template<typename TStream, typename TSeq, typename TSpec>
+void
+writeSupercontigs(TStream & outputStream, String<TSeq> & mergedSeqs, StringSet<TSeq, TSpec> & contigs, unsigned pos)
+{
+    typedef typename Size<TSeq>::Type TSize;
+
+    if (length(mergedSeqs) <= 25)
     {
-        std::cerr << "ERROR: Could not open output file " << options.outputFile << std::endl;
-        return 1;
+        for (TSize i = 0; i < length(mergedSeqs); ++i)
+        {
+            outputStream << ">COMPONENT_" << pos << "_" << char('a'+i)
+                         << "_length_" << length(mergedSeqs[i])
+                         << "_size_" << length(contigs) << std::endl;
+            outputStream << mergedSeqs[i] << std::endl;
+        }
     }
+    else
+    {
+        for (TSize i = 0; i < length(mergedSeqs); ++i)
+        {
+            outputStream << ">COMPONENT_" << pos << "_" << char('a'+i/26) << char('a'+i%26)
+                         << "_length_" << length(mergedSeqs[i])
+                         << "_size_" << length(contigs) << std::endl;
+            outputStream << mergedSeqs[i] << std::endl;
+        }
+    }
+}
+
+// --------------------------------------------------------------------------
+// Function constructSupercontigs()
+// --------------------------------------------------------------------------
+
+template<typename TSequence>
+void
+constructSupercontigs(std::map<ContigId, ContigComponent<TSequence> > & components,
+                      StringSet<TSequence, Owner<> > & contigs,
+                      StringSet<ContigId, Owner<> > & contigIds,
+                      MergingOptions & options)
+{
+    typedef std::map<ContigId, ContigComponent<TSequence> > TComponents;
     
     if (options.verbose) std::cerr << "[" << time(0) << "] " << "Constructing supercontigs" << std::endl;
 
@@ -298,7 +321,7 @@ int popins_merge(int argc, char const ** argv)
     
     // Iterate over the set of components.
     unsigned pos = 0;
-    for (TComponents::iterator it = components.begin(); it != components.end(); ++it)
+    for (typename TComponents::iterator it = components.begin(); it != components.end(); ++it)
     {
         ContigComponent<TSequence> component = it->second;
 
@@ -325,17 +348,8 @@ int popins_merge(int argc, char const ** argv)
 
         if (options.verbose) std::cout << "COMPONENT_" << pos << " size:" << length(component.contigs) << std::endl;
 
-        // *** Merge contigs of the component. ***
+        // --- MERGE CONTIGS OF THE COMPONENT ---
         String<TSequence> mergedSeqs;
-        
-        /////// DEBUG CODE ///////
-        //if (length(component.contigs) == 10 && pos == 1626)
-        //{
-        //    std::cout << std::endl;
-        //    for (unsigned i = 0; i < length(component.ids); ++i)
-        //        std::cout << component.ids[i] << std::endl;
-        //}
-        
         if (!mergeSequences(mergedSeqs, component.contigs,
                             options.minTipScore, options.matchScore, options.errorPenalty, options.qgramLength,
                             options.verbose))
@@ -348,26 +362,8 @@ int popins_merge(int argc, char const ** argv)
 
         if (length(mergedSeqs) > 1) ++numBranching;
 
-        if (length(mergedSeqs) <= 25)
-        {
-            for (TSize i = 0; i < length(mergedSeqs); ++i)
-            {
-                options.outputStream << ">COMPONENT_" << pos << "_" << char('a'+i)
-                                     << "_length_" << length(mergedSeqs[i])
-                                     << "_size_" << length(component.contigs) << std::endl;
-                options.outputStream << mergedSeqs[i] << std::endl;
-            }
-        }
-        else
-        {
-            for (TSize i = 0; i < length(mergedSeqs); ++i)
-            {
-                options.outputStream << ">COMPONENT_" << pos << "_" << char('a'+i/26) << char('a'+i%26)
-                                     << "_length_" << length(mergedSeqs[i])
-                                     << "_size_" << length(component.contigs) << std::endl;
-                options.outputStream << mergedSeqs[i] << std::endl;
-            }
-        }
+        // Output the supercontig.
+        writeSupercontigs(options.outputStream, mergedSeqs, component.contigs, pos);
 
         ++pos;
     }
@@ -381,6 +377,43 @@ int popins_merge(int argc, char const ** argv)
         std::cerr << "[" << time(0) << "] " << numBranching << " components are branching, given up on " << numVeryBranching << " of them." << std::endl;
         std::cerr << "[" << time(0) << "] " << numTooLarge << " components exceeded the maximum number of contigs for merging." << std::endl;
     }
+}
+
+// ==========================================================================
+// Function popins_merge()
+// ==========================================================================
+
+// TODO clp: option for batch size for merging components
+// TODO clp: option for batch number for merging components
+
+int popins_merge(int argc, char const ** argv)
+{
+    typedef Dna5String TSequence;
+
+    // Parse the command line to get option values.
+    MergingOptions options;
+    if (parseCommandLine(options, argc, argv) != 0)
+        return 1;
+
+    // Read contigs from file.
+    StringSet<TSequence, Owner<> > contigs;
+    StringSet<ContigId, Owner<> > contigIds;
+    if (readContigs(contigs, contigIds, options.contigFiles, options.verbose) != 0) return 1;
+
+    // --- 1) PARTITIONING ---
+    std::map<ContigId, ContigComponent<TSequence> > components;
+    if (computeOrReadContigComponents(components, contigs, contigIds, options) != 0) return 1;
+
+    // Prepare the output file.
+    options.outputStream.open(toCString(options.outputFile), std::ios_base::out);
+    if (!options.outputStream.is_open())
+    {
+        std::cerr << "ERROR: Could not open output file " << options.outputFile << std::endl;
+        return 1;
+    }
+    
+    // --- 2) SUPERCONTIG CONSTRUCTION ---
+    constructSupercontigs(components, contigs, contigIds, options);
 
     return 0;
 }
