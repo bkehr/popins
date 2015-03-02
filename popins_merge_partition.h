@@ -9,62 +9,36 @@
 
 using namespace seqan;
 
-// ==========================================================================
-// Function readAndMergeComponents()
-// ==========================================================================
+// --------------------------------------------------------------------------
+// Function readNextContig()
+// --------------------------------------------------------------------------
 
-template<typename TSequence, typename TSpec>
-bool
-readAndMergeComponents(std::map<ContigId, ContigComponent<TSequence> > & components,
-                       String<CharString> & componentFiles,
-                       StringSet<ContigId, TSpec> & contigIds,
-                       bool verbose)
+template<typename TSeq, typename TSize>
+int
+readNextContig(TSeq & contig, ContigId & contigId, SequenceStream & stream, TSize & i, String<CharString> & filenames)
 {
-    typedef std::map<ContigId, ContigComponent<TSequence> > TComponents;
-    typedef typename ContigComponent<TSequence>::TSize TSize;
-    typedef typename std::map<TSize, std::set<TSize> >::iterator TPairsIterator;
-
-    std::cerr << "[" << time(0) << "] " << "Reading and merging components files" << std::endl;
-
-    // Initialize Union-Find data structure.
-    UnionFind<int> uf;
-    resize(uf, length(contigIds));
-    
-    // Read the component files and join sets.
-    String <ContigComponent<TSequence> > comps;
-    for (unsigned i = 0; i < length(componentFiles); ++i)
-        if (readComponents(comps, uf, componentFiles[i], length(contigIds)/2, verbose) != 0) return 1;
-
-    // Merge elements of comps that belong to the same set by adding them to the same element in components.
-    typename Iterator<String<ContigComponent<TSequence> > >::Type compsIt = begin(comps);
-    typename Iterator<String<ContigComponent<TSequence> > >::Type compsEnd = end(comps);
-    for (; compsIt != compsEnd; ++compsIt)
+    // Open the next file.
+    while ((i < (int)length(filenames) && atEnd(stream)) || i == -1)
     {
-        int set_i = findSet(uf, (*compsIt).alignedPairs.begin()->first);
-        if (set_i >= (int)length(contigIds)/2) continue;
-
-        ContigId id = contigIds[set_i];
-
-        TPairsIterator pairsIt = (*compsIt).alignedPairs.begin();
-        TPairsIterator pairsEnd = (*compsIt).alignedPairs.end();
-        for (; pairsIt != pairsEnd; ++pairsIt)
-            components[id].alignedPairs[pairsIt->first].insert(pairsIt->second.begin(), pairsIt->second.end());
-    }
-
-    // Add singleton contigs to components (= those contigs that don't align to any other contig).
-    unsigned numSingletons = 0;
-    for (unsigned i = 0; i < length(contigIds)/2; ++i)
-    {
-        if (components.count(contigIds[i]) == 0 && (int)i == findSet(uf, i))
+        ++i;
+        open(stream, toCString(filenames[i]));
+        if (!isGood(stream))
         {
-            components[contigIds[i]].alignedPairs[i];
-            ++numSingletons;
+            std::cerr << "ERROR: Could not open " << filenames[i] << std::endl;
+            return -1;
         }
     }
-
-    std::cerr << "[" << time(0) << "] " << "Added " << numSingletons << " singletons." << std::endl;
-    std::cerr << "[" << time(0) << "] " << "There are " << components.size() << " components after merging." << std::endl;
-
+    
+    if (atEnd(stream)) return 1;
+    
+    // Read the next record.
+    contigId.orientation = true;
+    contigId.pn = formattedIndex(i, length(filenames));
+    if (readRecord(contigId.contigId, contig, stream))
+    {
+        std::cerr << "ERROR: Could not read fasta record from " << filenames[i] << std::endl;
+        return -1;
+    }
     return 0;
 }
 
@@ -77,8 +51,8 @@ inline bool
 pairwiseAlignment(TSeq & contig1,
                   TSeq & contig2,
                   Score<int, Simple> scoringScheme,
-                  unsigned lowerDiag,
-                  unsigned upperDiag,
+                  int lowerDiag,
+                  int upperDiag,
                   TValueScore minScore)
 {
     typedef typename Position<TSeq>::Type TPos;
@@ -103,204 +77,288 @@ pairwiseAlignment(TSeq & contig1,
 // Function partitionContigs()
 // ==========================================================================
 
-template<typename TSize, typename TSeq, typename TFloat, typename TLen, typename TLength, typename TValueMatch, typename TValueError, typename TValueScore>
-void
+template<typename TSize, typename TSeq>
+bool
 partitionContigs(UnionFind<int> & uf,
-                 std::map<TSize, std::set<TSize> > & alignedPairs,
+                 std::set<Pair<TSize> > & alignedPairs,
                  StringSet<TSeq> & contigs,
                  StringSet<ContigId> & contigIds,
-                 StringSet<TSeq> & contigSubset,
-                 StringSet<ContigId> & contigIdSubset,
-                 int offset,
-                 unsigned len,
-                 TFloat errorRate,
-                 TLen minimalLength,
-                 TLength qgramLength,
-                 TValueMatch matchScore,
-                 TValueError errorPenalty,
-                 TValueScore minScore,
-                 bool verbose)
+                 int totalContigs,
+                 unsigned offset,
+                 MergingOptions & options)
 {
-    typedef StringSet<TSeq> TStringSet;
-
-    typedef Index<TStringSet, IndexQGram<SimpleShape, OpenAddressing> > TIndex;
+    typedef Index<StringSet<TSeq> , IndexQGram<SimpleShape, OpenAddressing> > TIndex;
     typedef Finder<TSeq, Swift<SwiftLocal> > TFinder;
+    
+    if (options.verbose) std::cerr << "[" << time(0) << "] " << "Partitioning contigs" << std::endl;
+    if (options.verbose) std::cerr << "[" << time(0) << "] " << "- Indexing batch of contigs" << std::endl;
 
     TSize numComparisons = 0;
-    TSize numAligns = 0;
 
-    // --- Initialization of SWIFT pattern and finders
-    TIndex qgramIndex(contigSubset);
-    resize(indexShape(qgramIndex), qgramLength);
+    // initialization of SWIFT pattern (q-gram index)
+    TIndex qgramIndex(contigs);
+    resize(indexShape(qgramIndex), options.qgramLength);
     Pattern<TIndex, Swift<SwiftLocal> > swiftPattern(qgramIndex);
     indexRequire(qgramIndex, QGramSADir());
 
     // define scoring scheme
-    Score<int, Simple> scoringScheme(matchScore, errorPenalty, errorPenalty);
-    int diagExtension = minScore/10;
+    Score<int, Simple> scoringScheme(options.matchScore, options.errorPenalty, options.errorPenalty);
+    int diagExtension = options.minScore/10;
     
-    if (verbose) std::cerr << "0%   10   20   30   40   50   60   70   80   90  100%" << std::endl;
-    if (verbose) std::cerr << "|----|----|----|----|----|----|----|----|----|----|" << std::endl;
-    unsigned fiftieth = std::max(len/50, 1u);
+    if (options.verbose) std::cerr << "[" << time(0) << "] " << "- Streaming over all contig files" << std::endl;
+    if (options.verbose) std::cerr << "0%   10   20   30   40   50   60   70   80   90  100%" << std::endl;
+    if (options.verbose) std::cerr << "|----|----|----|----|----|----|----|----|----|----|" << std::endl;
+    unsigned fiftieth = std::max((offset+length(contigs)/2)/50, (TSize)1);
 
-    for (unsigned a = 0; a < len; ++a)
+    SequenceStream contigStream;
+    int i = -1;
+    for (unsigned a = 0; a < offset+length(contigs)/2; ++a)
     {
-        if (verbose && a%fiftieth == 0) std::cerr << "*" << std::flush;
+        if (options.verbose && a%fiftieth == 0) std::cerr << "*" << std::flush;
         
-        TFinder swiftFinder(contigs[a], 1000, 1);
+        // read the next contig
+        TSeq contig;
+        ContigId contigId;
+        int ret = readNextContig(contig, contigId, contigStream, i, options.contigFiles);
+        SEQAN_ASSERT_NEQ(ret, 1);
+        if (ret == -1) return 1;
 
-        // --- SWIFT search
+        // initialization of swift finder
+        TFinder swiftFinder(contig, 1000, 1);
+        while (find(swiftFinder, swiftPattern, options.errorRate, options.minimalLength)) {
+        
+            // get index of pattern sequence
+            unsigned bSubset = swiftPattern.curSeqNo;
+            
+            // align contigs only of different individuals 
+            if (contigId.pn == contigIds[bSubset].pn) continue;
+            
+            // convert index bSubset to the index space over all contigs
+            unsigned b = bSubset + offset;
+            if (bSubset >= length(contigs)/2) b += (totalContigs - length(contigs)/2);
 
-        while (find(swiftFinder, swiftPattern, errorRate, minimalLength)) {
-            // get index of pattern sequence (subsetB is index in contigSubset and swiftIndex, b is index in uf)
-            unsigned subsetB = swiftPattern.curSeqNo;
-            unsigned b = subsetB + offset;
-            if (subsetB > length(contigSubset)/2) b += len - length(contigSubset)/2;
-            SEQAN_ASSERT_EQ(contigIdSubset[subsetB].pn, contigIds[b].pn);
-            SEQAN_ASSERT_EQ(contigIdSubset[subsetB].contigId, contigIds[b].contigId);
-            SEQAN_ASSERT_EQ(contigIdSubset[subsetB].orientation, contigIds[b].orientation);
-
-            // align contigs only of different individuals and only if not same component already
-            if (contigIds[a].pn == contigIdSubset[subsetB].pn) continue;
+            // align contigs only if not same component already
             if (findSet(uf, a) == findSet(uf, b)) continue;
 
+            // find the contig sequences
+            TSeq contigA = haystack(swiftFinder);
+            TSeq contigB = indexText(needle(swiftPattern))[bSubset];
+    
+            // compute upper and lower diagonal of band.
+            int upperDiag = (*swiftFinder.curHit).hstkPos - (*swiftFinder.curHit).ndlPos;
+            int lowerDiag = upperDiag - swiftPattern.bucketParams[bSubset].delta - swiftPattern.bucketParams[bSubset].overlap;
+            upperDiag += diagExtension;
+            lowerDiag -= diagExtension;
+    
             // verify by banded Smith-Waterman alignment
             ++numComparisons;
-            unsigned upperDiag = (*swiftFinder.curHit).hstkPos - (*swiftFinder.curHit).ndlPos + diagExtension;
-            unsigned lowerDiag = upperDiag - swiftPattern.bucketParams[subsetB].delta - swiftPattern.bucketParams[subsetB].overlap - diagExtension;
-            if (!pairwiseAlignment(contigs[a], contigSubset[subsetB], scoringScheme, lowerDiag, upperDiag, minScore)) continue;
-
-            ++numAligns;
+            if (!pairwiseAlignment(contigA, contigB, scoringScheme, lowerDiag, upperDiag, options.minScore)) continue;
+            alignedPairs.insert(Pair<TSize>(a, b));
 
             // join sets of the two aligned contigs
             joinSets(uf, findSet(uf, a), findSet(uf, b));
-            alignedPairs[a].insert(b);
-            alignedPairs[b].insert(a);
 
             // join sets for reverse complements of the contigs
-            unsigned a1 = a;
-            if (a1 < len) a1 += len; // a was index of contig in forward orientation, set it to index of contig in reverse orientation
-            else a1 -= len;         // a was index of contig in reverse orientation, set it to index of contig in forward orientation
-            if (b < len) b += len; // b was index of contig in forward orientation, set it to index of contig in reverse orientation
-            else b -= len;         // b was index of contig in reverse orientation, set it to index of contig in forward orientation
+            int a1 = a;
+            if (a1 < totalContigs) a1 += totalContigs; // a was index of contig in forward orientation, set it to index of contig in reverse orientation
+            else a1 -= totalContigs;                   // a was index of contig in reverse orientation, set it to index of contig in forward orientation
+            if (b < (unsigned)totalContigs) b += totalContigs;   // b was index of contig in forward orientation, set it to index of contig in reverse orientation
+            else b -= totalContigs;                    // b was index of contig in reverse orientation, set it to index of contig in forward orientation
             joinSets(uf, findSet(uf, a1), findSet(uf, b));
-            alignedPairs[a1].insert(b);
-            alignedPairs[b].insert(a1);
         }
     }
-    if (verbose) std::cerr << std::endl;
+    if (options.verbose) std::cerr << std::endl;
 
-    std::cerr << "[" << time(0) << "] " << "Number of pairwise comparisons: \t" << numComparisons << std::endl;
-    std::cerr << "[" << time(0) << "] " << "Number of valid alignments:     \t" << numAligns << std::endl;
+    std::cerr << "[" << time(0) << "] " << "Number of pairwise comparisons: " << numComparisons << std::endl;
+    std::cerr << "[" << time(0) << "] " << "Number of valid alignments:     " << length(alignedPairs) << std::endl;
+
+    return 0;
 }
 
 // --------------------------------------------------------------------------
+// Function writeAlignedPairs()
+// --------------------------------------------------------------------------
 
-template<typename TSeq, typename TFloat, typename TLen, typename TLength, typename TValueMatch, typename TValueError, typename TValueScore>
+template<typename TStream, typename TSize>
 void
-partitionContigs(std::map<ContigId, ContigComponent<TSeq> > & components,
-                 StringSet<TSeq> & contigs,
-                 StringSet<ContigId> & contigIds,
-                 TFloat errorRate,
-                 TLen minimalLength,
-                 TLength qgramLength,
-                 TValueMatch matchScore,
-                 TValueError errorPenalty,
-                 TValueScore minScore,
-                 bool verbose)
+writeAlignedPairs(TStream & outputStream, std::set<Pair<TSize> > & alignedPairs)
 {
-    typedef typename Size<TSeq>::Type TSize;
+    typedef typename std::set<Pair<TSize> >::iterator TIter;
 
-    // Initialize Union-Find data structure.
-    UnionFind<int> uf;
-    resize(uf, length(contigs));
-    
-    std::map<TSize, std::set<TSize> > alignedPairs;
-
-    // Partition the contigs.
-    partitionContigs(uf, alignedPairs, contigs, contigIds, contigs, contigIds, 0, length(contigs)/2,
-                     errorRate, minimalLength, qgramLength, matchScore, errorPenalty, minScore, verbose);
-    
-    // Determine components from Union-Find data structure by
-    // mapping ids and contigs to their representative ContigId.
-    TSize len = length(contigs)/2;
-    for (TSize i = 0; i < len; ++i)
-    {
-        int set_i = findSet(uf, i);
-        if (set_i <= findSet(uf, i + len))
-        {
-            ContigId id = contigIds[set_i];
-            components[id].alignedPairs[i].insert(alignedPairs[i].begin(), alignedPairs[i].end());
-        }
-    }
-
-    for (TSize i = len; i < length(contigs); ++i)
-    {
-        int set_i = findSet(uf, i);
-        if (set_i <= findSet(uf, i - len))
-        {
-            ContigId id = contigIds[set_i];
-            components[id].alignedPairs[i].insert(alignedPairs[i].begin(), alignedPairs[i].end());
-        }
-    }
-
-    std::cerr << "[" << time(0) << "] " << "There are " << components.size() << " components in total." << std::endl;
+    TIter pairsEnd = alignedPairs.end();
+    for (TIter pairsIt = alignedPairs.begin(); pairsIt != pairsEnd; ++pairsIt)
+        outputStream << (*pairsIt).i1 << " " << (*pairsIt).i2 << "\n";
 }
 
 // --------------------------------------------------------------------------
+// Function readAlignedPairs()
+// --------------------------------------------------------------------------
 
-template<typename TSeq, typename TFloat, typename TLen, typename TLength, typename TValueMatch, typename TValueError, typename TValueScore>
-void
-partitionContigs(std::map<ContigId, ContigComponent<TSeq> > & components,
-                 StringSet<TSeq> & contigs,
-                 StringSet<ContigId> & contigIds,
-                 StringSet<TSeq> & contigSubset,
-                 StringSet<ContigId> & contigIdSubset,
-                 int offset,
-                 TFloat errorRate,
-                 TLen minimalLength,
-                 TLength qgramLength,
-                 TValueMatch matchScore,
-                 TValueError errorPenalty,
-                 TValueScore minScore,
-                 bool verbose)
+template<typename TSize>
+bool
+readAlignedPairs(UnionFind<int> & uf, std::set<Pair<TSize> > & alignedPairs, CharString & fileName, unsigned len, bool verbose)
 {
-    typedef typename Size<TSeq>::Type TSize;
+   // Open the input file and initialize record reader.
+    std::fstream stream(toCString(fileName), std::ios::in);
+    
+    if (!stream.is_open())
+    {
+        std::cerr << "ERROR: Could not open components input file " << fileName << std::endl;
+        return 1;
+    }
+    
+    RecordReader<std::fstream, SinglePass<> > reader(stream);
+    CharString buffer;
+    
+    TSize numPairs = 0;
+    
+    // Read the components line by line.
+    while (!atEnd(reader))
+    {
+        TSize key, val, key_rev, val_rev;
+        clear(buffer);
+        if (readDigits(buffer, reader) != 0)
+        {
+            std::cerr << "ERROR: File format error. Reading key from " << fileName << " failed." << std::endl;
+            return 1;
+        }
+        lexicalCast2<TSize>(key, buffer);
+        if (key < len) key_rev = key + len;
+        else key_rev = key - len;
+
+        skipWhitespaces(reader);
+
+        clear(buffer);
+        if (readDigits(buffer, reader) != 0)
+        {
+            std::cerr << "ERROR: File format error. Reading value from " << fileName << " failed." << std::endl;
+            return 1;
+        }
+        lexicalCast2<TSize>(val, buffer);
+        if (val < len) val_rev = val + len;
+        else val_rev = val - len;
+
+        // Add the aligned pairs.
+        alignedPairs.insert(Pair<TSize>(key, val));
+        ++numPairs;
+
+        // Join sets of key and value.
+        joinSets(uf, findSet(uf, key), findSet(uf, val));
+        SEQAN_ASSERT_EQ(findSet(uf, key), findSet(uf, val));
+        joinSets(uf, findSet(uf, key_rev), findSet(uf, val_rev));
+        SEQAN_ASSERT_EQ(findSet(uf, key_rev), findSet(uf, val_rev));
+
+        skipLine(reader);
+    }
+    
+    if (verbose) std::cerr << "[" << time(0) << "] " << "Loaded " << fileName << ": " << numPairs << " pairs." << std::endl;
+    
+    return 0;
+}
+
+// --------------------------------------------------------------------------
+// Function unionFindToComponents()
+// --------------------------------------------------------------------------
+
+template<typename TSize, typename TSeq>
+void
+unionFindToComponents(std::map<TSize, ContigComponent<TSeq> > & components,
+                      UnionFind<int> & uf,
+                      std::set<Pair<TSize> > & alignedPairs,
+                      int totalContigs)
+{
+    // Determine components from Union-Find data structure by
+    // mapping ids to their representative id.
+    for (typename std::set<Pair<TSize> >::iterator it = alignedPairs.begin(); it != alignedPairs.end(); ++it)
+    {
+        int rev1 = (*it).i1;
+        if (rev1 < totalContigs) rev1 += totalContigs;
+        else rev1 -= totalContigs;
+        
+        int rev2 = (*it).i2;
+        if (rev2 < totalContigs) rev2 += totalContigs;
+        else rev2 -= totalContigs;
+
+        int set = std::min(findSet(uf, (*it).i1), findSet(uf, rev1));
+        components[set].alignedPairs.insert(*it);
+        components[set].alignedPairs.insert(Pair<TSize>((*it).i2, (*it).i1));
+        components[set].alignedPairs.insert(Pair<TSize>(rev1, rev2));
+        components[set].alignedPairs.insert(Pair<TSize>(rev2, rev1));
+    }
+
+    std::cerr << "[" << time(0) << "] " << "There are " << components.size() << " components." << std::endl;
+}
+
+// --------------------------------------------------------------------------
+// Function addSingletons()
+// --------------------------------------------------------------------------
+
+template<typename TSize, typename TSeq>
+void
+addSingletons(std::map<TSize, ContigComponent<TSeq> > & components, UnionFind<int> & uf, int totalContigs)
+{
+    unsigned numSingletons = 0;
+    for (int i = 0; i < totalContigs; ++i)
+    {
+        if (components.count(i) == 0 && i == findSet(uf, i))
+        {
+            components[i];
+            ++numSingletons;
+        }
+    }
+
+    std::cerr << "[" << time(0) << "] " << "Added " << numSingletons << " singletons to components." << std::endl;
+}
+
+// ==========================================================================
+// Function readAndMergeComponents()
+// ==========================================================================
+
+template<typename TSize, typename TSequence>
+bool
+readAndMergeComponents(std::map<TSize, ContigComponent<TSequence> > & components,
+                       String<CharString> & componentFiles,
+                       int numContigs,
+                       int batchIndex,
+                       int batches,
+                       bool verbose)
+{
+    typedef std::map<TSize, ContigComponent<TSequence> > TComponents;
+    typedef typename std::set<Pair<TSize> >::iterator TPairsIterator;
+
+    std::cerr << "[" << time(0) << "] " << "Reading and merging components files" << std::endl;
 
     // Initialize Union-Find data structure.
     UnionFind<int> uf;
-    resize(uf, 2*length(contigs));
-
-    std::map<TSize, std::set<TSize> > alignedPairs;
-
-    // Partition the contigs.
-    partitionContigs(uf, alignedPairs, contigs, contigIds, contigSubset, contigIdSubset, offset, length(contigs),
-                     errorRate, minimalLength, qgramLength, matchScore, errorPenalty, minScore, verbose);
+    resize(uf, numContigs*2);
+    std::set<Pair<TSize> > alignedPairs;
     
-    // Determine components from Union-Find data structure by
-    // mapping ids and contigs to their representative ContigId.
-    for (TSize i = 0; i < 2*length(contigs); ++i)
+    // Read the aligned pairs from input files and join sets.
+    for (unsigned i = 0; i < length(componentFiles); ++i)
+        if (readAlignedPairs(uf, alignedPairs, componentFiles[i], numContigs, verbose) != 0) return 1;
+
+    // Convert union-find data structure to components.
+    unionFindToComponents(components, uf, alignedPairs, numContigs); // --> popins_merge_partition.h
+
+    // Add singleton contigs to components (= those contigs that don't align to any other contig).
+    addSingletons(components, uf, numContigs); // --> popins_merge_partition.h
+
+    // Keep only batch of components.
+    if (batches != 1)
     {
-        int set_i = findSet(uf, i);
+        unsigned total = components.size();
+        unsigned batchSize = (total + batches -1) / batches;
+        unsigned batchStart = batchSize * batchIndex;
+        unsigned batchEnd = std::min(batchStart + batchSize, total);
 
-        ContigId id;
-        if (set_i < (int)length(contigs))
-        {
-            id = contigIds[set_i];
-        }
-        else
-        {
-            set_i -= length(contigs);
-            id = contigIds[set_i];
-            id.orientation = false;
-        }
-
-        components[id].alignedPairs[i].insert(alignedPairs[i].begin(), alignedPairs[i].end());
+        for (unsigned i = 0; i < batchStart; ++i)
+            components.erase(components.begin());
+            
+        for (unsigned i = 0; i < total - batchEnd; ++i)
+            components.erase(--components.end());
     }
 
-    std::cerr << "[" << time(0) << "] " << "There are " << components.size() << " components in total." << std::endl;
+    return 0;
 }
-
-
 
 #endif // #ifndef POPINS_MERGE_PARTITION_H_

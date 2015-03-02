@@ -150,6 +150,51 @@ enumeratePaths(String<Path<TSeq, typename ComponentGraph<TSeq>::TVertexDescripto
 }
 
 // --------------------------------------------------------------------------
+// Function getSeqsByAlignOrder()
+// --------------------------------------------------------------------------
+
+template<typename TSeq, typename TContigs, typename TContigIds>
+void
+getSeqsByAlignOrder(ContigComponent<TSeq> & component, TContigs & contigs, TContigIds & contigIds)
+{
+    typedef typename Size<TSeq>::Type TSize;
+    typedef typename std::set<Pair<TSize> >::iterator TPairIter;
+
+    // --- find a possible order ---
+    
+    String<TSize> order;
+    std::set<TSize> ordered;
+    appendValue(order, (*component.alignedPairs.begin()).i1);
+    ordered.insert((*component.alignedPairs.begin()).i1);
+    
+    TSize i = 0;
+    while (i < length(order))
+    {
+        TPairIter neighborsEnd = component.alignedPairs.upper_bound(Pair<TSize>(order[i], maxValue<TSize>()));
+        TPairIter neighbor = component.alignedPairs.lower_bound(Pair<TSize>(order[i], 0));
+        for (; neighbor != neighborsEnd; ++neighbor)
+        {
+            if (ordered.count((*neighbor).i2) == 0)
+            {
+                // add the neighbor
+                appendValue(order, (*neighbor).i2);
+                ordered.insert((*neighbor).i2);
+            }
+        }
+        ++i;
+    }
+    clear(ordered);
+    
+    // --- bring contigs and contig ids into the order ---
+
+    for (TSize i = 0; i < length(order); ++i)
+    {
+        appendValue(component.ids, contigIds[order[i]]);
+        appendValue(component.contigs, contigs[order[i]]);
+    }
+}
+
+// --------------------------------------------------------------------------
 // Function bestDiagonal()
 // --------------------------------------------------------------------------
 
@@ -345,9 +390,9 @@ addSequencesToGraph(ComponentGraph<TSeq1> & compGraph,
     return true;
 }
 
-// ==========================================================================
+// --------------------------------------------------------------------------
 // Function mergeSequences()
-// ==========================================================================
+// --------------------------------------------------------------------------
 
 template<typename TSeq1, typename TSeq2, typename TSpec, typename TLength, typename TValueMatch, typename TValueError>
 bool
@@ -385,6 +430,121 @@ mergeSequences(String<TSeq1> & mergedSeqs,
         appendValue(mergedSeqs, finalPaths[i].seq);
 
     return true;
+}
+
+// --------------------------------------------------------------------------
+// Function writeSupercontigs()
+// --------------------------------------------------------------------------
+
+template<typename TStream, typename TSeq, typename TSpec>
+void
+writeSupercontigs(TStream & outputStream, String<TSeq> & mergedSeqs, StringSet<TSeq, TSpec> & contigs, int batchIndex, unsigned pos)
+{
+    typedef typename Size<TSeq>::Type TSize;
+
+    if (length(mergedSeqs) <= 25)
+    {
+        for (TSize i = 0; i < length(mergedSeqs); ++i)
+        {
+            outputStream << ">COMPONENT_" << batchIndex << "." << pos << "_" << char('a'+i)
+                         << "_length_" << length(mergedSeqs[i])
+                         << "_size_" << length(contigs) << std::endl;
+            outputStream << mergedSeqs[i] << std::endl;
+        }
+    }
+    else
+    {
+        for (TSize i = 0; i < length(mergedSeqs); ++i)
+        {
+            outputStream << ">COMPONENT_" << batchIndex << "." << pos << "_" << char('a'+i/26) << char('a'+i%26)
+                         << "_length_" << length(mergedSeqs[i])
+                         << "_size_" << length(contigs) << std::endl;
+            outputStream << mergedSeqs[i] << std::endl;
+        }
+    }
+}
+
+// ==========================================================================
+// Function constructSupercontigs()
+// ==========================================================================
+
+template<typename TSize, typename TSequence, typename TContigs, typename TContigIds>
+void
+constructSupercontigs(std::map<TSize, ContigComponent<TSequence> > & components,
+                      TContigs & contigs,
+                      TContigIds & contigIds,
+                      MergingOptions & options)
+{
+    typedef std::map<TSize, ContigComponent<TSequence> > TComponents;
+    
+    if (options.verbose) std::cerr << "[" << time(0) << "] " << "Constructing supercontigs" << std::endl;
+
+    unsigned numSingleton = 0;
+    unsigned numBranching = 0;
+    unsigned numVeryBranching = 0;
+    unsigned numTooLarge = 0;
+    
+    // Iterate over the set of components.
+    unsigned pos = 0;
+    for (typename TComponents::iterator it = components.begin(); it != components.end(); ++it)
+    {
+        ContigComponent<TSequence> component = it->second;
+
+        // Sort the contigs for merging.
+        getSeqsByAlignOrder(component, contigs, contigIds);
+        
+        if (length(component.contigs) > 10 * length(options.contigFiles))
+        {
+            if (options.verbose) std::cout << "COMPONENT_" << pos << " size:" << length(component.contigs) << " skipped." << std::endl;
+            ++numTooLarge;
+            continue;
+        }
+
+        // Output component if consisting of a single contig.
+        if (length(component.contigs) == 1)
+        {
+            SEQAN_ASSERT_EQ(length(component.ids), 1u);
+            options.outputStream << ">" << component.ids[0] << std::endl;
+            options.outputStream << component.contigs[0] << std::endl;
+
+            ++numSingleton;
+            continue;
+        }
+
+        if (options.verbose) std::cout << "COMPONENT_" << options.batchIndex << "." << pos << " size:" << length(component.contigs) << std::endl;
+
+        // --- MERGE CONTIGS OF THE COMPONENT ---
+        String<TSequence> mergedSeqs;
+        if (!mergeSequences(mergedSeqs, component.contigs,
+                            options.minTipScore, options.matchScore, options.errorPenalty, options.qgramLength,
+                            options.verbose))
+        {
+            if (options.verbose) std::cout << "COMPONENT_" << options.batchIndex << "." << pos << " size:" << length(component.contigs) << " given up." << std::endl;
+            ++numVeryBranching;
+            ++numBranching;
+            clear(component);
+            ++pos;
+            continue;
+        }
+
+        if (length(mergedSeqs) > 1) ++numBranching;
+
+        // Output the supercontig.
+        writeSupercontigs(options.outputStream, mergedSeqs, component.contigs, options.batchIndex, pos);
+        
+        clear(component);
+        ++pos;
+    }
+
+    options.outputStream.close();
+
+    if (options.verbose) 
+    {
+        std::cerr << "[" << time(0) << "] " << length(components)-numSingleton << " components are merged from several contigs." << std::endl;
+        std::cerr << "[" << time(0) << "] " << numSingleton << " contigs did not align with any other contig." << std::endl;
+        std::cerr << "[" << time(0) << "] " << numBranching << " components are branching, given up on " << numVeryBranching << " of them." << std::endl;
+        std::cerr << "[" << time(0) << "] " << numTooLarge << " components exceeded the maximum number of contigs for merging." << std::endl;
+    }
 }
 
 #endif // #ifndef POPINS_MERGE_SEQS_H_
