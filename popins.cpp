@@ -15,17 +15,21 @@
 
 void printHelp(char const * name)
 {
+    std::cerr << "PopIns - population-scale detection of novel sequence insertions" << std::endl;
+    std::cerr << "================================================================" << std::endl;
     std::cerr << std::endl;
-    std::cerr << "PopIns -- population-scale detection of novel sequence insertions" << std::endl;
-    std::cerr << "Version: " << VERSION << ", Date: " << VERSION_DATE << std::endl;
+    std::cerr << "\033[1mSYNOPSIS\033[0m" << std::endl;
+    std::cerr << "    \033[1m" << name << " COMMAND\033[0m [\033[4mOPTIONS\033[0m]" << std::endl;
     std::cerr << std::endl;
-    std::cerr << "Usage:   " << name << " COMMAND [ OPTIONS ]" << std::endl;
+    std::cerr << "\033[1mCOMMAND\033[0m" << std::endl;
+    std::cerr << "    \033[1massemble\033[0m   Crop unmapped reads from a bam file and assemble them." << std::endl;
+    std::cerr << "    \033[1mmerge\033[0m      Merge contigs from assemblies of unmapped reads into supercontigs." << std::endl;
+    std::cerr << "    \033[1mcontigmap\033[0m  Map unmapped reads to (super-)contigs." << std::endl;
+    std::cerr << "    \033[1mplace\033[0m      Find position of (super-)contigs in the reference genome." << std::endl;
+    std::cerr << "    \033[1mgenotype\033[0m   Genotype insertions for an individual." << std::endl;
     std::cerr << std::endl;
-    std::cerr << "COMMAND: assemble   Crop unmapped reads from a bam file and assemble them." << std::endl;
-    std::cerr << "         merge      Merge contigs from assemblies of unmapped reads into supercontigs." << std::endl;
-    std::cerr << "         contigmap  Map unmapped reads to (super-)contigs." << std::endl;
-    std::cerr << "         place      Find position of (super-)contigs in the reference genome." << std::endl;
-    std::cerr << "         genotype   Genotype insertions for an individual." << std::endl;
+    std::cerr << "\033[1mVERSION\033[0m" << std::endl;
+    std::cerr << "    " << VERSION << ", Date: " << VERSION_DATE << std::endl;
     std::cerr << std::endl;
     std::cerr << "Try `" << name << " COMMAND --help' for more information on each command." << std::endl;
     std::cerr << std::endl;
