@@ -16,6 +16,8 @@
 using namespace seqan;
 
 // --------------------------------------------------------------------------
+// Function countContigs()
+// --------------------------------------------------------------------------
 
 int
 countContigs(String<CharString> & filenames, String<unsigned> & contigsPerFile)
@@ -62,7 +64,7 @@ countContigs(String<CharString> & filenames, String<unsigned> & contigsPerFile)
 }
 
 // --------------------------------------------------------------------------
-// Function readContigs()
+// Function readContigFile()
 // --------------------------------------------------------------------------
 
 template<typename TSeq>
@@ -118,7 +120,8 @@ readContigFile(StringSet<TSeq> & contigs,
 }
 
 // --------------------------------------------------------------------------
-
+// Function readContigs()
+// --------------------------------------------------------------------------
 
 template<typename TSeq>
 int
@@ -224,6 +227,7 @@ readContigs(std::map<TSize, TSeq> & contigs,
     std::set<unsigned> indices;
     for (typename TComponents::iterator it = components.begin(); it != components.end(); ++it)
     {
+        insertIndex(indices, it->first, totalContigs);
         TPairsIter pairsEnd = it->second.alignedPairs.end();
         for (TPairsIter pairsIt = it->second.alignedPairs.begin(); pairsIt != pairsEnd; ++pairsIt)
         {
@@ -259,7 +263,7 @@ readContigs(std::map<TSize, TSeq> & contigs,
                 firstIndexInCurrFile += contigsPerFile[fileIndex];
                 ++fileIndex;
             }
-            while (firstIndexInCurrFile + contigsPerFile[fileIndex] < *it);
+            while (firstIndexInCurrFile + contigsPerFile[fileIndex] <= *it);
 
             open(stream, toCString(filenames[fileIndex]));
             if (!isGood(stream))
@@ -311,36 +315,6 @@ readContigs(std::map<TSize, TSeq> & contigs,
 }
 
 // --------------------------------------------------------------------------
-// Function addReverseComplementContigs()
-// --------------------------------------------------------------------------
-
-template<typename TSeq>
-void
-addReverseComplementContigs(StringSet<TSeq> & contigs,
-                            StringSet<ContigId> & ids)
-{
-    typedef typename Size<TSeq>::Type TSize;
-    SEQAN_ASSERT_EQ(length(contigs), length(ids));
-
-    TSize len = length(contigs);
-
-    resize(contigs, 2*len);
-    resize(ids, 2*len);
-
-    for (TSize i = 0; i < len; ++i)
-    {
-        TSeq contig_rev = contigs[i];
-        reverseComplement(contig_rev);
-        contigs[len + i] = contig_rev;
-
-        SEQAN_ASSERT(ids[i].orientation);
-        ContigId id_rev = ids[i];
-        id_rev.orientation = false;
-        ids[len + i] = id_rev;
-    }
-}
-
-// --------------------------------------------------------------------------
 // Function readInputFiles()
 // --------------------------------------------------------------------------
 
@@ -371,14 +345,14 @@ readInputFiles(StringSet<TSeq, Owner<> > & contigs,
         {
             numContigs = readContigs(contigs, contigIds, options.contigFiles, options.verbose);
             if (numContigs == -1) return -1;
-            if (readAndMergeComponents(components, options.componentFiles, numContigs,
+            if (readAndMergeComponents(components, options.componentFiles, length(options.contigFiles), numContigs,
                                        options.batchIndex, options.batches, options.verbose) != 0) return -1;
         }
         else                      // -i and -b options are set -> read contigs for this batch of components
         {
             int numContigs = countContigs(options.contigFiles, options.contigsPerFile);
             if (numContigs == -1) return -1;
-            if (readAndMergeComponents(components, options.componentFiles, numContigs,  // --> popins_merge_partition.h
+            if (readAndMergeComponents(components, options.componentFiles, length(options.contigFiles), numContigs,  // --> popins_merge_partition.h
                                        options.batchIndex, options.batches, options.verbose) != 0) return -1;
             if (readContigs(contigsMap, contigIdsMap, components,
                             options.contigFiles, options.contigsPerFile, numContigs, options.verbose) != 0) return -1;
@@ -386,6 +360,36 @@ readInputFiles(StringSet<TSeq, Owner<> > & contigs,
     }
 
     return numContigs;
+}
+
+// --------------------------------------------------------------------------
+// Function addReverseComplementContigs()
+// --------------------------------------------------------------------------
+
+template<typename TSeq>
+void
+addReverseComplementContigs(StringSet<TSeq> & contigs,
+                            StringSet<ContigId> & ids)
+{
+    typedef typename Size<TSeq>::Type TSize;
+    SEQAN_ASSERT_EQ(length(contigs), length(ids));
+
+    TSize len = length(contigs);
+
+    resize(contigs, 2*len);
+    resize(ids, 2*len);
+
+    for (TSize i = 0; i < len; ++i)
+    {
+        TSeq contig_rev = contigs[i];
+        reverseComplement(contig_rev);
+        contigs[len + i] = contig_rev;
+
+        SEQAN_ASSERT(ids[i].orientation);
+        ContigId id_rev = ids[i];
+        id_rev.orientation = false;
+        ids[len + i] = id_rev;
+    }
 }
 
 // ==========================================================================
@@ -428,29 +432,29 @@ int popins_merge(int argc, char const ** argv)
     resize(uf, 2*totalContigs);
     std::set<Pair<TSize> > alignedPairs;
 
-    // PARTITIONING into components (if -c option is not set).
+    // PARTITIONING into components (if -c option is not set)                               --> popins_merge_partition.h
     if (length(options.componentFiles) == 0)
     {
-        if (partitionContigs(uf, alignedPairs, contigs, contigIds, totalContigs, batchOffset, options) != 0) // --> popins_merge_partition.h
+        if (partitionContigs(uf, alignedPairs, contigs, contigIds, totalContigs, batchOffset, options) != 0) 
             return 1;
         
         // Write aligned pairs or convert union find data structure into set of components.
         if (options.batches != 1)
-            writeAlignedPairs(options.outputStream, alignedPairs); // --> popins_merge_partition.h
+            writeAlignedPairs(options.outputStream, alignedPairs);
         else
         {
-            unionFindToComponents(components, uf, alignedPairs, totalContigs); // --> popins_merge_partition.h
-            addSingletons(components, uf, totalContigs); // --> popins_merge_partition.h
+            unionFindToComponents(components, uf, alignedPairs, length(options.contigFiles), totalContigs, options.verbose);
+            addSingletons(components, uf, totalContigs);
         }
     }
 
-    // SUPERCONTIG CONSTRUCTION (if -c option is set OR -i and -b options are not set).
+    // SUPERCONTIG CONSTRUCTION (if -c option is set OR -i and -b options are not set)           --> popins_merge_seqs.h
     if (length(options.componentFiles) != 0 || options.batches == 1)
     {
         if (length(contigs) != 0)
-            constructSupercontigs(components, contigs, contigIds, options);  // --> popins_merge_seqs.h
+            constructSupercontigs(components, contigs, contigIds, options);
         else
-            constructSupercontigs(components, contigsMap, contigIdsMap, options);  // --> popins_merge_seqs.h
+            constructSupercontigs(components, contigsMap, contigIdsMap, options);
     }
 
     return 0;

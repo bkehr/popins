@@ -104,12 +104,14 @@ partitionContigs(UnionFind<int> & uf,
     // define scoring scheme
     Score<int, Simple> scoringScheme(options.matchScore, options.errorPenalty, options.errorPenalty);
     int diagExtension = options.minScore/10;
-    
+
+    // print status bar
     if (options.verbose) std::cerr << "[" << time(0) << "] " << "- Streaming over all contig files" << std::endl;
     if (options.verbose) std::cerr << "0%   10   20   30   40   50   60   70   80   90  100%" << std::endl;
     if (options.verbose) std::cerr << "|----|----|----|----|----|----|----|----|----|----|" << std::endl;
     unsigned fiftieth = std::max((offset+length(contigs)/2)/50, (TSize)1);
 
+    // stream over the contigs
     SequenceStream contigStream;
     int i = -1;
     for (unsigned a = 0; a < offset+length(contigs)/2; ++a)
@@ -165,6 +167,9 @@ partitionContigs(UnionFind<int> & uf,
             if (b < (unsigned)totalContigs) b += totalContigs;   // b was index of contig in forward orientation, set it to index of contig in reverse orientation
             else b -= totalContigs;                    // b was index of contig in reverse orientation, set it to index of contig in forward orientation
             joinSets(uf, findSet(uf, a1), findSet(uf, b));
+            
+            // stop aligning this contig if it is already in a component with more than 100 other contigs
+            if (uf._values[findSet(uf, a)] < -100) break;
         }
     }
     if (options.verbose) std::cerr << std::endl;
@@ -238,6 +243,10 @@ readAlignedPairs(UnionFind<int> & uf, std::set<Pair<TSize> > & alignedPairs, Cha
         if (val < len) val_rev = val + len;
         else val_rev = val - len;
 
+        skipLine(reader);
+
+        if (findSet(uf, key) == findSet(uf, val)) continue;
+        
         // Add the aligned pairs.
         alignedPairs.insert(Pair<TSize>(key, val));
         ++numPairs;
@@ -248,7 +257,6 @@ readAlignedPairs(UnionFind<int> & uf, std::set<Pair<TSize> > & alignedPairs, Cha
         joinSets(uf, findSet(uf, key_rev), findSet(uf, val_rev));
         SEQAN_ASSERT_EQ(findSet(uf, key_rev), findSet(uf, val_rev));
 
-        skipLine(reader);
     }
     
     if (verbose) std::cerr << "[" << time(0) << "] " << "Loaded " << fileName << ": " << numPairs << " pairs." << std::endl;
@@ -265,8 +273,12 @@ void
 unionFindToComponents(std::map<TSize, ContigComponent<TSeq> > & components,
                       UnionFind<int> & uf,
                       std::set<Pair<TSize> > & alignedPairs,
-                      int totalContigs)
+                      unsigned samples,
+                      int totalContigs,
+                      bool verbose)
 {
+    std::set<int> skipped;
+
     // Determine components from Union-Find data structure by
     // mapping ids to their representative id.
     for (typename std::set<Pair<TSize> >::iterator it = alignedPairs.begin(); it != alignedPairs.end(); ++it)
@@ -280,6 +292,18 @@ unionFindToComponents(std::map<TSize, ContigComponent<TSeq> > & components,
         else rev2 -= totalContigs;
 
         int set = std::min(findSet(uf, (*it).i1), findSet(uf, rev1));
+
+        // skip components that are 10 times larger than number of samples
+        if (uf._values[set] < -10 * (int)samples) 
+        {
+            if (verbose && skipped.count(set) == 0)
+            {
+                skipped.insert(set);
+                std::cerr << "[" << time(0) << "] " << "WARNING: Skipping component of size " << (-1*uf._values[set]) << std::endl;
+            }
+            continue;
+        }
+
         components[set].alignedPairs.insert(*it);
         components[set].alignedPairs.insert(Pair<TSize>((*it).i2, (*it).i1));
         components[set].alignedPairs.insert(Pair<TSize>(rev1, rev2));
@@ -318,6 +342,7 @@ template<typename TSize, typename TSequence>
 bool
 readAndMergeComponents(std::map<TSize, ContigComponent<TSequence> > & components,
                        String<CharString> & componentFiles,
+                       unsigned samples,
                        int numContigs,
                        int batchIndex,
                        int batches,
@@ -325,6 +350,7 @@ readAndMergeComponents(std::map<TSize, ContigComponent<TSequence> > & components
 {
     typedef std::map<TSize, ContigComponent<TSequence> > TComponents;
     typedef typename std::set<Pair<TSize> >::iterator TPairsIterator;
+    typedef typename TComponents::iterator TCompIterator;
 
     std::cerr << "[" << time(0) << "] " << "Reading and merging components files" << std::endl;
 
@@ -338,24 +364,23 @@ readAndMergeComponents(std::map<TSize, ContigComponent<TSequence> > & components
         if (readAlignedPairs(uf, alignedPairs, componentFiles[i], numContigs, verbose) != 0) return 1;
 
     // Convert union-find data structure to components.
-    unionFindToComponents(components, uf, alignedPairs, numContigs); // --> popins_merge_partition.h
+    unionFindToComponents(components, uf, alignedPairs, samples, numContigs, verbose);
 
     // Add singleton contigs to components (= those contigs that don't align to any other contig).
-    addSingletons(components, uf, numContigs); // --> popins_merge_partition.h
+    addSingletons(components, uf, numContigs);
 
-    // Keep only batch of components.
+    // Keep only batch of components (erase all except every batchSize'th component).
     if (batches != 1)
     {
-        unsigned total = components.size();
-        unsigned batchSize = (total + batches -1) / batches;
-        unsigned batchStart = batchSize * batchIndex;
-        unsigned batchEnd = std::min(batchStart + batchSize, total);
-
-        for (unsigned i = 0; i < batchStart; ++i)
-            components.erase(components.begin());
-            
-        for (unsigned i = 0; i < total - batchEnd; ++i)
-            components.erase(--components.end());
+        TCompIterator it = --components.end();
+        TSize i = components.size();
+        while (i > 0)
+        {
+            TCompIterator element = it;
+            --it; --i;
+            if (i % batches != (TSize)batchIndex)
+                components.erase(element);
+        }
     }
 
     return 0;

@@ -490,24 +490,24 @@ constructSupercontigs(std::map<TSize, ContigComponent<TSequence> > & components,
     {
         ContigComponent<TSequence> component = it->second;
 
+        // Output component if consisting of a single contig.
+        if (length(component.alignedPairs) == 0)
+        {
+            options.outputStream << ">" << contigIds[it->first] << std::endl;
+            options.outputStream << contigs[it->first] << std::endl;
+
+            ++numSingleton;
+            continue;
+        }
+
         // Sort the contigs for merging.
         getSeqsByAlignOrder(component, contigs, contigIds);
-        
+
+        // Skip too large components.
         if (length(component.contigs) > 10 * length(options.contigFiles))
         {
             if (options.verbose) std::cout << "COMPONENT_" << pos << " size:" << length(component.contigs) << " skipped." << std::endl;
             ++numTooLarge;
-            continue;
-        }
-
-        // Output component if consisting of a single contig.
-        if (length(component.contigs) == 1)
-        {
-            SEQAN_ASSERT_EQ(length(component.ids), 1u);
-            options.outputStream << ">" << component.ids[0] << std::endl;
-            options.outputStream << component.contigs[0] << std::endl;
-
-            ++numSingleton;
             continue;
         }
 
