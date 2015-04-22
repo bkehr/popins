@@ -346,7 +346,7 @@ int popins_place(int argc, char const ** argv)
 
         // Merge approximate locations and write them to a file.
         if (options.verbose) std::cerr << "[" << time(0) << "] " << "Merging locations files." << std::endl;
-        if (mergeLocations(locations, options.locationsFiles, options.verbose) != 0) return 1;
+        if (mergeLocations(locations, options.locationsFiles, options.locationsFile, options.verbose) != 0) return 1;
         if (options.verbose) std::cerr << "[" << time(0) << "] " << "Sorting locations." << std::endl;
         LocationPosLess less;
         std::stable_sort(begin(locations, Standard()), end(locations, Standard()), less);
