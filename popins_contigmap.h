@@ -68,16 +68,19 @@ fill_sequences(CharString & outFile, CharString & inFile)
     BamStream inStream(toCString(inFile));
     if (!isGood(inStream))
     {
-        std::cerr << "ERROR: Could bwa output file " << inFile << "" << std::endl;
+        std::cerr << "ERROR: Could not open bwa output file " << inFile << "" << std::endl;
         return 1;
     }
+    std::cerr << "[" << time(0) << "]  - opened input file " << inFile << std::endl;
     BamStream outStream(toCString(outFile), BamStream::WRITE);
     if (!isGood(outStream))
     {
         std::cerr << "ERROR: Could not open output file " << outFile << "" << std::endl;
         return 1;
     }
+    std::cerr << "[" << time(0) << "]  - opened output file " << outFile << std::endl;
     outStream.header = inStream.header;
+    std::cerr << "[" << time(0) << "]  - copied header" << std::endl;
 
     BamAlignmentRecord firstRecord, nextRecord;
     while (!atEnd(inStream))
