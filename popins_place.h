@@ -346,7 +346,7 @@ int popins_place(int argc, char const ** argv)
 
         // Merge approximate locations and write them to a file.
         if (options.verbose) std::cerr << "[" << time(0) << "] " << "Merging locations files." << std::endl;
-        if (mergeLocations(locations, options.locationsFiles) != 0) return 1;
+        if (mergeLocations(locations, options.locationsFiles, options.verbose) != 0) return 1;
         if (options.verbose) std::cerr << "[" << time(0) << "] " << "Sorting locations." << std::endl;
         LocationPosLess less;
         std::stable_sort(begin(locations, Standard()), end(locations, Standard()), less);
@@ -389,9 +389,9 @@ int popins_place(int argc, char const ** argv)
         return 0;
     }
     
-    
     if (options.verbose)
-        std::cerr << "[" << time(0) << "] " << "Keeping " << length(locations) << " locations with score >= " << options.minLocScore << std::endl;
+        std::cerr << "[" << time(0) << "] " << "Keeping " << length(locations) << " locations with score >= "
+                  << options.minLocScore << " and shorter than " << (2*options.maxInsertSize) << std::endl;
     
     // Concatenate the artificial reference for each location.
     if (options.verbose)
@@ -414,9 +414,8 @@ int popins_place(int argc, char const ** argv)
     Iterator<String<CharString> >::Type filesEnd = end(options.bamFiles);
     for (Iterator<String<CharString> >::Type file = begin(options.bamFiles); file != filesEnd; ++file)
     {
-        if (openBamLoadBai(bamStream, bamIndex, *file) != 0) return 1;
-
         if (options.verbose) std::cerr << "[" << time(0) << "] " << "Split aligning reads from " << *file << std::endl;
+        if (openBamLoadBai(bamStream, bamIndex, *file) != 0) return 1;
         
         for (unsigned i = 0; i < length(locations); ++i)
         {

@@ -48,7 +48,13 @@ struct Location
     
     unsigned fileIndex;
     
-    Location () {}
+    Location ()
+    {
+        chr = "";
+        chrStart = 0;
+        chrEnd = 0;
+        contig = "";
+    }
     
     Location (CharString h, TPos hs, TPos he, bool ho, CharString c, bool co, unsigned n, double s) :
         chr(h), chrStart(hs), chrEnd(he), chrOri(ho), contig(c), contigOri(co), numReads(n), score(s)
@@ -597,11 +603,11 @@ readLocations(String<Location> & locations, CharString & locationsFile, unsigned
 void
 addLocation(Location & prevLoc, String<Location> & locations, Location & loc)
 {
-    if (prevLoc.chr == "")
+    if (prevLoc.contig == "")
     {
         prevLoc = loc;
     }
-    else if (prevLoc.chr != loc.chr || prevLoc.chrEnd + 1000 < loc.chrStart)
+    else if (prevLoc.contig != loc.contig || prevLoc.chr != loc.chr || prevLoc.chrEnd + 1000 < loc.chrStart)
     {
         appendValue(locations, prevLoc);
         prevLoc = loc;
@@ -618,62 +624,87 @@ addLocation(Location & prevLoc, String<Location> & locations, Location & loc)
 // ==========================================================================
 
 int
-mergeLocations(String<Location> & locations, String<CharString> & locationsFiles)
+mergeLocations(String<Location> & locations, String<CharString> & locationsFiles, bool verbose)
 {
-    typedef RecordReader<std::fstream, SinglePass<> > TReader;
-    typedef Pair<std::fstream *, TReader *> TPtrPair;
+    typedef Iterator<String<Location> >::Type TLocsIter;
 
-    Location forwardForward, forwardReverse, reverseForward, reverseReverse;
-
-    // define min heap of Locations
-    std::priority_queue<Location, std::vector<Location>, LocationTypeGreater> heap;
-    
-    // Open location files and store String of reader pointers.
-    String<TPtrPair> readerPtr;
-    resize(readerPtr, length(locationsFiles));
     for (unsigned i = 0; i < length(locationsFiles); ++i)
     {
-        std::fstream * stream = new std::fstream(toCString(locationsFiles[i]), std::ios::in);
-        if (!(*stream).good())
+        if (verbose) std::cerr << "[" << time(0) << "] " << "Reading locations from " << locationsFiles[i] << "..." << std::endl;
+        std::fstream stream(toCString(locationsFiles[i]), std::ios::in);
+        if (!stream.good())
         {
             std::cerr << "ERROR: Could not open locations file " << locationsFiles[i] << std::endl;
             return 1;
         }
-        readerPtr[i] = TPtrPair(stream, new TReader(*stream));
+        RecordReader<std::fstream, SinglePass<> > reader(stream);
+
+        LocationTypeLess less;
+        std::stable_sort(begin(locations, Standard()), end(locations, Standard()), less);
         
-        // Read the first location record and push it to min heap.
-        Location loc;
-        if (readLocation(loc, *readerPtr[i].i2, locationsFiles[i]) != 0) return 1;
-        loc.fileIndex = i;
-        heap.push(loc);
-    }
+        TLocsIter it = begin(locations);
+        TLocsIter itEnd = end(locations);
+        String<Location> newLocs;
 
-    while (!heap.empty())
-    {
-        Location loc = heap.top();
+        Location forwardForward, forwardReverse, reverseForward, reverseReverse;
 
-        if (loc.chrOri)
+        while (!atEnd(reader))
         {
-            if (loc.contigOri) addLocation(forwardForward, locations, loc);
-            else addLocation(forwardReverse, locations, loc);
+            Location loc;
+            if (readLocation(loc, reader, locationsFiles[i]) != 0) return 1;
+
+            while (it != itEnd)
+            {
+                if (less.compare(*it, loc) == -1) break;
+
+                if ((*it).chrOri)
+                {
+                    if ((*it).contigOri) addLocation(forwardForward, newLocs, *it);
+                    else addLocation(forwardReverse, newLocs, *it);
+                }
+                else
+                {
+                    if ((*it).contigOri) addLocation(reverseForward, newLocs, *it);
+                    else addLocation(reverseReverse, newLocs, *it);
+                }
+                ++it;
+            }
+
+            if (loc.chrOri)
+            {
+                if (loc.contigOri) addLocation(forwardForward, newLocs, loc);
+                else addLocation(forwardReverse, newLocs, loc);
+            }
+            else
+            {
+                if (loc.contigOri) addLocation(reverseForward, newLocs, loc);
+                else addLocation(reverseReverse, newLocs, loc);
+            }
         }
-        else
+
+        // add remaining locations to newLocs
+        while (it != itEnd)
         {
-            if (loc.contigOri) addLocation(reverseForward, locations, loc);
-            else addLocation(reverseReverse, locations, loc);
+            if ((*it).chrOri)
+            {
+                if ((*it).contigOri) addLocation(forwardForward, newLocs, *it);
+                else addLocation(forwardReverse, newLocs, *it);
+            }
+            else
+            {
+                if ((*it).contigOri) addLocation(reverseForward, newLocs, *it);
+                else addLocation(reverseReverse, newLocs, *it);
+            }
+            ++it;
         }
+        if (forwardForward.contig != "") appendValue(newLocs, forwardForward);
+        if (forwardReverse.contig != "") appendValue(newLocs, forwardReverse);
+        if (reverseForward.contig != "") appendValue(newLocs, reverseForward);
+        if (reverseReverse.contig != "") appendValue(newLocs, reverseReverse);
         
-        heap.pop();
-        unsigned i = loc.fileIndex;
-        if (!atEnd(*readerPtr[i].i2))
-        {
-            Location nextLoc;
-            if (readLocation(nextLoc, *readerPtr[i].i2, locationsFiles[i]) != 0) return 1;
-            nextLoc.fileIndex = i;
-            heap.push(nextLoc);
-        }
+        locations = newLocs;
     }
-
+    
     return 0;
 }
 
