@@ -94,13 +94,13 @@ It outputs VCF records with the genotype likelihoods in GT:PL format for the ind
 References
 ----------
 
+Kehr B., Melsted P., Halldórsson B. V.
+PopIns: population-scale detection of novel sequence insertions.
+Bioinformatics, 2015 (accepted).
+
 Kehr B., Melsted P., Jónasdóttir A., Jónasdóttir A., Sigurðsson A., Gylfason A., Guðbjartsson D., Halldórsson B. V., Stefánsson K.
 Detecting novel sequence insertions in 3000 individuals from short read sequencing data. (Abstract/Program #38).
 Presented at the 64th Annual Meeting of The American Society of Human Genetics, October 20, 2014, San Diego, CA.
-
-Kehr B., Melsted P., Halldórsson B. V.
-PopIns: population-scale detection of novel sequence insertions.
-Submitted.
 
 
 Contact
