@@ -344,16 +344,17 @@ int popins_place(int argc, char const ** argv)
             return 1;
         }
 
+        // Open output file.
+        std::fstream stream(toCString(options.locationsFile), std::ios::out);
+        if (!stream.good())
+        {
+            std::cerr << "ERROR: Could not open locations file " << options.locationsFile << " for writing." << std::endl;
+            return 1;
+        }
+
         // Merge approximate locations and write them to a file.
         if (options.verbose) std::cerr << "[" << time(0) << "] " << "Merging locations files." << std::endl;
-        if (mergeLocations(locations, options.locationsFiles, options.locationsFile, options.verbose) != 0) return 1;
-        if (options.verbose) std::cerr << "[" << time(0) << "] " << "Sorting locations." << std::endl;
-        LocationPosLess less;
-        std::stable_sort(begin(locations, Standard()), end(locations, Standard()), less);
-        if (options.verbose) std::cerr << "[" << time(0) << "] " << "Scoring locations." << std::endl;
-        scoreLocations(locations);
-        if (options.verbose) std::cerr << "[" << time(0) << "] " << "Writing locations to " << options.locationsFile << std::endl;
-        writeLocations(options.locationsFile, locations);
+        if (mergeLocations(stream, locations, options.locationsFiles, options.locationsFile, options.verbose) != 0) return 1;
     }
     else
     {
@@ -372,8 +373,14 @@ int popins_place(int argc, char const ** argv)
         if (options.verbose) std::cerr << "[" << time(0) << "] " << "Reading " << options.batchSize << " locations from " << options.locationsFile << std::endl;
         if (readLocations(locations, options.locationsFile, options.batchSize, options.batchIndex) != 0) return 1;
     }
+    else
+    {
+        if (options.verbose) std::cerr << "[" << time(0) << "] " << "Sorting locations." << std::endl;
+        LocationPosLess less;
+        std::stable_sort(begin(locations, Standard()), end(locations, Standard()), less);
+    }
 
-    // Discard locations with score below options.minLocScore or OTHER or longer than 2*maxInsertSize
+    // Discard locations with score below options.minLocScore or OTHER or longer than 2*maxInsertSize // TODO: move this to reading function!
     unsigned i = 0;
     while (i < length(locations))
     {
