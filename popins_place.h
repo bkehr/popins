@@ -417,6 +417,9 @@ int popins_place(int argc, char const ** argv)
     
     String<std::map<Pair<TPos>, unsigned> > splitPosMaps;
     resize(splitPosMaps, length(locations));
+    
+    String<unsigned> splitReadCounts;
+    resize(splitReadCounts, length(locations), 0);
 
     Iterator<String<CharString> >::Type filesEnd = end(options.bamFiles);
     for (Iterator<String<CharString> >::Type file = begin(options.bamFiles); file != filesEnd; ++file)
@@ -426,6 +429,8 @@ int popins_place(int argc, char const ** argv)
         
         for (unsigned i = 0; i < length(locations); ++i)
         {
+            if (splitReadCounts[i] > options.maxSplitReads) continue;
+
             // Jump to the location in bam file.
             TPos locStart = 0, locEnd = 0;
             bool hasAlignments = jumpToLocation(locStart, locEnd, bamStream, bamIndex, locations[i],
@@ -473,6 +478,9 @@ int popins_place(int argc, char const ** argv)
 
                 if (splitPosMaps[i].count(refPos) == 0) splitPosMaps[i][refPos] = 1;
                 else ++splitPosMaps[i][refPos];
+
+                ++splitReadCounts[i];
+                if (splitReadCounts[i] > options.maxSplitReads) break;
             }
 
             // Discard high coverage locations.

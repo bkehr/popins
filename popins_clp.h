@@ -171,11 +171,14 @@ struct PlacingOptions {
     unsigned readLength;
     unsigned maxInsertSize;
     
+    unsigned maxSplitReads;
+    
     bool verbose;
     
     PlacingOptions() :
         locationsFile("locations.txt"), vcfInsertionsFile("insertions.vcf"), faInsertionsFile("insertions.fa"),
-        batchIndex(0), batchSize(maxValue<unsigned>()), minLocScore(0.3), readLength(100), maxInsertSize(800), verbose(false)
+        batchIndex(0), batchSize(maxValue<unsigned>()), minLocScore(0.3), readLength(100), maxInsertSize(800), maxSplitReads(1000),
+        verbose(false)
     {}
 };
 
@@ -421,6 +424,7 @@ setupParser(ArgumentParser & parser, PlacingOptions & options)
 
     addOption(parser, ArgParseOption("r", "readLength", "The length of the reads.", ArgParseArgument::INTEGER, "INT"));
     addOption(parser, ArgParseOption("e", "maxInsertSize", "The maximal expected insert size of the read pairs.", ArgParseArgument::INTEGER, "INT"));
+    addOption(parser, ArgParseOption("p", "maxSplitReads", "The maximum number of reads to split-align per location.", ArgParseArgument::INTEGER, "INT"));
 
     // Output file options.
     addSection(parser, "Output options");
@@ -438,6 +442,7 @@ setupParser(ArgumentParser & parser, PlacingOptions & options)
     setDefaultValue(parser, "m", options.minLocScore);
     setDefaultValue(parser, "r", options.readLength);
     setDefaultValue(parser, "e", options.maxInsertSize);
+    setDefaultValue(parser, "p", options.maxSplitReads);
     setDefaultValue(parser, "ov", options.vcfInsertionsFile);
     setDefaultValue(parser, "of", options.faInsertionsFile);
 }
@@ -695,6 +700,8 @@ getOptionValues(PlacingOptions & options, ArgumentParser & parser)
         getOptionValue(options.readLength, parser, "readLength");
     if (isSet(parser, "maxInsertSize"))
         getOptionValue(options.maxInsertSize, parser, "maxInsertSize");
+    if (isSet(parser, "maxSplitReads"))
+        getOptionValue(options.maxSplitReads, parser, "maxSplitReads");
 
     if (isSet(parser, "outVcf"))
         getOptionValue(options.vcfInsertionsFile, parser, "outVcf");
