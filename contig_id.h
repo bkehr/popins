@@ -27,6 +27,26 @@ struct ContigId
 // Functions
 // ============================================================================
 
+template<typename TLen>
+CharString
+formattedIndex(unsigned i, TLen max)
+{
+    unsigned digits = 0;
+    while (max) {
+        max /= 10;
+        digits++;
+    }
+    
+    std::stringstream s;
+    s << std::setfill('0') << std::setw(digits) << i;
+    
+    return s.str();
+}
+
+// --------------------------------------------------------------------------
+// Function operator<<                                               ContigId
+// --------------------------------------------------------------------------
+
 template<typename TStream>
 inline TStream &
 operator<<(TStream & stream, ContigId & id)
@@ -37,7 +57,7 @@ operator<<(TStream & stream, ContigId & id)
 }
 
 // --------------------------------------------------------------------------
-// Function operator!=                                                ContigId
+// Function operator!=                                               ContigId
 // --------------------------------------------------------------------------
 
 inline bool

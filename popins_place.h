@@ -105,37 +105,6 @@ artificialReferences(String<Pair<TSeq> > & concatRefs,
 // ==========================================================================
 
 bool
-readFileNames(String<CharString> & files, CharString const & filenameFile)
-{
-    if (filenameFile == "") return 0;
-
-    std::fstream stream(toCString(filenameFile), std::fstream::in);
-    if (!stream.is_open())
-    {
-        std::cerr << "ERROR: Could not open file listing files " << filenameFile << std::endl;
-        return 1;
-    }
-    
-    RecordReader<std::fstream, SinglePass<> > reader(stream);
-    
-    while (!atEnd(reader))
-    {
-        CharString file;
-        int res = readLine(file, reader);
-        if (res != 0)
-        {
-            std::cerr << "ERROR while reading line from " << filenameFile << std::endl;
-            return 1;
-        }
-        appendValue(files, file);
-    }
-    
-    return 0;
-}
-
-// ==========================================================================
-
-bool
 openBamLoadBai(BamStream & bamStream, BamIndex<Bai> & bamIndex, CharString & filename)
 {
     // Open bam file.
@@ -369,33 +338,30 @@ int popins_place(int argc, char const ** argv)
 
     if (!exists(options.locationsFile))
     {
-        String<CharString> locationsFiles;
-        if (readFileNames(locationsFiles, options.locationsFilesFile) != 0) return 1;
-        if (length(locationsFiles) == 0)
+        if (length(options.locationsFiles) == 0)
         {
             std::cerr << "ERROR: Locations file " << options.locationsFile << "does not exist. Specify -l option to create it." << std::endl;
             return 1;
         }
 
+        // Open output file.
+        std::fstream stream(toCString(options.locationsFile), std::ios::out);
+        if (!stream.good())
+        {
+            std::cerr << "ERROR: Could not open locations file " << options.locationsFile << " for writing." << std::endl;
+            return 1;
+        }
+
         // Merge approximate locations and write them to a file.
         if (options.verbose) std::cerr << "[" << time(0) << "] " << "Merging locations files." << std::endl;
-        if (mergeLocations(locations, locationsFiles) != 0) return 1;
-        if (options.verbose) std::cerr << "[" << time(0) << "] " << "Sorting locations." << std::endl;
-        LocationPosLess less;
-        std::stable_sort(begin(locations, Standard()), end(locations, Standard()), less);
-        if (options.verbose) std::cerr << "[" << time(0) << "] " << "Scoring locations." << std::endl;
-        scoreLocations(locations);
-        if (options.verbose) std::cerr << "[" << time(0) << "] " << "Writing locations to " << options.locationsFile << std::endl;
-        writeLocations(options.locationsFile, locations);
+        if (mergeLocations(stream, locations, options.locationsFiles, options.locationsFile, options.verbose) != 0) return 1;
     }
     else
     {
         if (options.verbose) std::cerr << "[" << time(0) << "] " << "Locations file exists." << std::endl;
     }
-    
-    String<CharString> bamFiles;
-    if (readFileNames(bamFiles, options.bamFilesFile) != 0) return 1;
-    if (length(bamFiles) == 0) 
+
+    if (length(options.bamFiles) == 0)
     {
         if (options.verbose) std::cerr << "[" << time(0) << "] " << "No split mapping. Specify -b option for split mapping." << std::endl;
         return 0;
@@ -407,8 +373,14 @@ int popins_place(int argc, char const ** argv)
         if (options.verbose) std::cerr << "[" << time(0) << "] " << "Reading " << options.batchSize << " locations from " << options.locationsFile << std::endl;
         if (readLocations(locations, options.locationsFile, options.batchSize, options.batchIndex) != 0) return 1;
     }
+    else
+    {
+        if (options.verbose) std::cerr << "[" << time(0) << "] " << "Sorting locations." << std::endl;
+        LocationPosLess less;
+        std::stable_sort(begin(locations, Standard()), end(locations, Standard()), less);
+    }
 
-    // Discard locations with score below options.minLocScore or OTHER or longer than 2*maxInsertSize
+    // Discard locations with score below options.minLocScore or OTHER or longer than 2*maxInsertSize // TODO: move this to reading function!
     unsigned i = 0;
     while (i < length(locations))
     {
@@ -424,9 +396,9 @@ int popins_place(int argc, char const ** argv)
         return 0;
     }
     
-    
     if (options.verbose)
-        std::cerr << "[" << time(0) << "] " << "Keeping " << length(locations) << " locations with score >= " << options.minLocScore << std::endl;
+        std::cerr << "[" << time(0) << "] " << "Keeping " << length(locations) << " locations with score >= "
+                  << options.minLocScore << " and shorter than " << (2*options.maxInsertSize) << std::endl;
     
     // Concatenate the artificial reference for each location.
     if (options.verbose)
@@ -445,16 +417,20 @@ int popins_place(int argc, char const ** argv)
     
     String<std::map<Pair<TPos>, unsigned> > splitPosMaps;
     resize(splitPosMaps, length(locations));
+    
+    String<unsigned> splitReadCounts;
+    resize(splitReadCounts, length(locations), 0);
 
-    Iterator<String<CharString> >::Type filesEnd = end(bamFiles);
-    for (Iterator<String<CharString> >::Type file = begin(bamFiles); file != filesEnd; ++file)
+    Iterator<String<CharString> >::Type filesEnd = end(options.bamFiles);
+    for (Iterator<String<CharString> >::Type file = begin(options.bamFiles); file != filesEnd; ++file)
     {
-        if (openBamLoadBai(bamStream, bamIndex, *file) != 0) return 1;
-
         if (options.verbose) std::cerr << "[" << time(0) << "] " << "Split aligning reads from " << *file << std::endl;
+        if (openBamLoadBai(bamStream, bamIndex, *file) != 0) return 1;
         
         for (unsigned i = 0; i < length(locations); ++i)
         {
+            if (splitReadCounts[i] > options.maxSplitReads) continue;
+
             // Jump to the location in bam file.
             TPos locStart = 0, locEnd = 0;
             bool hasAlignments = jumpToLocation(locStart, locEnd, bamStream, bamIndex, locations[i],
@@ -502,6 +478,9 @@ int popins_place(int argc, char const ** argv)
 
                 if (splitPosMaps[i].count(refPos) == 0) splitPosMaps[i][refPos] = 1;
                 else ++splitPosMaps[i][refPos];
+
+                ++splitReadCounts[i];
+                if (splitReadCounts[i] > options.maxSplitReads) break;
             }
 
             // Discard high coverage locations.
@@ -514,7 +493,7 @@ int popins_place(int argc, char const ** argv)
                 --i;
             }
         }
-        if (file == begin(bamFiles) && options.verbose)
+        if (file == begin(options.bamFiles) && options.verbose)
             std::cerr << "[" << time(0) << "] " << "Discarded " << discardedLocs << " locations because of high coverage." << std::endl;
     }
         

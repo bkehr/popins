@@ -1,4 +1,5 @@
 #include <iostream>
+#include <sstream>
 #include <fstream>
 #include <queue>
 
@@ -48,7 +49,14 @@ struct Location
     
     unsigned fileIndex;
     
-    Location () {}
+    Location ()
+    {
+        chr = "";
+        chrStart = 0;
+        chrEnd = 0;
+        contig = "";
+        score = -1;
+    }
     
     Location (CharString h, TPos hs, TPos he, bool ho, CharString c, bool co, unsigned n, double s) :
         chr(h), chrStart(hs), chrEnd(he), chrOri(ho), contig(c), contigOri(co), numReads(n), score(s)
@@ -590,109 +598,14 @@ readLocations(String<Location> & locations, CharString & locationsFile, unsigned
     return 0;
 }
 
-// --------------------------------------------------------------------------
-// addLocation()
-// --------------------------------------------------------------------------
-
-void
-addLocation(Location & prevLoc, String<Location> & locations, Location & loc)
-{
-    if (prevLoc.chr == "")
-    {
-        prevLoc = loc;
-    }
-    else if (prevLoc.chr != loc.chr || prevLoc.chrEnd + 1000 < loc.chrStart)
-    {
-        appendValue(locations, prevLoc);
-        prevLoc = loc;
-    }
-    else
-    {
-        prevLoc.chrEnd = std::max(prevLoc.chrEnd, loc.chrEnd);
-        prevLoc.numReads += loc.numReads;
-    }
-}
-
-// ==========================================================================
-// Function mergeLocations()
-// ==========================================================================
-
-int
-mergeLocations(String<Location> & locations, String<CharString> & locationsFiles)
-{
-    typedef RecordReader<std::fstream, SinglePass<> > TReader;
-    typedef Pair<std::fstream *, TReader *> TPtrPair;
-
-    Location forwardForward, forwardReverse, reverseForward, reverseReverse;
-
-    // define min heap of Locations
-    std::priority_queue<Location, std::vector<Location>, LocationTypeGreater> heap;
-    
-    // Open location files and store String of reader pointers.
-    String<TPtrPair> readerPtr;
-    resize(readerPtr, length(locationsFiles));
-    for (unsigned i = 0; i < length(locationsFiles); ++i)
-    {
-        std::fstream * stream = new std::fstream(toCString(locationsFiles[i]), std::ios::in);
-        if (!(*stream).good())
-        {
-            std::cerr << "ERROR: Could not open locations file " << locationsFiles[i] << std::endl;
-            return 1;
-        }
-        readerPtr[i] = TPtrPair(stream, new TReader(*stream));
-        
-        // Read the first location record and push it to min heap.
-        Location loc;
-        if (readLocation(loc, *readerPtr[i].i2, locationsFiles[i]) != 0) return 1;
-        loc.fileIndex = i;
-        heap.push(loc);
-    }
-
-    while (!heap.empty())
-    {
-        Location loc = heap.top();
-
-        if (loc.chrOri)
-        {
-            if (loc.contigOri) addLocation(forwardForward, locations, loc);
-            else addLocation(forwardReverse, locations, loc);
-        }
-        else
-        {
-            if (loc.contigOri) addLocation(reverseForward, locations, loc);
-            else addLocation(reverseReverse, locations, loc);
-        }
-        
-        heap.pop();
-        unsigned i = loc.fileIndex;
-        if (!atEnd(*readerPtr[i].i2))
-        {
-            Location nextLoc;
-            if (readLocation(nextLoc, *readerPtr[i].i2, locationsFiles[i]) != 0) return 1;
-            nextLoc.fileIndex = i;
-            heap.push(nextLoc);
-        }
-    }
-
-    return 0;
-}
-
 // ==========================================================================
 // Function writeLocations()
 // ==========================================================================
 
 int
-writeLocations(CharString & locationsFile, String<Location> & locations)
+writeLocations(std::fstream & stream, String<Location> & locations)
 {
     typedef Iterator<String<Location> >::Type TIterator;
-    
-    // Open output file.
-    std::fstream stream(toCString(locationsFile), std::ios::out);
-    if (!stream.good())
-    {
-        std::cerr << "ERROR: Could not open locations file " << locationsFile << " for writing." << std::endl;
-        return 1;
-    }
     
     // Iterate over locations to output them one per line.
     TIterator itEnd = end(locations);
@@ -705,14 +618,209 @@ writeLocations(CharString & locationsFile, String<Location> & locations)
             stream << (*it).chrStart << "-";
             stream << (*it).chrEnd;
         }
-        stream << "\t";
-        stream << ((*it).chrOri ? "+" : "-") << "\t";
-        stream << (*it).contig << "\t";
-        stream << ((*it).contigOri ? "+" : "-") << "\t";
-        stream << (*it).numReads << "\t";
-        stream << (*it).score << std::endl;
+        stream << "\t" << ((*it).chrOri ? "+" : "-");
+        stream << "\t" << (*it).contig;
+        stream << "\t" << ((*it).contigOri ? "+" : "-");
+        stream << "\t" << (*it).numReads;
+        if ((*it).score != -1) stream << "\t" << (*it).score;
+        stream << std::endl;
     }
     
+    return 0;
+}
+
+int
+writeLocations(CharString & filename, String<Location> & locations)
+{
+    std::fstream stream(toCString(filename), std::ios::out);
+    if (!stream.good())
+    {
+        std::cerr << "ERROR: Could not open temporary locations file " << filename << " for writing." << std::endl;
+        return 1;
+    }
+    
+    return writeLocations(stream, locations);
+}
+
+// --------------------------------------------------------------------------
+// addLocation()
+// --------------------------------------------------------------------------
+
+void
+addLocation(Location & prevLoc, String<Location> & locations, Location & loc)
+{
+    if (prevLoc.contig == "")
+    {
+        loc.score = -1;
+        prevLoc = loc;
+    }
+    else if (prevLoc.chr != loc.chr || prevLoc.chrEnd + 1000 < loc.chrStart)
+    {
+        appendValue(locations, prevLoc);
+        loc.score = -1;
+        prevLoc = loc;
+    }
+    else
+    {
+        prevLoc.chrEnd = std::max(prevLoc.chrEnd, loc.chrEnd);
+        prevLoc.numReads += loc.numReads;
+    }
+}
+
+// --------------------------------------------------------------------------
+// mergeLocationsBatch()
+// --------------------------------------------------------------------------
+
+int mergeLocationsBatch(std::fstream & stream, String<Location> & locations, String<CharString> locationsFiles, size_t offset, size_t batchSize)
+{
+    typedef RecordReader<std::fstream, SinglePass<> > TReader;
+    typedef Pair<std::fstream *, TReader *> TPtrPair;
+
+    Location forward, reverse;
+    unsigned contigCount = 0;
+
+    // define min heap of Locations
+    std::priority_queue<Location, std::vector<Location>, LocationTypeGreater> heap;
+
+    unsigned last = std::min(offset+batchSize, length(locationsFiles));
+    
+    
+    // Open files and store String of reader pointers.
+    String<TPtrPair> readerPtr;
+    resize(readerPtr, length(locationsFiles));
+    for (unsigned i = offset; i < last; ++i)
+    {
+        std::fstream * stream = new std::fstream(toCString(locationsFiles[i]), std::ios::in);
+        if (!(*stream).good())
+        {
+            std::cerr << "ERROR: Could not open locations file " << locationsFiles[i] << std::endl;
+            return 1;
+        }
+        readerPtr[i] = TPtrPair(stream, new TReader(*stream));
+
+        // Read the first location record and push it to min heap.
+        Location loc;
+        if (readLocation(loc, *readerPtr[i].i2, locationsFiles[i]) != 0) return 1;
+        loc.fileIndex = i;
+        heap.push(loc);
+    }
+
+    // Iterate over all files simultaneously using the min heap.
+    while (!heap.empty())
+    {
+        Location loc = heap.top();
+
+        // Output all the locations for a contig.
+        if ((forward.contig != "" && (forward.contig != loc.contig || (forward.contig == loc.contig && forward.contigOri != loc.contigOri))) ||
+            (reverse.contig != "" && (reverse.contig != loc.contig || (reverse.contig == loc.contig && reverse.contigOri != loc.contigOri))))
+        {
+            if (forward.contig != "") appendValue(locations, forward);
+            if (reverse.contig != "") appendValue(locations, reverse);
+
+            // Compute the score for each location.
+            Iterator<String<Location> >::Type itEnd = end(locations);
+            for (Iterator<String<Location> >::Type it = begin(locations); it != itEnd; ++it)
+                (*it).score = (*it).numReads/(double)contigCount;
+
+            LocationTypeLess less;
+            std::stable_sort(begin(locations, Standard()), end(locations, Standard()), less);
+            if (length(locations) > 0) writeLocations(stream, locations);
+
+            clear(locations);
+            forward = Location();
+            reverse = Location();
+            contigCount = 0;
+        }
+
+        contigCount += loc.numReads;
+        if (loc.chrOri) addLocation(forward, locations, loc);
+        else addLocation(reverse, locations, loc);
+
+        heap.pop();
+        unsigned i = loc.fileIndex;
+        if (!atEnd(*readerPtr[i].i2))
+        {
+            Location nextLoc;
+            if (readLocation(nextLoc, *readerPtr[i].i2, locationsFiles[i]) != 0) return 1;
+            nextLoc.fileIndex = i;
+            heap.push(nextLoc);
+        }
+    }
+
+    // Append the remaining locations.
+    Location loc = Location();
+    if (forward.contig != "") appendValue(locations, forward);
+    if (reverse.contig != "") appendValue(locations, reverse);
+    
+    // Compute the score for each location.
+    Iterator<String<Location> >::Type itEnd = end(locations);
+    for (Iterator<String<Location> >::Type it = begin(locations); it != itEnd; ++it)
+        (*it).score = (*it).numReads/(double)contigCount;
+
+    LocationTypeLess less;
+    std::stable_sort(begin(locations, Standard()), end(locations, Standard()), less);
+    if (length(locations) > 0) writeLocations(stream, locations);
+
+    // clean-up
+    for (unsigned i = offset; i < last; ++i)
+    {
+        delete readerPtr[i].i2;
+        (*readerPtr[i].i1).close();
+        delete readerPtr[i].i1;
+    }
+
+    return 0;
+}
+
+// ==========================================================================
+// Function mergeLocations()
+// ==========================================================================
+
+int
+mergeLocations(std::fstream & stream, String<Location> & locations, String<CharString> & locationsFiles, CharString & outFile, bool verbose)
+{
+    String<CharString> tmpFiles;
+    unsigned batchSize = 500;
+    
+    if (length(locationsFiles) > batchSize*batchSize)
+    {
+        std::cerr << "ERROR: Too many locations files, max: " << batchSize*batchSize << ", given: " << length(locationsFiles) << std::endl;
+        return 1;
+    }
+    else if (length(locationsFiles) <= batchSize)
+    {
+        mergeLocationsBatch(stream, locations, locationsFiles, 0, batchSize);
+        return 0;
+    }
+
+    // Write a temporary file for each batch of files.
+    for (unsigned offset = 0; offset < length(locationsFiles); offset += batchSize)
+    {
+        if (verbose) std::cerr << "[" << time(0) << "] " << "Merging batch " << (offset/batchSize)+1 << " of location files." << std::endl;
+
+        // Create temporary file name.
+        std::stringstream tmpName;
+        tmpName << outFile << "." << (offset/batchSize)+1;
+        CharString tmp = tmpName.str();
+        appendValue(tmpFiles, tmp);
+
+        // Open output file.
+        std::fstream tmpStream(toCString(tmp), std::ios::out);
+        if (!tmpStream.good())
+        {
+            std::cerr << "ERROR: Could not open temporary locations file " << tmp << " for writing." << std::endl;
+            return 1;
+        }
+
+        String<Location> locs;
+        if (mergeLocationsBatch(tmpStream, locs, locationsFiles, offset, batchSize) != 0) return 1;
+    }
+
+    // Merge and remove the temporary files.
+    if (verbose) std::cerr << "[" << time(0) << "] " << "Merging temporary location files." << std::endl;
+    if (mergeLocationsBatch(stream, locations, tmpFiles, 0, length(tmpFiles)) != 0) return 1;
+    for (unsigned i = 0; i < length(tmpFiles); ++i) remove(toCString(tmpFiles[i]));
+
     return 0;
 }
 

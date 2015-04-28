@@ -200,7 +200,7 @@ mergeHeaders(BamHeader & header,
     header = header1;
     for (unsigned i = 0; i < length(header2.records); ++i)
     {
-        if (header1.records[i].type == 1)
+        if (header2.records[i].type == 1)
             appendValue(header.records, header2.records[i]);
     }
     BamHeaderRecordTypeLess less;
@@ -279,27 +279,30 @@ merge_and_set_mate(CharString & mergedBam, CharString & nonRefBam, CharString & 
         std::cerr << "ERROR: Could not open input bam/sam file " << nonRefBam << "." << std::endl;
         return 1;
     }
+    std::cerr << "[" << time(0) << "]  - opened non_ref file " << nonRefBam << std::endl;
+
     BamStream remappedStream(toCString(remappedBam));
     if (!isGood(remappedStream))
     {
         std::cerr << "ERROR: Could not open input bam/sam file " << remappedBam << "." << std::endl;
         return 1;
     }
+    std::cerr << "[" << time(0) << "]  - opened remapped file " << remappedBam << std::endl;
 
-    // Prepare a header for the output files.
-    TNameStore nameStor;
-    NameStoreCache<TNameStore> nameStoreCache(nameStor);
-    BamHeader header;
-    mergeHeaders(header, nameStor, nameStoreCache, nonRefStream.header, remappedStream.header);
-
-    // Open output file and set the header.
+    // Open output file.
     BamStream outStream(toCString(mergedBam), BamStream::WRITE);
     if (!isGood(remappedStream))
     {
         std::cerr << "ERROR: Could not open output bam file " << mergedBam << "." << std::endl;
         return 1;
     }
-    outStream.header = header;
+    std::cerr << "[" << time(0) << "]  - opened output file " << mergedBam << std::endl;
+
+    // Prepare a header for the output files.
+    TNameStore nameStor;
+    NameStoreCache<TNameStore> nameStoreCache(nameStor);
+    mergeHeaders(outStream.header, nameStor, nameStoreCache, nonRefStream.header, remappedStream.header);
+    std::cerr << "[" << time(0) << "]  - merged headers" << std::endl;
 
     // Read the first record from each input file. Correct ids in records from remappedStreams for new header.
     BamAlignmentRecord record1, record2;
