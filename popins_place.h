@@ -130,9 +130,8 @@ openBamLoadBai(BamStream & bamStream, BamIndex<Bai> & bamIndex, CharString & fil
 
 template<typename TPos>
 bool
-jumpToLocation(TPos & locStart, TPos & locEnd, BamStream & bamStream, BamIndex<Bai> & bamIndex, Location & loc, unsigned readLength, unsigned maxInsertSize)
+jumpToLocation(TPos & locStart, TPos & locEnd, int & rID, BamStream & bamStream, BamIndex<Bai> & bamIndex, Location & loc, unsigned readLength, unsigned maxInsertSize)
 {
-    int rID = 0;
     BamIOContext<StringSet<CharString> > context = bamStream.bamIOContext;
     getIdByName(nameStore(context), loc.chr, rID, nameStoreCache(context));
 
@@ -418,7 +417,8 @@ int popins_place(int argc, char const ** argv)
 
             // Jump to the location in bam file.
             TPos locStart = 0, locEnd = 0;
-            bool hasAlignments = jumpToLocation(locStart, locEnd, bamStream, bamIndex, locations[i],
+            int rID = 0;
+            bool hasAlignments = jumpToLocation(locStart, locEnd, rID, bamStream, bamIndex, locations[i],
                                                 options.readLength, options.maxInsertSize);
             if (!hasAlignments) continue;
 
@@ -431,7 +431,8 @@ int popins_place(int argc, char const ** argv)
             // Read and split align reads.
             BamAlignmentRecord record;
             record.beginPos = minValue<TPos>();
-            while (!atEnd(bamStream) && (TPos)record.beginPos < locEnd)
+            record.rID = rID;
+            while (!atEnd(bamStream) && (TPos)record.beginPos < locEnd && rID == record.rID)
             {
                 if (readCount > covThresh)
                 {
@@ -443,7 +444,7 @@ int popins_place(int argc, char const ** argv)
                     std::cerr << "ERROR while reading bam alignment record from " << *file << std::endl;
                     return 1;
                 }
-                if ((TPos)record.beginPos < locStart) continue;
+                if ((TPos)record.beginPos < locStart || record.rID != rID) continue;
                 
                 ++readCount;
                 if (length(record.cigar) == 1) continue;
