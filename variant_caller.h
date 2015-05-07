@@ -296,7 +296,8 @@ int readBamRegion(TBamIOContext& hN, BamIndex< Bai>& baiI, Stream< Bgzf>& bamS,
 template<typename TOptions>
 int addBARsToVC(std::map< CharString, BamAlignmentRecord>&  bars,  TSequence& refSeq, TSequence& altSeq, TOptions & options, std::vector< double>& vC)
 {
-  for( auto i = bars.begin(); i != bars.end(); i++ ){
+  int barCount = 0;
+  for( auto i = bars.begin(); i != bars.end() && barCount < options.maxBARcount; i++ ){
     double asRef = alignReadToSeq( refSeq, (*i).second, options );
     double asAlt = alignReadToSeq( altSeq, (*i).second, options );
     if( asRef <= options.minAlignScore ) asRef = options.minAlignScore;
@@ -318,6 +319,7 @@ int addBARsToVC(std::map< CharString, BamAlignmentRecord>&  bars,  TSequence& re
       vC[1] += -log( 2.0);
       vC[2] += pa;
     }
+    barCount++;
   }
   return 0;
 }

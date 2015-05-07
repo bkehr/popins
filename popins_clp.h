@@ -200,6 +200,7 @@ struct GenotypingOptions {
     int bpQclip;
     int minSeqLen;
     double minReadProb;
+    int maxBARcount;
 
     int regionWindowSize;
     bool addReadGroup;
@@ -212,7 +213,7 @@ struct GenotypingOptions {
 
     GenotypingOptions() : 
         sampleName("sample"), match(1), mismatch(-4), gapOpen(-10), gapExtend(-1), minAlignScore(55),
-        maxInsertSize( 500 ), bpQclip(0), minSeqLen(10), minReadProb(0.0001),
+        maxInsertSize( 500 ), bpQclip(0), minSeqLen(10), minReadProb(0.0001), maxBARcount(200),
         regionWindowSize(50), addReadGroup(false), verbose(false),
         callBoth(false), useReadCounts(false), fullOverlap(false)
     {}
@@ -482,6 +483,7 @@ setupParser(ArgumentParser & parser, GenotypingOptions & options)
     addOption(parser, ArgParseOption("q", "qual", "Quality score threshold for read trimming.", ArgParseArgument::INTEGER, "INT"));
     addOption(parser, ArgParseOption("l", "minSeqLen", "Minimum read length after trimming.", ArgParseArgument::INTEGER, "INT"));
     addOption(parser, ArgParseOption("pm", "minreadprob", "Minimum read probability.", ArgParseArgument::DOUBLE, "DOUBLE"));
+    addOption(parser, ArgParseOption("mb", "maxBARcount", "Maximum number of reads to consider in region window.", ArgParseArgument::INTEGER, "INT"));
 
     addSection(parser, "Misc options");
     addOption(parser, ArgParseOption("v", "verbose", "Enable verbose output."));
@@ -506,6 +508,7 @@ setupParser(ArgumentParser & parser, GenotypingOptions & options)
     setDefaultValue(parser, "insertSize", options.maxInsertSize);
     setDefaultValue(parser, "qual", options.bpQclip);
     setDefaultValue(parser, "minreadprob", options.minReadProb);
+    setDefaultValue(parser, "maxBARcount", options.maxBARcount);
     setDefaultValue(parser, "window", options.regionWindowSize);
     setDefaultValue(parser, "samplename", options.sampleName);
 }
@@ -737,6 +740,8 @@ getOptionValues(GenotypingOptions & options, ArgumentParser & parser)
         getOptionValue(options.maxInsertSize, parser, "insertSize");
     if (isSet(parser, "minreadprob"))
         getOptionValue(options.minReadProb, parser, "minreadprob");
+    if (isSet(parser, "maxBARcount"))
+        getOptionValue(options.maxBARcount, parser, "maxBARcount");
     if (isSet(parser, "qual"))
         getOptionValue(options.bpQclip, parser, "qual");
     if (isSet(parser, "minSeqLen"))
