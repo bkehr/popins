@@ -157,10 +157,14 @@ jumpToLocation(TPos & locStart, TPos & locEnd, BamStream & bamStream, BamIndex<B
 // ==========================================================================
 
 template<typename TPos, typename TSequence>
-bool
+inline bool
 splitAlign(Pair<TPos> & refPos, Pair<TSequence> & ref, BamAlignmentRecord & record, bool chrOri)
 {
     TSequence read = record.seq;
+    if ((hasFlagRC(record) && hasFlagNextRC(record)) || (!hasFlagRC(record) && !hasFlagNextRC(record)))
+    {
+        reverseComplement(read);
+    }
 
     Align<TSequence> left;
     resize(rows(left), 2);
@@ -172,35 +176,15 @@ splitAlign(Pair<TPos> & refPos, Pair<TSequence> & ref, BamAlignmentRecord & reco
     setSource(row(right, 0), read);
     setSource(row(right, 1), ref.i2);
 
-    TSequence revRead = read;
-    reverseComplement(revRead);
-    
-    Align<TSequence> leftRev;
-    resize(rows(leftRev), 2);
-    setSource(row(leftRev, 0), revRead);
-    setSource(row(leftRev, 1), ref.i1);
-
-    Align<TSequence> rightRev;
-    resize(rows(rightRev), 2);
-    setSource(row(rightRev, 0), revRead);
-    setSource(row(rightRev, 1), ref.i2);
-
     Score<int, Simple> scoringScheme(1, -2, -5);
     int splitScore = splitAlignment(left, right, scoringScheme);
-    int splitScoreRev = splitAlignment(leftRev, rightRev, scoringScheme);
-    
-    if (splitScoreRev > splitScore)
-    {
-        splitScore = splitScoreRev;
-        right = rightRev;
-        left = leftRev;
-    }
 
-    if (splitScore < length(read)*0.5) return 1;
+    if (splitScore < length(read)*0.7) return 1;
 
     // Position on the read.
     TPos readPos = toSourcePosition(row(left, 0), clippedEndPosition(row(left, 0)));
-    if (readPos < 5 || readPos > length(read)-5) return 1;
+    unsigned minOverhang = 0.1*length(read);
+    if (readPos < minOverhang || readPos > length(read)-minOverhang) return 1;
 
     // Position on the reference infix and contig.
     refPos = Pair<TPos>(toSourcePosition(row(left, 1), clippedEndPosition(row(left, 1))),
@@ -216,8 +200,8 @@ splitAlign(Pair<TPos> & refPos, Pair<TSequence> & ref, BamAlignmentRecord & reco
             ++refPos.i2;
         }
     }
-    
-    if (refPos.i1 > length(ref.i1)-5 || refPos.i2 < 5) return 1;
+
+    if (refPos.i1 > length(ref.i1)-minOverhang || refPos.i2 < minOverhang) return 1;
 
     return 0;
 }
@@ -370,7 +354,8 @@ int popins_place(int argc, char const ** argv)
     // Read the locations file.
     if (length(locations) == 0)
     {
-        if (options.verbose) std::cerr << "[" << time(0) << "] " << "Reading " << options.batchSize << " locations from " << options.locationsFile << std::endl;
+        if (options.verbose) std::cerr << "[" << time(0) << "] " << "Reading batch " << options.batchIndex << " of size "
+                                       << options.batchSize << " (locations) from " << options.locationsFile << std::endl;
         if (readLocations(locations, options.locationsFile, options.batchSize, options.batchIndex) != 0) return 1;
     }
     else
@@ -389,7 +374,7 @@ int popins_place(int argc, char const ** argv)
             replace(locations, i, i+1, TLocations());
         else ++i;
     }
-    
+
     if (length(locations) == 0)
     {
         std::cerr << "[" << time(0) << "] " << "No locations on genome left after filtering for score >= " << options.minLocScore << std::endl;
@@ -399,7 +384,7 @@ int popins_place(int argc, char const ** argv)
     if (options.verbose)
         std::cerr << "[" << time(0) << "] " << "Keeping " << length(locations) << " locations with score >= "
                   << options.minLocScore << " and shorter than " << (2*options.maxInsertSize) << std::endl;
-    
+
     // Concatenate the artificial reference for each location.
     if (options.verbose)
         std::cerr << "[" << time(0) << "] " << "Collecting contig and location sequences from "
@@ -436,10 +421,11 @@ int popins_place(int argc, char const ** argv)
             bool hasAlignments = jumpToLocation(locStart, locEnd, bamStream, bamIndex, locations[i],
                                                 options.readLength, options.maxInsertSize);
             if (!hasAlignments) continue;
-            
+
             unsigned readCount = 0;
             bool highCoverage = false;
-            
+            unsigned covThresh = (100 * (locEnd - locStart + options.readLength)) / options.readLength;
+
 //            std::cout << "Jumped to " << locations[i].chr << ":" << locations[i].chrStart << " " << locations[i].contig << std::endl;
 
             // Read and split align reads.
@@ -447,7 +433,7 @@ int popins_place(int argc, char const ** argv)
             record.beginPos = minValue<TPos>();
             while (!atEnd(bamStream) && (TPos)record.beginPos < locEnd)
             {
-                if (readCount * options.readLength > 100 * (locEnd - locStart + options.readLength))
+                if (readCount > covThresh)
                 {
                     highCoverage = true;
                     break;
@@ -458,9 +444,11 @@ int popins_place(int argc, char const ** argv)
                     return 1;
                 }
                 if ((TPos)record.beginPos < locStart) continue;
+                
                 ++readCount;
                 if (length(record.cigar) == 1) continue;
-                
+                if ((locations[i].chrOri && hasFlagNextRC(record)) || (!locations[i].chrOri && !hasFlagNextRC(record))) continue;
+
                 Pair<TPos> refPos;
                 if (splitAlign(refPos, artificialRefs[i], record, locations[i].chrOri) != 0) continue;
 
@@ -496,7 +484,7 @@ int popins_place(int argc, char const ** argv)
         if (file == begin(options.bamFiles) && options.verbose)
             std::cerr << "[" << time(0) << "] " << "Discarded " << discardedLocs << " locations because of high coverage." << std::endl;
     }
-        
+
     // Find the best split positions in sets and write the output.
     if (options.verbose)
         std::cerr << "[" << time(0) << "] " << "Identifying best split positions and writing output to "
