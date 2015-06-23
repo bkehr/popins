@@ -94,7 +94,7 @@ It outputs VCF records with the genotype likelihoods in GT:PL format for the ind
 References
 ----------
 
-Kehr, B., Melsted, P., & Halldórsson, B. V. (2015).
+Kehr, B., Melsted, P., Halldórsson, B. V. (2015).
 PopIns: population-scale detection of novel sequence insertions.
 Bioinformatics, btv273.
 
