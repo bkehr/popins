@@ -79,7 +79,7 @@ If a file with merged locations (-ml option) does not already exist, it requires
 If bam files with all reads of the individuals are specified, it determines exact positions of insertions from split read alignments for each contig end.
 Both steps can be run separately or in a single program call.
 The split alignment can be done in batches (e.g. 100 locations per batch) if the locations files have been merged before.
-It outputs a vcf and a fa record for each identified position.
+It outputs a vcf record for each identified position, which references contigs and contig positions in the (super-)contigs file.
 
 
 ### The genotype command
