@@ -269,7 +269,7 @@ readAlignedPairs(UnionFind<int> & uf, std::set<Pair<TSize> > & alignedPairs, Cha
 // --------------------------------------------------------------------------
 
 template<typename TSize, typename TSeq>
-void
+std::set<int>
 unionFindToComponents(std::map<TSize, ContigComponent<TSeq> > & components,
                       UnionFind<int> & uf,
                       std::set<Pair<TSize> > & alignedPairs,
@@ -298,9 +298,13 @@ unionFindToComponents(std::map<TSize, ContigComponent<TSeq> > & components,
         {
             if (verbose && skipped.count(set) == 0)
             {
-                skipped.insert(set);
                 std::cerr << "[" << time(0) << "] " << "WARNING: Skipping component of size " << (-1*uf._values[set]) << std::endl;
             }
+            skipped.insert(set);
+            skipped.insert((*it).i1);
+            skipped.insert((*it).i2);
+            skipped.insert(rev1);
+            skipped.insert(rev2);
             continue;
         }
 
@@ -311,6 +315,7 @@ unionFindToComponents(std::map<TSize, ContigComponent<TSeq> > & components,
     }
 
     std::cerr << "[" << time(0) << "] " << "There are " << components.size() << " components." << std::endl;
+    return skipped;
 }
 
 // --------------------------------------------------------------------------
@@ -341,6 +346,7 @@ addSingletons(std::map<TSize, ContigComponent<TSeq> > & components, UnionFind<in
 template<typename TSize, typename TSequence>
 bool
 readAndMergeComponents(std::map<TSize, ContigComponent<TSequence> > & components,
+                       std::set<int> & skipped,
                        String<CharString> & componentFiles,
                        unsigned samples,
                        int numContigs,
@@ -364,7 +370,7 @@ readAndMergeComponents(std::map<TSize, ContigComponent<TSequence> > & components
         if (readAlignedPairs(uf, alignedPairs, componentFiles[i], numContigs, verbose) != 0) return 1;
 
     // Convert union-find data structure to components.
-    unionFindToComponents(components, uf, alignedPairs, samples, numContigs, verbose);
+    skipped = unionFindToComponents(components, uf, alignedPairs, samples, numContigs, verbose);
 
     // Add singleton contigs to components (= those contigs that don't align to any other contig).
     addSingletons(components, uf, numContigs);

@@ -326,6 +326,7 @@ readInputFiles(StringSet<TSeq, Owner<> > & contigs,
                std::map<TSize, ContigId> & contigIdsMap,
                unsigned & batchOffset,
                std::map<TSize, ContigComponent<TSeq> > & components,
+               std::set<int> & skipped,
                MergingOptions & options)
 {
     int numContigs = 0;
@@ -345,14 +346,14 @@ readInputFiles(StringSet<TSeq, Owner<> > & contigs,
         {
             numContigs = readContigs(contigs, contigIds, options.contigFiles, options.verbose);
             if (numContigs == -1) return -1;
-            if (readAndMergeComponents(components, options.componentFiles, length(options.contigFiles), numContigs,
+            if (readAndMergeComponents(components, skipped, options.componentFiles, length(options.contigFiles), numContigs,
                                        options.batchIndex, options.batches, options.verbose) != 0) return -1;
         }
         else                      // -i and -b options are set -> read contigs for this batch of components
         {
             int numContigs = countContigs(options.contigFiles, options.contigsPerFile);
             if (numContigs == -1) return -1;
-            if (readAndMergeComponents(components, options.componentFiles, length(options.contigFiles), numContigs,  // --> popins_merge_partition.h
+            if (readAndMergeComponents(components, skipped, options.componentFiles, length(options.contigFiles), numContigs,  // --> popins_merge_partition.h
                                        options.batchIndex, options.batches, options.verbose) != 0) return -1;
             if (readContigs(contigsMap, contigIdsMap, components,
                             options.contigFiles, options.contigsPerFile, numContigs, options.verbose) != 0) return -1;
@@ -392,6 +393,23 @@ addReverseComplementContigs(StringSet<TSeq> & contigs,
     }
 }
 
+// --------------------------------------------------------------------------
+// Function writeSkipped()
+// --------------------------------------------------------------------------
+
+template<typename TStream, typename TSeq>
+void
+writeSkipped(TStream & stream, StringSet<TSeq> & contigs, StringSet<ContigId> & contigIds, std::set<int> skipped)
+{
+    typename std::set<int>::iterator itEnd = skipped.end();
+    for (typename std::set<int>::iterator it = skipped.begin(); it != itEnd; ++it)
+    {
+        if (!contigIds[*it].orientation) continue;
+        stream << ">" << contigIds[*it] << " " << "(large component)" << std::endl;
+        stream << contigs[*it] << std::endl;
+    }
+}
+
 // ==========================================================================
 // Function popins_merge()
 // ==========================================================================
@@ -412,19 +430,29 @@ int popins_merge(int argc, char const ** argv)
     std::map<TSize, TSequence> contigsMap; // only needed for supercontig construction in batches
     std::map<TSize, ContigId> contigIdsMap; // only needed for superconitg construction in batches
     std::map<TSize, ContigComponent<TSequence> > components;
+    std::set<int> skipped;
 
     // Reading of input files (files of contigs, and files of components if -c option is set).
     unsigned batchOffset = 0;
-    int totalContigs = readInputFiles(contigs, contigIds, contigsMap, contigIdsMap, batchOffset, components, options);
+    int totalContigs = readInputFiles(contigs, contigIds, contigsMap, contigIdsMap, batchOffset, components, skipped, options);
     if (totalContigs == -1) return 1;
     addReverseComplementContigs(contigs, contigIds);
 
-    // Prepare the output file.
+    // Prepare the output files.
     options.outputStream.open(toCString(options.outputFile), std::ios_base::out);
     if (!options.outputStream.is_open())
     {
         std::cerr << "ERROR: Could not open output file " << options.outputFile << std::endl;
         return 1;
+    }
+    if (options.skippedFile != "")
+    {
+        options.skippedStream.open(toCString(options.skippedFile), std::ios_base::out);
+        if (!options.skippedStream.is_open())
+        {
+            std::cerr << "ERROR: Could not open output file for skipped contigs " << options.skippedFile << std::endl;
+            return 1;
+        }
     }
 
     // Initialize Union-Find data structure for partitioning.
@@ -443,10 +471,14 @@ int popins_merge(int argc, char const ** argv)
             writeAlignedPairs(options.outputStream, alignedPairs);
         else
         {
-            unionFindToComponents(components, uf, alignedPairs, length(options.contigFiles), totalContigs, options.verbose);
+            skipped = unionFindToComponents(components, uf, alignedPairs, length(options.contigFiles), totalContigs, options.verbose);
             addSingletons(components, uf, totalContigs);
         }
     }
+    
+    // Write contigs that were skippe because they form too large components.
+    if (options.skippedFile != "")
+        writeSkipped(options.skippedStream, contigs, contigIds, skipped);
 
     // SUPERCONTIG CONSTRUCTION (if -c option is set OR -i and -b options are not set)           --> popins_merge_seqs.h
     if (length(options.componentFiles) != 0 || options.batches == 1)

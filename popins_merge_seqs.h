@@ -58,6 +58,21 @@ struct ComponentGraph
 
 // --------------------------------------------------------------------------
 
+template<typename TSeq>
+bool
+isSource(ComponentGraph<TSeq> & graph, typename ComponentGraph<TSeq>::TVertexDescriptor & v)
+{
+    typedef typename ComponentGraph<TSeq>::TVertexDescriptor TVertexDescriptor;
+    
+    typename Iterator<String<TVertexDescriptor> >::Type itEnd = end(graph.sources);
+    for (typename Iterator<String<TVertexDescriptor> >::Type it = begin(graph.sources); it < itEnd; ++it)
+        if (v == *it) return true;
+
+    return false;
+}
+
+// --------------------------------------------------------------------------
+
 template<typename TSeq1, typename TSeq2>
 typename ComponentGraph<TSeq1>::TVertexDescriptor
 addVertex(ComponentGraph<TSeq1> & graph, TSeq2 & seq)
@@ -283,7 +298,12 @@ bool mergeSeqWithGraph(ComponentGraph<TSeq1> & compGraph,
         {
             append(compGraph.sequenceMap[v], suffix(seq, alignEndSeq));
         }
-        else if (length(seq) - alignEndSeq > (TSize)minBranchLen) // unaligned part of seq is longer than minBranchLen
+        else if (outDegree(compGraph.graph, v) == 0 && vPos - alignEndPath < (TSize)minBranchLen) // unaligned suffix of seq is longer than minBranchLen, but v is a leaf and unaligned suffix in v is shorter than minBranchLen
+        {
+            TPos splitPos = length(compGraph.sequenceMap[v]) - (vPos - alignEndPath); // relative to vertex label
+            replace(compGraph.sequenceMap[v], splitPos, length(compGraph.sequenceMap[v]), suffix(seq, alignEndSeq));
+        }
+        else if (length(seq) - alignEndSeq > (TSize)minBranchLen) // unaligned suffix of seq is longer than minBranchLen
         {
             if (vPos > alignEndPath) // alignment ends before end of vertex label
             {
@@ -311,6 +331,11 @@ bool mergeSeqWithGraph(ComponentGraph<TSeq1> & compGraph,
         if (alignBeginPath == 0)
         {
             replace(compGraph.sequenceMap[u], 0, 0, prefix(seq, alignBeginSeq));
+        }
+        else if (isSource(compGraph, u) && alignBeginPath < (TSize)minBranchLen)
+        {
+            TPos splitPos = length(compGraph.sequenceMap[u]) - (uPos - alignBeginPath);
+            replace(compGraph.sequenceMap[u], 0, splitPos, prefix(seq, alignBeginSeq));
         }
         else if (alignBeginSeq > (TSize)minBranchLen)
         {
@@ -436,6 +461,26 @@ mergeSequences(String<TSeq1> & mergedSeqs,
 // Function writeSupercontigs()
 // --------------------------------------------------------------------------
 
+template<typename TStream, typename TSeq, typename TSpec1, typename TSpec2>
+void
+writeSkippedBranching(TStream & stream, StringSet<TSeq, TSpec1> & contigs, StringSet<ContigId, TSpec2> & contigIds)
+{
+    for (unsigned i = 0; i < length(contigs); ++i)
+    {
+        if (!contigIds[i].orientation)
+        {
+            reverseComplement(contigs[i]);
+            contigIds[i].orientation = true;
+        }
+        stream << ">" << contigIds[i] << " (branching component)" << std::endl;
+        stream << contigs[i] << std::endl;
+    }
+}
+
+// --------------------------------------------------------------------------
+// Function writeSupercontigs()
+// --------------------------------------------------------------------------
+
 template<typename TStream, typename TSeq, typename TSpec>
 void
 writeSupercontigs(TStream & outputStream, String<TSeq> & mergedSeqs, StringSet<TSeq, TSpec> & contigs, int batchIndex, unsigned pos)
@@ -482,7 +527,6 @@ constructSupercontigs(std::map<TSize, ContigComponent<TSequence> > & components,
     unsigned numSingleton = 0;
     unsigned numBranching = 0;
     unsigned numVeryBranching = 0;
-    unsigned numTooLarge = 0;
     
     // Iterate over the set of components.
     unsigned pos = 0;
@@ -507,7 +551,6 @@ constructSupercontigs(std::map<TSize, ContigComponent<TSequence> > & components,
         if (length(component.contigs) > 10 * length(options.contigFiles))
         {
             if (options.verbose) std::cout << "COMPONENT_" << pos << " size:" << length(component.contigs) << " skipped." << std::endl;
-            ++numTooLarge;
             continue;
         }
 
@@ -519,7 +562,10 @@ constructSupercontigs(std::map<TSize, ContigComponent<TSequence> > & components,
                             options.minTipScore, options.matchScore, options.errorPenalty, options.qgramLength,
                             options.verbose))
         {
-            if (options.verbose) std::cout << "COMPONENT_" << options.batchIndex << "." << pos << " size:" << length(component.contigs) << " given up." << std::endl;
+            if (options.verbose)
+                std::cout << "COMPONENT_" << options.batchIndex << "." << pos << " size:" << length(component.contigs) << " given up." << std::endl;
+            if (options.skippedFile != "")
+                writeSkippedBranching(options.skippedStream, component.contigs, component.ids);
             ++numVeryBranching;
             ++numBranching;
             clear(component);
@@ -538,12 +584,11 @@ constructSupercontigs(std::map<TSize, ContigComponent<TSequence> > & components,
 
     options.outputStream.close();
 
-    if (options.verbose) 
+    if (options.verbose)
     {
         std::cerr << "[" << time(0) << "] " << length(components)-numSingleton << " components are merged from several contigs." << std::endl;
         std::cerr << "[" << time(0) << "] " << numSingleton << " contigs did not align with any other contig." << std::endl;
         std::cerr << "[" << time(0) << "] " << numBranching << " components are branching, given up on " << numVeryBranching << " of them." << std::endl;
-        std::cerr << "[" << time(0) << "] " << numTooLarge << " components exceeded the maximum number of contigs for merging." << std::endl;
     }
 }
 

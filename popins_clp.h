@@ -117,7 +117,9 @@ struct MergingOptions {
     String<CharString> componentFiles;
 
     CharString outputFile;
+    CharString skippedFile;
     std::fstream outputStream;
+    std::fstream skippedStream;
     bool verbose;
     bool veryVerbose;
 
@@ -326,6 +328,7 @@ setupParser(ArgumentParser & parser, MergingOptions & options)
     // Output file options.
     addSection(parser, "Output options");
     addOption(parser, ArgParseOption("o", "outFile", "Name of output file. Either in text format for components or fasta format for the supercontigs.", ArgParseArgument::OUTPUTFILE, "OUTPUTFILE"));
+    addOption(parser, ArgParseOption("os", "skippedFile", "Name of output file for skipped contigs. Default: no output of skipped contigs.", ArgParseArgument::OUTPUTFILE, "OUTPUTFILE"));
     addOption(parser, ArgParseOption("v", "verbose", "Enable verbose screen output."));
     addOption(parser, ArgParseOption("vv", "veryVerbose", "Enable very verbose screen output."));
 
@@ -345,6 +348,7 @@ setupParser(ArgumentParser & parser, MergingOptions & options)
     setMinValue(parser, "k", "3");
     setMinValue(parser, "t", "0");
     setValidValues(parser, "o", "txt fa fna fasta");
+    setValidValues(parser, "os", "fa fna fasta");
 
     // Set default values.
     setDefaultValue(parser, "e", options.errorRate);
@@ -611,6 +615,8 @@ getOptionValues(MergingOptions & options, ArgumentParser & parser)
     // Get output options.
     if (isSet(parser, "outFile"))
         getOptionValue(options.outputFile, parser, "outFile");
+    if (isSet(parser, "skippedFile"))
+        getOptionValue(options.skippedFile, parser, "skippedFile");
     if (isSet(parser, "verbose"))
         options.verbose = true;
     if (isSet(parser, "veryVerbose"))
