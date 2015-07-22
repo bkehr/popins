@@ -161,7 +161,6 @@ struct PlacingOptions {
     CharString locationsFile;          // merged from all individuals
     String<CharString> locationsFiles; // one file per individual
     CharString vcfInsertionsFile;
-    CharString faInsertionsFile;
     
     unsigned batchIndex;
     unsigned batchSize;
@@ -176,8 +175,8 @@ struct PlacingOptions {
     bool verbose;
     
     PlacingOptions() :
-        locationsFile("locations.txt"), vcfInsertionsFile("insertions.vcf"), faInsertionsFile("insertions.fa"),
-        batchIndex(0), batchSize(maxValue<unsigned>()), minLocScore(0.3), readLength(100), maxInsertSize(800), maxSplitReads(1000),
+        locationsFile("locations.txt"), vcfInsertionsFile("insertions.vcf"), batchIndex(0), batchSize(maxValue<unsigned>()),
+        minLocScore(0.3), readLength(100), maxInsertSize(800), maxSplitReads(1000),
         verbose(false)
     {}
 };
@@ -406,9 +405,10 @@ setupParser(ArgumentParser & parser, PlacingOptions & options)
     addDescription(parser, "Finds the positions of (super-)contigs in the reference genome. Merges files with "
                            "approximate locations computed from anchoring read pairs if a file with locations does not "
                            "already exist. Determines exact positions of insertions by split aligning reads at each "
-                           "contig end if bam files with all reads of the individuals are specified. Outputs a vcf and "
-                           "fa record for each identified position. The split alignment  can be done in batches (e.g. "
-                           "100 locations per batch) if the approximate locations have been computed before.");
+                           "contig end if bam files with all reads of the individuals are specified. Outputs a vcf "
+                           "record for each identified position. The contig position in the vcf record refers to the "
+                           "sequence in the (super-)contigs file. The split alignment can be done in batches (e.g. 100 "
+                           "locations per batch) if the approximate locations have been computed before.");
 
     // Require fasta file with merged contigs as arguments.
     addArgument(parser, ArgParseArgument(ArgParseArgument::INPUTFILE, "CONTIGFILE"));
@@ -429,12 +429,10 @@ setupParser(ArgumentParser & parser, PlacingOptions & options)
 
     // Output file options.
     addSection(parser, "Output options");
-    addOption(parser, ArgParseOption("ov", "outVcf", "Name of output file for vcf records.", ArgParseArgument::OUTPUTFILE, "VCFFILE"));
-    addOption(parser, ArgParseOption("of", "outFa", "Name of output file for insertion sequences.", ArgParseArgument::OUTPUTFILE, "FAFILE"));
+    addOption(parser, ArgParseOption("o", "out", "Name of vcf output file.", ArgParseArgument::OUTPUTFILE, "VCFFILE"));
     addOption(parser, ArgParseOption("v", "verbose", "Enable verbose output."));
 
-    setValidValues(parser, "of", "fa fna fasta");
-    setValidValues(parser, "ov", "vcf");
+    setValidValues(parser, "o", "vcf");
     setMinValue(parser, "m", "0");
     setMaxValue(parser, "m", "1");
 
@@ -444,8 +442,7 @@ setupParser(ArgumentParser & parser, PlacingOptions & options)
     setDefaultValue(parser, "r", options.readLength);
     setDefaultValue(parser, "e", options.maxInsertSize);
     setDefaultValue(parser, "p", options.maxSplitReads);
-    setDefaultValue(parser, "ov", options.vcfInsertionsFile);
-    setDefaultValue(parser, "of", options.faInsertionsFile);
+    setDefaultValue(parser, "o", options.vcfInsertionsFile);
 }
 
 void
@@ -706,10 +703,8 @@ getOptionValues(PlacingOptions & options, ArgumentParser & parser)
     if (isSet(parser, "maxSplitReads"))
         getOptionValue(options.maxSplitReads, parser, "maxSplitReads");
 
-    if (isSet(parser, "outVcf"))
-        getOptionValue(options.vcfInsertionsFile, parser, "outVcf");
-    if (isSet(parser, "outFa"))
-        getOptionValue(options.faInsertionsFile, parser, "outFa");
+    if (isSet(parser, "out"))
+        getOptionValue(options.vcfInsertionsFile, parser, "out");
         
     options.verbose = isSet(parser, "verbose");
 
