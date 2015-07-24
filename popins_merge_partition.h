@@ -10,6 +10,93 @@
 using namespace seqan;
 
 // --------------------------------------------------------------------------
+// Function calculateEntropy()
+// --------------------------------------------------------------------------
+
+template<typename TSeq>
+double
+averageEntropy(TSeq & seq)
+{
+    typedef typename Size<TSeq>::Type TSize;
+
+    // Count dinucleotide occurrences
+    String<TSize> diCounts;
+    resize(diCounts, 16, 0);
+    int counted = 0;
+    for (TSize i = 0; i < length(seq)-1; ++i)
+    {
+        if (seq[i] != 'N' && seq[i+1] != 'N')
+        {
+            diCounts[ordValue(seq[i]) + 4*ordValue(seq[i+1])] += 1;
+            counted += 1;  
+        }
+    }
+
+    // Calculate entropy for dinucleotide counts
+    double entropy = 0;
+    typename Iterator<String<TSize> >::Type countEnd = end(diCounts);
+    for (typename Iterator<String<TSize> >::Type count = begin(diCounts); count != countEnd; ++count)
+    {
+        if (*count == 0) continue;
+        double p = double(*count) / counted;
+        entropy -= p * log(p) / log(2);
+    }
+
+    return entropy / 4;
+}
+
+// ==========================================================================
+// Function filterByEntropy()
+// ==========================================================================
+
+template<typename TSeq>
+bool
+filterByEntropy(StringSet<TSeq> & contigs,
+                StringSet<ContigId> & contigIds,
+                MergingOptions & options)
+{
+    typedef typename Position<StringSet<TSeq> >::Type TPos;
+    
+    StringSet<TSeq> passed;
+    StringSet<ContigId> passedIds;
+    
+    // Iterate contigs and determine entropy
+    typename Iterator<StringSet<TSeq>, Rooted>::Type itEnd = end(contigs);
+    for (typename Iterator<StringSet<TSeq>, Rooted>::Type it = begin(contigs, Rooted()); it != itEnd; ++it)
+    {
+        // Entropy calculation
+        double entropy = averageEntropy(*it);
+
+        if (entropy < options.minEntropy)
+        {
+            options.skippedStream << ">" << contigIds[position(it)] << " (entropy filter, entropy: " << entropy << ")" << std::endl;
+            options.skippedStream << *it << std::endl;
+        }
+        else
+        {
+            appendValue(passed, *it);
+            appendValue(passedIds, contigIds[position(it)]);
+        }
+    }
+    
+    
+    
+    if (length(passed) == 0)
+    {
+        std::cerr << "There are no contigs that passed the entropy filter." << std::endl;
+        return false;
+    }
+    
+    if (options.verbose)
+        std::cerr << "[" << time(0) << "] " << "Passed entropy filter: " << length(passed) << std::endl;
+    
+    contigs = passed;
+    contigIds = passedIds;
+    
+    return true;
+}
+
+// --------------------------------------------------------------------------
 // Function readNextContig()
 // --------------------------------------------------------------------------
 

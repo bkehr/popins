@@ -432,13 +432,7 @@ int popins_merge(int argc, char const ** argv)
     std::map<TSize, ContigComponent<TSequence> > components;
     std::set<int> skipped;
 
-    // Reading of input files (files of contigs, and files of components if -c option is set).
-    unsigned batchOffset = 0;
-    int totalContigs = readInputFiles(contigs, contigIds, contigsMap, contigIdsMap, batchOffset, components, skipped, options);
-    if (totalContigs == -1) return 1;
-    addReverseComplementContigs(contigs, contigIds);
-
-    // Prepare the output files.
+    // Open the output files.
     options.outputStream.open(toCString(options.outputFile), std::ios_base::out);
     if (!options.outputStream.is_open())
     {
@@ -454,6 +448,13 @@ int popins_merge(int argc, char const ** argv)
             return 1;
         }
     }
+
+    // Reading of input files (files of contigs, and files of components if -c option is set).
+    unsigned batchOffset = 0;
+    int totalContigs = readInputFiles(contigs, contigIds, contigsMap, contigIdsMap, batchOffset, components, skipped, options);
+    if (totalContigs == -1) return 1;
+    if (filterByEntropy(contigs, contigIds, options) == 0) return 1;
+    addReverseComplementContigs(contigs, contigIds);
 
     // Initialize Union-Find data structure for partitioning.
     UnionFind<int> uf;

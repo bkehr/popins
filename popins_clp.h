@@ -133,10 +133,11 @@ struct MergingOptions {
     int errorPenalty;
     int minScore;
     int minTipScore;
+    double minEntropy;
 
     MergingOptions() :
         outputFile("supercontigs.fa"), verbose(false), veryVerbose(false), batchIndex(0), batches(1),
-        errorRate(0.01), minimalLength(60), qgramLength(47), matchScore(1), errorPenalty(-5), minScore(90), minTipScore(30)
+        errorRate(0.01), minimalLength(60), qgramLength(47), matchScore(1), errorPenalty(-5), minScore(90), minTipScore(30), minEntropy(0.88)
     {} 
 };
 
@@ -318,6 +319,8 @@ setupParser(ArgumentParser & parser, MergingOptions & options)
     addOption(parser, ArgParseOption("p", "penalty", "Error penalty for Smith-Waterman alignment.", ArgParseArgument::INTEGER, "INT"));
     addOption(parser, ArgParseOption("s", "minScore", "Minimal score for Smith-Waterman alignment.", ArgParseArgument::INTEGER, "INT"));
     addOption(parser, ArgParseOption("t", "minTipScore", "Minimal score for tips in supercontig graph.", ArgParseArgument::INTEGER, "INT"));
+    addOption(parser, ArgParseOption("y", "minEntropy", "Minimal entropy for discarding low-complexity sequences. Choose as 0.0 to disable filter.", ArgParseArgument::DOUBLE, "FLOAT"));
+    
     
     // Program mode options
     addSection(parser, "Program mode options");
@@ -347,6 +350,8 @@ setupParser(ArgumentParser & parser, MergingOptions & options)
     setMinValue(parser, "l", "3");
     setMinValue(parser, "k", "3");
     setMinValue(parser, "t", "0");
+    setMinValue(parser, "y", "0");
+    setMaxValue(parser, "y", "1");
     setValidValues(parser, "o", "txt fa fna fasta");
     setValidValues(parser, "os", "fa fna fasta");
 
@@ -358,6 +363,7 @@ setupParser(ArgumentParser & parser, MergingOptions & options)
     setDefaultValue(parser, "p", options.errorPenalty);
     setDefaultValue(parser, "s", options.minScore);
     setDefaultValue(parser, "t", options.minTipScore);
+    setDefaultValue(parser, "y", options.minEntropy);
     setDefaultValue(parser, "b", options.batches);
     setDefaultValue(parser, "i", options.batchIndex);
     setDefaultValue(parser, "o", "supercontigs.fa or components_<BATCH INDEX>.txt");
@@ -571,6 +577,8 @@ getOptionValues(MergingOptions & options, ArgumentParser & parser)
         getOptionValue(options.errorPenalty, parser, "penalty");
     if (isSet(parser, "minTipScore"))
         getOptionValue(options.minTipScore, parser, "minTipScore");
+    if (isSet(parser, "minEntropy"))
+        getOptionValue(options.minEntropy, parser, "minEntropy");
     
     // Get program mode options.
     if (isSet(parser, "batchIndex") && isSet(parser, "batches"))
