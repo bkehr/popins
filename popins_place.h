@@ -3,6 +3,7 @@
 #include <seqan/sequence.h>
 #include <seqan/stream.h>
 #include <seqan/vcf_io.h>
+#include <seqan/seq_io.h>
 
 #include "popins_location.h"
 #include "align_split.h"
@@ -55,19 +56,22 @@ loadSequences(std::map<CharString, TSeq> & seqs,
 template<typename TSeq>
 bool
 artificialReferences(String<Pair<TSeq> > & concatRefs,
-                                String<Location> & locations,
-                                CharString & referenceFile,
-                                CharString & contigFile,
-                                unsigned readLength,
-                                unsigned maxInsertSize)
+                     String<Location> & locations,
+                     std::map<CharString, TSeq> & contigs,
+                     CharString & referenceFile,
+                     unsigned readLength,
+                     unsigned maxInsertSize)
 {
     typedef String<Location> TLocations;
     typedef Iterator<TLocations>::Type TLocsIter;
     
-    // Load the genome and the contig file.
-    std::map<CharString, TSeq> genome, contigs;
-    if (loadSequences(genome, referenceFile) != 0) return 1;
-    if (loadSequences(contigs, contigFile) != 0) return 1;
+    // Use fai to jump into reference.
+    FaiIndex fai;
+    if (read(fai, toCString(referenceFile)) != 0)
+    {
+        std::cerr << "ERROR: Could not open fai index for " << referenceFile << std::endl;
+        return 1;
+    }
 
     // Append reference sequences.
     TLocsIter locsEnd = end(locations);
@@ -75,12 +79,13 @@ artificialReferences(String<Pair<TSeq> > & concatRefs,
     {
         if (contigs.count((*loc).contig) == 0)
         {
-            std::cerr << "ERROR: Could not find record for " << (*loc).contig << " in contigs file " << contigFile << std::endl;
+            std::cerr << "ERROR: Could not find record for " << (*loc).contig << " in contigs file." << std::endl;
             return 1;
         }
-        if (genome.count((*loc).chr) == 0)
+        unsigned idx = 0;
+        if (!getIdByName(fai, (*loc).chr, idx))
         {
-            std::cerr << "ERROR: Could not find record for " << (*loc).chr << " in file of reference genome " << referenceFile << std::endl;
+            std::cerr << "ERROR: Could not find " << (*loc).chr << " in FAI index." << std::endl;
             return 1;
         }
 
@@ -89,12 +94,14 @@ artificialReferences(String<Pair<TSeq> > & concatRefs,
 
         if ((*loc).chrOri)
         {
-            TSeq chrInfix = infix(genome[(*loc).chr], (*loc).chrStart+readLength, (*loc).chrEnd+maxInsertSize);
+            TSeq chrInfix;
+            readRegion(chrInfix, fai, idx, (*loc).chrStart+readLength, (*loc).chrEnd+maxInsertSize);
             appendValue(concatRefs, Pair<TSeq>(chrInfix, contig));
         }
         else
         {
-            TSeq chrInfix = infix(genome[(*loc).chr], (*loc).chrStart-maxInsertSize, (*loc).chrEnd);
+            TSeq chrInfix;
+            readRegion(chrInfix, fai, idx, (*loc).chrStart-maxInsertSize, (*loc).chrEnd);
             appendValue(concatRefs, Pair<TSeq>(contig, chrInfix));
         }
     }
@@ -260,7 +267,7 @@ template<typename TStream, typename TPos, typename TScore, typename TSize, typen
 void
 writeVcf(TStream & vcfStream,
          CharString & chr, CharString & contig, TPos chrPos, TPos contigPos, bool chrOri, bool contigOri,
-         TScore & score, TSize numReads, TSize1 splitReads, unsigned splitReadsSamePosition)
+         TScore & score, TSize numReads, TSize1 splitReads, unsigned splitReadsSamePosition, bool groupRepresentative)
 {
     VcfRecord record;
     
@@ -282,13 +289,13 @@ writeVcf(TStream & vcfStream,
     if (chrOri)
     {
         alt << "N[" << contig << (contigOri ? "r" : "f");
-        if (contigPos != maxValue<TPos>()) alt << ":" << contigPos;
+        if (contigPos != maxValue<TPos>() && groupRepresentative) alt << ":" << contigPos;
         alt << "[";
     }
     else
     {
         alt << "]" << contig << (contigOri ? "f" : "r");
-        if (contigPos != maxValue<TPos>()) alt << ":" << contigPos;
+        if (contigPos != maxValue<TPos>() && groupRepresentative) alt << ":" << contigPos;
         alt << "]N";
     }
     record.alt = alt.str();
@@ -297,6 +304,7 @@ writeVcf(TStream & vcfStream,
     std::stringstream info;
     info << "AS=" << score << ";" << "RP=" << numReads << ";";
     if (splitReads != 0) info << "SR=" << splitReads << ";" << "SP=" << splitReadsSamePosition << ";";
+    if (!groupRepresentative) info << "GROUPED;";
     record.info = info.str();
 
     writeRecord(vcfStream, record, context, Vcf());
@@ -308,9 +316,11 @@ writeVcf(TStream & vcfStream,
 
 int popins_place(int argc, char const ** argv)
 {
+    typedef Dna5String TSeq;
+    typedef Size<TSeq>::Type TSize;
     typedef String<Location> TLocations;
     typedef Iterator<TLocations>::Type TLocsIter;
-    typedef Position<Dna5String>::Type TPos;
+    typedef Position<TSeq>::Type TPos;
 
     // Parse the command line to get option values.
     PlacingOptions options;
@@ -384,20 +394,30 @@ int popins_place(int argc, char const ** argv)
         std::cerr << "[" << time(0) << "] " << "Keeping " << length(locations) << " locations with score >= "
                   << options.minLocScore << " and shorter than " << (2*options.maxInsertSize) << std::endl;
 
+    // Load the contig file.
+    std::map<CharString, TSeq> contigs;
+    if (loadSequences(contigs, options.supercontigFile) != 0) return 1;
+    
+    // Determine groups of locations that overlap and where the contig prefix is highly similar
+    if (options.verbose) std::cerr << "[" << time(0) << "] " << "Grouping locations by reference position and contig sequence... " << std::flush;
+    std::map<TSize, std::set<TSize> > groups;
+    groupLocations(groups, locations, contigs);
+    if (options.verbose) std::cerr << groups.size() << " groups." << std::endl;
+
     // Concatenate the artificial reference for each location.
     if (options.verbose)
         std::cerr << "[" << time(0) << "] " << "Collecting contig and location sequences from "
                                             << options.referenceFile << " and " << options.supercontigFile << std::endl;
-    String<Pair<Dna5String> > artificialRefs;
-    if (artificialReferences(artificialRefs, locations,
-                             options.referenceFile, options.supercontigFile,
-                             options.readLength, options.maxInsertSize) != 0) return 1;
+    String<Pair<TSeq> > artificialRefs;
+    if (artificialReferences(artificialRefs, locations, contigs,
+                             options.referenceFile, options.readLength, options.maxInsertSize) != 0) return 1;
 
     // Split alignment per individual.
     BamStream bamStream;
     BamIndex<Bai> bamIndex;
 
-    unsigned discardedLocs = 0;
+    std::set<TSize> highCoverageLocs;
+    TSize discarded = 0;
     
     String<std::map<Pair<TPos>, unsigned> > splitPosMaps;
     resize(splitPosMaps, length(locations));
@@ -408,13 +428,15 @@ int popins_place(int argc, char const ** argv)
     Iterator<String<CharString> >::Type filesEnd = end(options.bamFiles);
     for (Iterator<String<CharString> >::Type file = begin(options.bamFiles); file != filesEnd; ++file)
     {
-        if (options.verbose) std::cerr << "[" << time(0) << "] " << "Split aligning reads from " << *file << std::endl;
+        if (options.verbose) std::cerr << "[" << time(0) << "] " << "Split aligning reads from " << *file << std::flush;
         if (openBamLoadBai(bamStream, bamIndex, *file) != 0) return 1;
         
-        for (unsigned i = 0; i < length(locations); ++i)
+        for (std::map<TSize, std::set<TSize> >::iterator it = groups.begin(); it != groups.end(); ++it)
         {
-            if (splitReadCounts[i] > options.maxSplitReads) continue;
+            unsigned i = it->first;
+            if (highCoverageLocs.count(i) > 0 || splitReadCounts[i] > options.maxSplitReads) continue;
 
+            std::cerr << "." << std::flush;
             // Jump to the location in bam file.
             TPos locStart = 0, locEnd = 0;
             int rID = 0;
@@ -423,8 +445,9 @@ int popins_place(int argc, char const ** argv)
             if (!hasAlignments) continue;
 
             unsigned readCount = 0;
-            bool highCoverage = false;
+            unsigned readCountAligned = 0;
             unsigned covThresh = (100 * (locEnd - locStart + options.readLength)) / options.readLength;
+            unsigned covThreshAlign = 100;
 
 //            std::cout << "Jumped to " << locations[i].chr << ":" << locations[i].chrStart << " " << locations[i].contig << std::endl;
 
@@ -434,9 +457,9 @@ int popins_place(int argc, char const ** argv)
             record.rID = rID;
             while (!atEnd(bamStream) && (TPos)record.beginPos < locEnd && rID == record.rID)
             {
-                if (readCount > covThresh)
+                if (readCount > covThresh || readCountAligned > covThreshAlign)
                 {
-                    highCoverage = true;
+                    highCoverageLocs.insert(i);
                     break;
                 }
                 if (readRecord(record, bamStream) != 0)
@@ -447,8 +470,9 @@ int popins_place(int argc, char const ** argv)
                 if ((TPos)record.beginPos < locStart || record.rID != rID) continue;
                 
                 ++readCount;
-                if (length(record.cigar) == 1) continue;
+                if (length(record.cigar) < 2) continue;
                 if ((locations[i].chrOri && hasFlagNextRC(record)) || (!locations[i].chrOri && !hasFlagNextRC(record))) continue;
+                ++readCountAligned;
 
                 Pair<TPos> refPos;
                 if (splitAlign(refPos, artificialRefs[i], record, locations[i].chrOri) != 0) continue;
@@ -471,19 +495,13 @@ int popins_place(int argc, char const ** argv)
                 ++splitReadCounts[i];
                 if (splitReadCounts[i] > options.maxSplitReads) break;
             }
-
-            // Discard high coverage locations.
-            if (highCoverage)
-            {
-                replace(locations, i, i+1, TLocations());
-                replace(artificialRefs, i, i+1, String<Pair<Dna5String> >());
-                replace(splitPosMaps, i, i+1, String<std::map<Pair<TPos>, unsigned> >());
-                ++discardedLocs;
-                --i;
-            }
         }
-        if (file == begin(options.bamFiles) && options.verbose)
-            std::cerr << "[" << time(0) << "] " << "Discarded " << discardedLocs << " locations because of high coverage." << std::endl;
+        std::cerr << std::endl;
+        if (discarded != highCoverageLocs.size() && options.verbose)
+        {
+            std::cerr << "[" << time(0) << "] " << "Discarded " << (highCoverageLocs.size() - discarded) << " groups because of high coverage." << std::endl;
+            discarded = highCoverageLocs.size();
+        }
     }
 
     // Find the best split positions in sets and write the output.
@@ -492,25 +510,45 @@ int popins_place(int argc, char const ** argv)
                                             << options.vcfInsertionsFile << std::endl;
     std::fstream vcfStream;
     if (initVcfStream(vcfStream, options.vcfInsertionsFile) != 0) return 1;
-    for (unsigned i = 0; i < length(locations); ++i)
+    for (std::map<TSize, std::set<TSize> >::iterator it = groups.begin(); it != groups.end(); ++it)
     {
-        Location loc = locations[i];
+        if (highCoverageLocs.count(it->first) > 0) continue;
+        // Write record for group representative
+        Location loc = locations[it->first];
         unsigned maxCount = 0;
         unsigned totalCount = 0;
         Pair<TPos> splitPos;
-        if (bestSplitPosition(splitPos, maxCount, totalCount, splitPosMaps[i]) == 0)
+        if (bestSplitPosition(splitPos, maxCount, totalCount, splitPosMaps[it->first]) == 0)
         {
             writeVcf(vcfStream, loc.chr, loc.contig, splitPos.i1, splitPos.i2, loc.chrOri, loc.contigOri,
-                     loc.score, loc.numReads, totalCount, maxCount);
+                     loc.score, loc.numReads, totalCount, maxCount, true);
+
+            // Write records for group members
+            for (std::set<TSize>::iterator it2 = (it->second).begin(); it2 != (it->second).end(); ++it2)
+            {
+                loc = locations[*it2];
+                writeVcf(vcfStream, loc.chr, loc.contig, splitPos.i1, splitPos.i2, loc.chrOri, loc.contigOri,
+                         loc.score, loc.numReads, totalCount, maxCount, false);
+            }
         }
         else
         {
             if (loc.chrOri)
                 writeVcf(vcfStream, loc.chr, loc.contig, loc.chrEnd + options.readLength, maxValue<TPos>(), loc.chrOri, loc.contigOri,
-                         loc.score, loc.numReads, 0, 0u);
+                         loc.score, loc.numReads, 0, 0u, true);
             else
                 writeVcf(vcfStream, loc.chr, loc.contig, loc.chrStart, maxValue<TPos>(), loc.chrOri, loc.contigOri,
-                         loc.score, loc.numReads, 0, 0u);
+                         loc.score, loc.numReads, 0, 0u, true);
+            for (std::set<TSize>::iterator it2 = (it->second).begin(); it2 != (it->second).end(); ++it2)
+            {
+                loc = locations[*it2];
+                if (loc.chrOri)
+                    writeVcf(vcfStream, loc.chr, loc.contig, loc.chrEnd + options.readLength, maxValue<TPos>(), loc.chrOri, loc.contigOri,
+                             loc.score, loc.numReads, 0, 0u, false);
+                else
+                    writeVcf(vcfStream, loc.chr, loc.contig, loc.chrStart, maxValue<TPos>(), loc.chrOri, loc.contigOri,
+                             loc.score, loc.numReads, 0, 0u, false);
+            }
         }
     }
 

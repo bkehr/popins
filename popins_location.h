@@ -12,6 +12,28 @@
 using namespace seqan;
 
 // ==========================================================================
+// struct GenomicInterval
+// ==========================================================================
+
+struct GenomicInterval
+{
+    typedef Position<CharString>::Type TPos;
+    
+    CharString chr;
+    TPos begin;
+    TPos end;
+    bool ori;
+    
+    GenomicInterval(CharString & c, TPos b, TPos e, bool o) :
+        chr(c), begin(b), end(e), ori(o)
+    {}
+    
+    GenomicInterval(GenomicInterval const & other) :
+        chr(other.chr), begin(other.begin), end(other.end), ori(other.ori)
+    {}
+};
+
+// ==========================================================================
 // struct AnchoringRecord
 // ==========================================================================
 
@@ -19,6 +41,7 @@ struct AnchoringRecord
 {
     typedef Position<CharString>::Type TPos;
 
+    // TODO replace by GenomicInterval
     CharString chr;
     TPos chrStart;
     TPos chrEnd;
@@ -36,6 +59,7 @@ struct Location
 {
     typedef Position<CharString>::Type TPos;
 
+    // TODO replace by GenomicInterval
     CharString chr;
     TPos chrStart;
     TPos chrEnd;
@@ -822,6 +846,132 @@ mergeLocations(std::fstream & stream, String<Location> & locations, String<CharS
     for (unsigned i = 0; i < length(tmpFiles); ++i) remove(toCString(tmpFiles[i]));
 
     return 0;
+}
+
+// ==========================================================================
+
+bool
+overlaps(GenomicInterval & i1, GenomicInterval & i2)
+{
+    if (i1.chr != i2.chr) return false;
+    if (i1.ori != i2.ori) return false;
+    if (i1.end <= i2.begin) return false;
+    if (i2.end <= i1.begin) return false;
+    return true;
+}
+
+// --------------------------------------------------------------------------
+
+template<typename TSize, typename TSeq>
+void
+verifyCandidateGroup(std::map<TSize, std::set<TSize> > & groups, String<TSize> & candidates, String<Location> & locations, std::map<CharString, TSeq> & contigs)
+{
+    std::map<TSize, Pair<TSize> > aligned; // which location aligns to which other location with which offset (loc1 <- Pair(loc2, offset))
+    
+    for (TSize i = 0; i < length(candidates)-1; ++i)
+    {
+        TSeq contig_i = contigs[locations[candidates[i]].contig];
+        if (locations[candidates[i]].contigOri) reverseComplement(contig_i);
+
+        for (TSize j = i+1; j < length(candidates); ++j)
+        {
+            if (aligned.count(candidates[j]) > 0) continue;
+            
+            TSeq contig_j = contigs[locations[candidates[j]].contig];
+            if (locations[candidates[j]].contigOri) reverseComplement(contig_j);
+
+            Align<TSeq> align;
+            resize(rows(align), 2);
+            assignSource(row(align, 0), prefix(contig_i, std::min((TSize)200, length(contig_i))));
+            assignSource(row(align, 1), prefix(contig_j, std::min((TSize)200, length(contig_j))));
+
+            int score = globalAlignment(align, Score<int, Simple>(1, -2, -1, -4), AlignConfig<true, true, true, true>());
+
+            if (score < 50) continue;
+
+            TSize alignBegin = std::max(toViewPosition(row(align, 0), 0), toViewPosition(row(align, 1), 0));
+            TSize alignEnd = std::min(toViewPosition(row(align, 0), length(contig_i)), toViewPosition(row(align, 1), length(contig_j)));
+//            std::cerr << "Score: " << score << ", Relative score: " << (score / ((double) alignEnd - alignBegin)) << std::endl;
+//            std::cerr << align << std::endl;
+            
+            if (score / ((double) alignEnd - alignBegin) < 0.8) continue;
+
+            // add to map
+            if (toViewPosition(row(align, 0), 0) == 0)
+                aligned[candidates[j]] = Pair<TSize>(candidates[i], toViewPosition(row(align, 1), 0));
+            else
+                aligned[candidates[j]] = Pair<TSize>(candidates[i], toViewPosition(row(align, 0), 0));
+            break;
+        }
+    }
+    
+    
+    // Make the groups from aligned
+    typename Iterator<String<TSize> >::Type it = begin(candidates);
+    typename Iterator<String<TSize> >::Type itEnd = end(candidates);
+    while (it != itEnd)
+    {
+        if (aligned.count(*it) == 0)
+        {
+            groups[*it];
+            ++it;
+        }
+        else
+        {
+            TSize i = aligned[*it].i1;
+            if (aligned.count(i) > 0)
+            {
+                aligned[*it].i1 = aligned[i].i1;
+                aligned[*it].i2 += aligned[i].i2;
+            }
+            else // i is group representative
+            {
+                groups[i].insert(*it);
+                ++it;
+            }
+        }
+    }
+}
+
+// ==========================================================================
+// Function groupLocations()
+// ==========================================================================
+
+template<typename TSize, typename TSeq>
+void
+groupLocations(std::map<TSize, std::set<TSize> > & groups, String<Location> & locations, std::map<CharString, TSeq> & contigs)
+{
+    String<TSize> candidates;
+    appendValue(candidates, 0);
+    GenomicInterval interval(locations[0].chr, locations[0].chrStart, locations[0].chrEnd, locations[0].chrOri);
+    for (TSize i = 1; i < length(locations); ++i)
+    {
+        // Find candidate group of locations that overlap on reference
+        for (; i < length(locations); ++i)
+        {
+            GenomicInterval locInterval(locations[i].chr, locations[i].chrStart, locations[i].chrEnd, locations[i].chrOri);
+            if (!overlaps(interval, locInterval))
+            {
+                interval = locInterval;
+                break;
+            }
+            interval.begin = _min(interval.begin, locInterval.begin);
+            interval.end = _max(interval.end, locInterval.end);
+            appendValue(candidates, i);
+        }
+        verifyCandidateGroup(groups, candidates, locations, contigs);
+        clear(candidates);
+        appendValue(candidates, i);
+    }
+
+//    // Debug code: Output groups.
+//    for(typename std::map<TSize, std::set<TSize> >::iterator it = groups.begin(); it != groups.end(); ++it)
+//    {
+//        std::cerr << it->first << " <-";
+//        for(typename std::set<TSize>::iterator it2 = (it->second).begin(); it2 != (it->second).end(); ++it2)
+//            std::cerr << " " << *it2;
+//        std::cerr << std::endl;
+//    }
 }
 
 #endif // #ifndef POPINS_LOCATION_H_
