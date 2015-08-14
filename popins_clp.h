@@ -45,50 +45,6 @@ readFileNames(String<CharString> & files, CharString const & filenameFile)
     return 0;
 }
 
-// --------------------------------------------------------------------------
-
-bool
-readFileNames(String<CharString> & files, String<unsigned> & numPerFile, CharString const & filenameFile)
-{
-    if (filenameFile == "") return 0;
-
-    std::fstream stream(toCString(filenameFile), std::fstream::in);
-    if (!stream.is_open())
-    {
-        std::cerr << "ERROR: Could not open file listing files " << filenameFile << std::endl;
-        return 1;
-    }
-    
-    RecordReader<std::fstream, SinglePass<> > reader(stream);
-    
-    while (!atEnd(reader))
-    {
-        CharString file;
-        int res = readUntilWhitespace(file, reader);
-        if (res != 0)
-        {
-            std::cerr << "ERROR while reading filename from " << filenameFile << std::endl;
-            return 1;
-        }
-        appendValue(files, file);
-        
-        skipWhitespaces(reader);
-        
-        CharString buffer;
-        res = readLine(buffer, reader);
-        if (res != 0)
-        {
-            std::cerr << "ERROR while reading number of contigs for " << file << " from " << filenameFile << std::endl;
-            return 1;
-        }
-        unsigned num;
-        lexicalCast2<unsigned>(num, buffer);
-        appendValue(numPerFile, num);
-    }
-    
-    return 0;
-}
-
 // ==========================================================================
 // struct <Command>Options
 // ==========================================================================
@@ -112,10 +68,7 @@ struct AssemblyOptions {
 
 struct MergingOptions {
     String<CharString> contigFiles;
-    String<unsigned> contigsPerFile;
-    CharString contigFilesFile;
     String<CharString> componentFiles;
-
     CharString outputFile;
     CharString skippedFile;
     std::fstream outputStream;
@@ -123,8 +76,8 @@ struct MergingOptions {
     bool verbose;
     bool veryVerbose;
 
-    int batchIndex;
-    int batches;
+    unsigned batchIndex;
+    unsigned batches;
     
     double errorRate;
     int minimalLength;
@@ -137,7 +90,7 @@ struct MergingOptions {
 
     MergingOptions() :
         outputFile("supercontigs.fa"), verbose(false), veryVerbose(false), batchIndex(0), batches(1),
-        errorRate(0.01), minimalLength(60), qgramLength(47), matchScore(1), errorPenalty(-5), minScore(90), minTipScore(30), minEntropy(0.88)
+        errorRate(0.01), minimalLength(60), qgramLength(47), matchScore(1), errorPenalty(-5), minScore(90), minTipScore(30), minEntropy(0.75)
     {} 
 };
 
@@ -552,15 +505,7 @@ getOptionValues(AssemblyOptions & options, ArgumentParser const & parser)
 int
 getOptionValues(MergingOptions & options, ArgumentParser & parser)
 {
-    if (getArgumentValueCount(parser, 0) == 1)
-    {
-         getArgumentValue(options.contigFilesFile, parser, 0);
-         if (readFileNames(options.contigFiles, options.contigsPerFile, options.contigFilesFile) != 0) return 1;
-    }
-    else
-    {
-        options.contigFiles = getArgumentValues(parser, 0);
-    }
+    options.contigFiles = getArgumentValues(parser, 0);
     
     // Get parameter values.
     if (isSet(parser, "errRate"))

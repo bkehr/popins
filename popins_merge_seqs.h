@@ -4,7 +4,7 @@
 #include <seqan/align.h>
 
 #include "contig_id.h"
-#include "contig_component.h"
+#include "contig_structs.h"
 
 using namespace seqan;
 
@@ -168,9 +168,9 @@ enumeratePaths(String<Path<TSeq, typename ComponentGraph<TSeq>::TVertexDescripto
 // Function getSeqsByAlignOrder()
 // --------------------------------------------------------------------------
 
-template<typename TSeq, typename TContigs, typename TContigIds>
+template<typename TSeq,typename TContigs>
 void
-getSeqsByAlignOrder(ContigComponent<TSeq> & component, TContigs & contigs, TContigIds & contigIds)
+getSeqsByAlignOrder(ContigComponent<TSeq> & component, TContigs & contigs)
 {
     typedef typename Size<TSeq>::Type TSize;
     typedef typename std::set<Pair<TSize> >::iterator TPairIter;
@@ -201,12 +201,8 @@ getSeqsByAlignOrder(ContigComponent<TSeq> & component, TContigs & contigs, TCont
     clear(ordered);
     
     // --- bring contigs and contig ids into the order ---
-
     for (TSize i = 0; i < length(order); ++i)
-    {
-        appendValue(component.ids, contigIds[order[i]]);
         appendValue(component.contigs, contigs[order[i]]);
-    }
 }
 
 // --------------------------------------------------------------------------
@@ -297,11 +293,15 @@ bool mergeSeqWithGraph(ComponentGraph<TSeq1> & compGraph,
         if (alignEndPath == length(path.seq)) // alignment ends at end of path
         {
             append(compGraph.sequenceMap[v], suffix(seq, alignEndSeq));
+            path.positionMap.erase(vPos);
+            path.positionMap[vPos + length(seq) - alignEndSeq] = v;
         }
         else if (outDegree(compGraph.graph, v) == 0 && vPos - alignEndPath < (TSize)minBranchLen) // unaligned suffix of seq is longer than minBranchLen, but v is a leaf and unaligned suffix in v is shorter than minBranchLen
         {
             TPos splitPos = length(compGraph.sequenceMap[v]) - (vPos - alignEndPath); // relative to vertex label
             replace(compGraph.sequenceMap[v], splitPos, length(compGraph.sequenceMap[v]), suffix(seq, alignEndSeq));
+            path.positionMap.erase(vPos);
+            path.positionMap[alignEndPath + length(seq) - alignEndSeq] = v;
         }
         else if (length(seq) - alignEndSeq > (TSize)minBranchLen) // unaligned suffix of seq is longer than minBranchLen
         {
@@ -310,10 +310,12 @@ bool mergeSeqWithGraph(ComponentGraph<TSeq1> & compGraph,
                 TPos splitPos = length(compGraph.sequenceMap[v]) - (vPos - alignEndPath); // relative to vertex label
                 TSeq1 prefixSeq = prefix(compGraph.sequenceMap[v], splitPos);
                 TSeq1 suffixSeq = suffix(compGraph.sequenceMap[v], splitPos);
-                splitVertex(compGraph, v, prefixSeq, suffixSeq);
+                TVertexDescriptor v2 = splitVertex(compGraph, v, prefixSeq, suffixSeq);
+                path.positionMap[vPos] = v2;
+                path.positionMap[splitPos] = v;
             }
             TSeq1 suf = suffix(seq, alignEndSeq);
-            TVertexDescriptor vBranch = addVertex(compGraph, suf);
+            TVertexDescriptor vBranch = addVertex(compGraph, suf); 
             addEdge(compGraph.graph, v, vBranch);
         }
     }
@@ -364,7 +366,7 @@ bool mergeSeqWithGraph(ComponentGraph<TSeq1> & compGraph,
 template<typename TSeq1, typename TSeq2, typename TSpec, typename TLength, typename TValueMatch, typename TValueError>
 bool
 addSequencesToGraph(ComponentGraph<TSeq1> & compGraph,
-                    StringSet<TSeq2, TSpec> & seqs,
+                    StringSet<Contig<TSeq2>, TSpec> & contigs,
                     TLength minBranchLen,
                     TValueMatch matchScore,
                     TValueError errorPenalty,
@@ -377,12 +379,12 @@ addSequencesToGraph(ComponentGraph<TSeq1> & compGraph,
 
     Score<TScoreValue, Simple> scoringScheme(matchScore, errorPenalty, errorPenalty);
 
-    for (TSize i = 1; i < length(seqs); ++i)
+    for (TSize i = 1; i < length(contigs); ++i)
     {
         String<TPath> paths;
         enumeratePaths(paths, compGraph);
         
-        if (length(paths) > 30) return false;
+        if (length(paths) > 50) return false;
 
         TScoreValue maxScore = minValue<TScoreValue>();
         TPath bestPath;
@@ -392,9 +394,9 @@ addSequencesToGraph(ComponentGraph<TSeq1> & compGraph,
         for (TSize j = 0; j < length(paths); ++j)
         {
             Gaps<TSeq1> gapsPath(paths[j].seq);
-            Gaps<TSeq2> gapsSeq(seqs[i]);
+            Gaps<TSeq2> gapsSeq(contigs[i].seq);
 
-            int diag = bestDiagonal(seqs[i], paths[j].seq, qgramLength);
+            int diag = bestDiagonal(contigs[i].seq, paths[j].seq, qgramLength);
 
             TScoreValue val = 0;
             if (diag == maxValue<int>()) val = localAlignment(gapsPath, gapsSeq, scoringScheme);
@@ -409,7 +411,7 @@ addSequencesToGraph(ComponentGraph<TSeq1> & compGraph,
             }
         }
 
-        mergeSeqWithGraph(compGraph, bestPath, seqs[i], bestGapsPath, bestGapsSeq, minBranchLen);
+        mergeSeqWithGraph(compGraph, bestPath, contigs[i].seq, bestGapsPath, bestGapsSeq, minBranchLen);
     }
 
     return true;
@@ -422,7 +424,7 @@ addSequencesToGraph(ComponentGraph<TSeq1> & compGraph,
 template<typename TSeq1, typename TSeq2, typename TSpec, typename TLength, typename TValueMatch, typename TValueError>
 bool
 mergeSequences(String<TSeq1> & mergedSeqs,
-               StringSet<TSeq2, TSpec> & seqs,
+               StringSet<Contig<TSeq2>, TSpec> & contigs,
                TLength & minBranchLen,
                TValueMatch matchScore,
                TValueError errorPenalty,
@@ -434,8 +436,8 @@ mergeSequences(String<TSeq1> & mergedSeqs,
     typedef Path<TSeq1, typename TGraph::TVertexDescriptor> TPath;
     typedef typename Size<String<TPath> >::Type TSize;
 
-    TGraph compGraph(seqs[0]);
-    if (!addSequencesToGraph(compGraph, seqs, minBranchLen, matchScore, errorPenalty, qgramLength))
+    TGraph compGraph(contigs[0].seq);
+    if (!addSequencesToGraph(compGraph, contigs, minBranchLen, matchScore, errorPenalty, qgramLength))
         return false;
 
     String<TPath> finalPaths;
@@ -458,22 +460,22 @@ mergeSequences(String<TSeq1> & mergedSeqs,
 }
 
 // --------------------------------------------------------------------------
-// Function writeSupercontigs()
+// Function writeSkippedBranching()
 // --------------------------------------------------------------------------
 
-template<typename TStream, typename TSeq, typename TSpec1, typename TSpec2>
+template<typename TStream, typename TSeq, typename TSpec>
 void
-writeSkippedBranching(TStream & stream, StringSet<TSeq, TSpec1> & contigs, StringSet<ContigId, TSpec2> & contigIds)
+writeSkippedBranching(TStream & stream, StringSet<Contig<TSeq>, TSpec> & contigs)
 {
     for (unsigned i = 0; i < length(contigs); ++i)
     {
-        if (!contigIds[i].orientation)
+        if (!contigs[i].id.orientation)
         {
-            reverseComplement(contigs[i]);
-            contigIds[i].orientation = true;
+            reverseComplement(contigs[i].seq);
+            contigs[i].id.orientation = true;
         }
-        stream << ">" << contigIds[i] << " (branching component)" << std::endl;
-        stream << contigs[i] << std::endl;
+        stream << ">" << contigs[i].id << " (branching component)" << std::endl;
+        stream << contigs[i].seq << std::endl;
     }
 }
 
@@ -481,9 +483,9 @@ writeSkippedBranching(TStream & stream, StringSet<TSeq, TSpec1> & contigs, Strin
 // Function writeSupercontigs()
 // --------------------------------------------------------------------------
 
-template<typename TStream, typename TSeq, typename TSpec>
+template<typename TStream, typename TSeq>
 void
-writeSupercontigs(TStream & outputStream, String<TSeq> & mergedSeqs, StringSet<TSeq, TSpec> & contigs, int batchIndex, unsigned pos)
+writeSupercontigs(TStream & outputStream, String<TSeq> & mergedSeqs, unsigned numContigs, int batchIndex, unsigned pos)
 {
     typedef typename Size<TSeq>::Type TSize;
 
@@ -493,7 +495,7 @@ writeSupercontigs(TStream & outputStream, String<TSeq> & mergedSeqs, StringSet<T
         {
             outputStream << ">COMPONENT_" << batchIndex << "." << pos << "_" << char('a'+i)
                          << "_length_" << length(mergedSeqs[i])
-                         << "_size_" << length(contigs) << std::endl;
+                         << "_size_" << numContigs << std::endl;
             outputStream << mergedSeqs[i] << std::endl;
         }
     }
@@ -503,7 +505,7 @@ writeSupercontigs(TStream & outputStream, String<TSeq> & mergedSeqs, StringSet<T
         {
             outputStream << ">COMPONENT_" << batchIndex << "." << pos << "_" << char('a'+i/26) << char('a'+i%26)
                          << "_length_" << length(mergedSeqs[i])
-                         << "_size_" << length(contigs) << std::endl;
+                         << "_size_" << numContigs << std::endl;
             outputStream << mergedSeqs[i] << std::endl;
         }
     }
@@ -513,11 +515,10 @@ writeSupercontigs(TStream & outputStream, String<TSeq> & mergedSeqs, StringSet<T
 // Function constructSupercontigs()
 // ==========================================================================
 
-template<typename TSize, typename TSequence, typename TContigs, typename TContigIds>
+template<typename TSize, typename TSequence, typename TContigs>
 void
 constructSupercontigs(std::map<TSize, ContigComponent<TSequence> > & components,
                       TContigs & contigs,
-                      TContigIds & contigIds,
                       MergingOptions & options)
 {
     typedef std::map<TSize, ContigComponent<TSequence> > TComponents;
@@ -537,22 +538,20 @@ constructSupercontigs(std::map<TSize, ContigComponent<TSequence> > & components,
         // Output component if consisting of a single contig.
         if (length(component.alignedPairs) == 0)
         {
-            options.outputStream << ">" << contigIds[it->first] << std::endl;
-            options.outputStream << contigs[it->first] << std::endl;
+            if (contigs[it->first].id.orientation == false)
+            {
+                contigs[it->first].id.orientation = true;
+                reverseComplement(contigs[it->first].seq);
+            }
+            options.outputStream << ">" << contigs[it->first].id << std::endl;
+            options.outputStream << contigs[it->first].seq << std::endl;
 
             ++numSingleton;
             continue;
         }
 
         // Sort the contigs for merging.
-        getSeqsByAlignOrder(component, contigs, contigIds);
-
-        // Skip too large components.
-        if (length(component.contigs) > 10 * length(options.contigFiles))
-        {
-            if (options.verbose) std::cout << "COMPONENT_" << pos << " size:" << length(component.contigs) << " skipped." << std::endl;
-            continue;
-        }
+        getSeqsByAlignOrder(component, contigs);
 
         if (options.verbose) std::cout << "COMPONENT_" << options.batchIndex << "." << pos << " size:" << length(component.contigs) << std::endl;
 
@@ -565,7 +564,7 @@ constructSupercontigs(std::map<TSize, ContigComponent<TSequence> > & components,
             if (options.verbose)
                 std::cout << "COMPONENT_" << options.batchIndex << "." << pos << " size:" << length(component.contigs) << " given up." << std::endl;
             if (options.skippedFile != "")
-                writeSkippedBranching(options.skippedStream, component.contigs, component.ids);
+                writeSkippedBranching(options.skippedStream, component.contigs);
             ++numVeryBranching;
             ++numBranching;
             clear(component);
@@ -576,7 +575,7 @@ constructSupercontigs(std::map<TSize, ContigComponent<TSequence> > & components,
         if (length(mergedSeqs) > 1) ++numBranching;
 
         // Output the supercontig.
-        writeSupercontigs(options.outputStream, mergedSeqs, component.contigs, options.batchIndex, pos);
+        writeSupercontigs(options.outputStream, mergedSeqs, length(component.contigs), options.batchIndex, pos);
         
         clear(component);
         ++pos;
