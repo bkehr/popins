@@ -14,6 +14,9 @@ inline bool exists(CharString const & filename)
   return (stat(toCString(filename), &buffer) == 0);
 }
 
+
+// ==========================================================================
+// Function readFileNames()
 // ==========================================================================
 
 bool
@@ -42,6 +45,105 @@ readFileNames(String<CharString> & files, CharString const & filenameFile)
         appendValue(files, file);
     }
     
+    return 0;
+}
+
+// ==========================================================================
+
+template <typename TValue>
+bool readFileNames(String<CharString> & files, String<TValue> & values)
+{
+    if (length(files) > 1) return 0;
+
+    // Open input file
+    CharString filenameFile = files[0];
+    std::fstream stream(toCString(filenameFile), std::fstream::in);
+    if (!stream.is_open())
+    {
+        std::cerr << "ERROR: Could not open file listing files " << filenameFile << std::endl;
+        return 1;
+    }
+    
+    RecordReader<std::fstream, SinglePass<> > reader(stream);
+    clear(files);
+    
+    while (!atEnd(reader))
+    {
+        // Read the file name
+        CharString file;
+        int res = readUntilWhitespace(file, reader);
+        if (res != 0)
+        {
+            std::cerr << "ERROR: Failed reading filename from " << filenameFile << std::endl;
+            return 1;
+        }
+        appendValue(files, file);
+        
+        skipBlanks(reader);
+        
+        // Read the value for this filename
+        CharString buffer;
+        res = readLine(buffer, reader);
+        if (res != 0 || length(buffer) == 0)
+        {
+            std::cerr << "ERROR: Failed reading second column of " << filenameFile << std::endl;
+            return 1;
+        }
+        TValue val;
+        lexicalCast2<TValue>(val, buffer);
+        appendValue(values, val);
+    }
+    
+    return 0;
+}
+
+// ==========================================================================
+
+bool
+parseInterval(Triple<CharString, unsigned, unsigned> & out, CharString & in)
+{
+    Iterator<CharString, Rooted>::Type it = begin(in, Rooted());
+
+    unsigned colonPos = 0;
+    while (it != end(in))
+    {
+        if (*it == ':')
+        {
+            colonPos = position(it);
+            break;
+        }
+        ++it;
+    }
+
+    if (colonPos == 0)
+    {
+        out.i1 = in;
+        out.i2 = 0;
+        out.i3 = maxValue<unsigned>();
+        return 0;
+    }
+
+    unsigned dashPos = 0;  
+    while (it != end(in))
+    {
+        if (*it == '-')
+        {
+            dashPos = position(it);
+            break;
+        }
+        ++it;
+    }
+
+    if (dashPos == 0)
+    {
+        std::cerr << "ERROR: Interval is not in format CHR:BEG-END." << std::endl;
+        return 1;
+    }
+
+    out.i1 = prefix(in, colonPos);
+    out.i2 = lexicalCast<unsigned>(infix(in, colonPos + 1, dashPos));
+    out.i3 = lexicalCast<unsigned>(suffix(in, dashPos + 1));
+
     return 0;
 }
 
@@ -113,13 +215,15 @@ struct PlacingOptions {
     CharString referenceFile;
     
     String<CharString> bamFiles;
+    String<double> bamAvgCov;
 
     CharString locationsFile;          // merged from all individuals
     String<CharString> locationsFiles; // one file per individual
     CharString vcfInsertionsFile;
     
-    unsigned batchIndex;
-    unsigned batchSize;
+    //unsigned batchIndex;
+    //unsigned batchSize;
+    Triple<CharString, unsigned, unsigned> interval; // chrom, beginPos, endPos
     
     double minLocScore;
     
@@ -131,7 +235,7 @@ struct PlacingOptions {
     bool verbose;
     
     PlacingOptions() :
-        locationsFile("locations.txt"), vcfInsertionsFile("insertions.vcf"), batchIndex(0), batchSize(maxValue<unsigned>()),
+        locationsFile("locations.txt"), vcfInsertionsFile("insertions.vcf"),
         minLocScore(0.3), readLength(100), maxInsertSize(800), maxSplitReads(1000),
         verbose(false)
     {}
@@ -383,8 +487,9 @@ setupParser(ArgumentParser & parser, PlacingOptions & options)
     addOption(parser, ArgParseOption("ml", "locations", "Name of file with approximate insertion locations merged from all individuals. Computed if not exists.", ArgParseArgument::INPUTFILE, "LOCATIONFILE"));
     addOption(parser, ArgParseOption("m", "minScore", "Minimal score of a location to be passed to split mapping.", ArgParseArgument::DOUBLE, "FLOAT"));
     addOption(parser, ArgParseOption("b", "bamFiles", "File listing original, full bam files of individuals, one per line. Specify to determine exact insertion positions from split reads.", ArgParseArgument::INPUTFILE, "FILE"));
-    addOption(parser, ArgParseOption("s", "batchSize", "Number of locations per batch. Specify to split computation into smaller batches. Requires locations file to exist, and specification of bam files, and batch number.", ArgParseArgument::INTEGER, "INT"));
-    addOption(parser, ArgParseOption("i", "batchIndex", "Number of batch. Specify to split computation into smaller batches. Requires locations file to exist, and specification of bam files and batch size.", ArgParseArgument::INTEGER, "INT"));
+    //addOption(parser, ArgParseOption("s", "batchSize", "Number of locations per batch. Specify to split computation into smaller batches. Requires locations file to exist, and specification of bam files, and batch number.", ArgParseArgument::INTEGER, "INT"));
+    //addOption(parser, ArgParseOption("i", "batchIndex", "Number of batch. Specify to split computation into smaller batches. Requires locations file to exist, and specification of bam files and batch size.", ArgParseArgument::INTEGER, "INT"));
+    addOption(parser, ArgParseOption("i", "interval", "Genomic interval. Specify to split split alignment into smaller batches. Requires locations file to exist, and specification of bam files.", ArgParseArgument::STRING, "CHR:BEG-END"));
 
     addOption(parser, ArgParseOption("r", "readLength", "The length of the reads.", ArgParseArgument::INTEGER, "INT"));
     addOption(parser, ArgParseOption("e", "maxInsertSize", "The maximal expected insert size of the read pairs.", ArgParseArgument::INTEGER, "INT"));
@@ -610,7 +715,8 @@ getOptionValues(PlacingOptions & options, ArgumentParser & parser)
     {
         CharString locationsFilesFile;
         getOptionValue(locationsFilesFile, parser, "locationsFiles");
-        if (readFileNames(options.locationsFiles, locationsFilesFile) != 0) return 1;
+        if (readFileNames(options.locationsFiles, locationsFilesFile) != 0)
+            return 1;
     }
     
     if (isSet(parser, "locations"))
@@ -626,33 +732,23 @@ getOptionValues(PlacingOptions & options, ArgumentParser & parser)
 
     if (isSet(parser, "bamFiles"))
     {
-        CharString bamFilesFile;
-        getOptionValue(bamFilesFile, parser, "bamFiles");
-        if (readFileNames(options.bamFiles, bamFilesFile) != 0) return 1;
+        resize(options.bamFiles, 1);
+        getOptionValue(options.bamFiles[0], parser, "bamFiles");
+        if (readFileNames(options.bamFiles, options.bamAvgCov) != 0)
+            return 1;
     }
-    if (!isSet(parser, "bamFiles") && (isSet(parser, "batchIndex") || isSet(parser, "batchSize")))
+    if (!isSet(parser, "bamFiles") && isSet(parser, "interval"))
     {
         std::cerr << "ERROR: Bam files with all reads of individuals not specified." << std::endl;
         return 1;
     }
 
-    if (isSet(parser, "batchIndex"))
+    if (isSet(parser, "interval"))
     {
-        if (!isSet(parser, "batchSize"))
-        {
-            std::cerr << "ERROR: Batch size not specified." << std::endl;
+        CharString interval;
+        getOptionValue(interval, parser, "interval");
+        if (parseInterval(options.interval, interval) != 0)
             return 1;
-        }
-        getOptionValue(options.batchIndex, parser, "batchIndex");
-    }
-    if (isSet(parser, "batchSize"))
-    {
-        if (!isSet(parser, "batchIndex"))
-        {
-            std::cerr << "ERROR: Batch index not specified." << std::endl;
-            return 1;
-        }
-        getOptionValue(options.batchSize, parser, "batchSize");
     }
 
     if (isSet(parser, "readLength"))

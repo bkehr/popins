@@ -7,57 +7,6 @@
 
 using namespace seqan;
 
-
-// --------------------------------------------------------------------------
-// Function readFileNames()
-// --------------------------------------------------------------------------
-
-bool readFileNames(String<CharString> & files, String<unsigned> & numPerFile)
-{
-    if (length(files) > 1) return 0;
-
-    // Open input file
-    CharString filenameFile = files[0];
-    std::fstream stream(toCString(filenameFile), std::fstream::in);
-    if (!stream.is_open())
-    {
-        std::cerr << "ERROR: Could not open file listing files " << filenameFile << std::endl;
-        return 1;
-    }
-    
-    RecordReader<std::fstream, SinglePass<> > reader(stream);
-    clear(files);
-    
-    while (!atEnd(reader))
-    {
-        // Read the file name
-        CharString file;
-        int res = readUntilWhitespace(file, reader);
-        if (res != 0)
-        {
-            std::cerr << "ERROR while reading filename from " << filenameFile << std::endl;
-            return 1;
-        }
-        appendValue(files, file);
-        
-        skipWhitespaces(reader);
-        
-        // Read the number of contigs for this filename
-        CharString buffer;
-        res = readLine(buffer, reader);
-        if (res != 0)
-        {
-            std::cerr << "ERROR while reading number of contigs for " << file << " from " << filenameFile << std::endl;
-            return 1;
-        }
-        unsigned num;
-        lexicalCast2<unsigned>(num, buffer);
-        appendValue(numPerFile, num);
-    }
-    
-    return 0;
-}
-
 // ==========================================================================
 // struct Contig
 // ==========================================================================

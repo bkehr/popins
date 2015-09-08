@@ -595,7 +595,7 @@ readLocation(Location & loc, RecordReader<std::fstream, SinglePass<> > & reader,
 // ==========================================================================
 
 int
-readLocations(String<Location> & locations, CharString & locationsFile, unsigned batchSize, unsigned batchIndex)
+readLocations(String<Location> & locations, CharString & locationsFile, Triple<CharString, unsigned, unsigned> & interval)
 {
     std::fstream stream(toCString(locationsFile), std::ios::in);
     if (!stream.good())
@@ -607,17 +607,10 @@ readLocations(String<Location> & locations, CharString & locationsFile, unsigned
 
     for (unsigned line = 0; !atEnd(reader); ++line)
     {
-        if (batchSize != maxValue<unsigned>() && line < batchIndex*batchSize)
-        {
-            skipLine(reader);
-            continue;
-        }
-
-        if (line >= batchIndex*batchSize+batchSize) break;
-
         Location loc;
         if (readLocation(loc, reader, locationsFile) != 0) return 1;
-        appendValue(locations, loc);
+        if (loc.chr == interval.i1 && loc.chrStart >= interval.i2 && loc.chrStart < interval.i3)
+            appendValue(locations, loc);
     }
     return 0;
 }
@@ -961,8 +954,13 @@ groupLocations(std::map<TSize, std::set<TSize> > & groups, String<Location> & lo
         }
         verifyCandidateGroup(groups, candidates, locations, contigs);
         clear(candidates);
-        appendValue(candidates, i);
+
+        if (i < length(locations))
+            appendValue(candidates, i);
     }
+    
+    if (length(candidates) > 0)
+        verifyCandidateGroup(groups, candidates, locations, contigs);
 
 //    // Debug code: Output groups.
 //    for(typename std::map<TSize, std::set<TSize> >::iterator it = groups.begin(); it != groups.end(); ++it)
@@ -972,6 +970,82 @@ groupLocations(std::map<TSize, std::set<TSize> > & groups, String<Location> & lo
 //            std::cerr << " " << *it2;
 //        std::cerr << std::endl;
 //    }
+}
+
+// =======================================================================================
+// Function loadLocations()
+// =======================================================================================
+
+int
+loadLocations(String<Location> & locations, PlacingOptions & options)
+{
+    if (!exists(options.locationsFile))
+    {
+        if (length(options.locationsFiles) == 0)
+        {
+            std::cerr << "ERROR: Locations file " << options.locationsFile << "does not exist. Specify -l option to create it." << std::endl;
+            return -1;
+        }
+
+        // Open output file.
+        std::fstream stream(toCString(options.locationsFile), std::ios::out);
+        if (!stream.good())
+        {
+            std::cerr << "ERROR: Could not open locations file " << options.locationsFile << " for writing." << std::endl;
+            return -1;
+        }
+
+        // Merge approximate locations and write them to a file.
+        if (options.verbose) std::cerr << "[" << time(0) << "] " << "Merging locations files." << std::endl;
+        if (mergeLocations(stream, locations, options.locationsFiles, options.locationsFile, options.verbose) != 0) return -1;
+    }
+    else
+    {
+        if (options.verbose) std::cerr << "[" << time(0) << "] " << "Locations file exists." << std::endl;
+    }
+
+    if (length(options.bamFiles) == 0)
+    {
+        if (options.verbose) std::cerr << "[" << time(0) << "] " << "No split mapping. Specify -b option for split mapping." << std::endl;
+        return 1;
+    }
+    
+    // Read the locations file.
+    if (length(locations) == 0)
+    {
+        if (options.verbose) std::cerr << "[" << time(0) << "] " << "Reading locations in " << options.interval.i1 << ":" << options.interval.i2 << "-" << options.interval.i3
+                                                                 << " from " << options.locationsFile << std::endl;
+        if (readLocations(locations, options.locationsFile, options.interval) != 0) return -1;
+        if (options.verbose) std::cerr << "[" << time(0) << "] " << length(locations) << " locations loaded." << std::endl;
+    }
+    else
+    {
+        if (options.verbose) std::cerr << "[" << time(0) << "] " << "Sorting locations." << std::endl;
+        LocationPosLess less;
+        std::stable_sort(begin(locations, Standard()), end(locations, Standard()), less);
+    }
+
+    // Discard locations with score below options.minLocScore or OTHER or longer than 2*maxInsertSize // TODO: move this to reading function!
+    unsigned i = 0;
+    while (i < length(locations))
+    {
+        if (locations[i].score < options.minLocScore || locations[i].chr == "OTHER" ||
+            locations[i].chrEnd - locations[i].chrStart > 2*options.maxInsertSize)
+            replace(locations, i, i+1, String<Location>());
+        else ++i;
+    }
+
+    if (length(locations) == 0)
+    {
+        std::cerr << "[" << time(0) << "] " << "No locations on genome left after filtering for score >= " << options.minLocScore << std::endl;
+        return 1;
+    }
+    
+    if (options.verbose)
+        std::cerr << "[" << time(0) << "] " << "Keeping " << length(locations) << " locations with score >= "
+                  << options.minLocScore << " and shorter than " << (2*options.maxInsertSize) << std::endl;
+
+    return 0;
 }
 
 #endif // #ifndef POPINS_LOCATION_H_
