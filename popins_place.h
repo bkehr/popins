@@ -56,8 +56,7 @@ loadSequences(std::map<CharString, TSeq> & seqs,
 
 template<typename TSeq, typename TPos, typename TSize>
 bool
-artificialReferences(std::map<TSize, Pair<TSeq> > & refs,
-                     std::map<TSize, Pair<TPos> > & refOffsets,
+artificialReferences(std::map<TSize, LocationInfo<TSeq, TPos, TSize> > & locInfos,
                      std::map<TSize, std::set<TSize> > & concatGroups,
                      std::map<TSize, std::set<TSize> > & groups,
                      String<Location> & locations,
@@ -80,7 +79,8 @@ artificialReferences(std::map<TSize, Pair<TSeq> > & refs,
     TIter groupsEnd = groups.end();
     for (TIter it = groups.begin(); it != groupsEnd; )
     {
-        Location loc = locations[it->first];
+        Location & loc = locations[it->first];
+        LocationInfo<TSeq, TPos, TSize> & locInfo = locInfos[it->first];
         if (contigs.count(loc.contig) == 0)
         {
             std::cerr << "ERROR: Could not find record for " << loc.contig << " in contigs file." << std::endl;
@@ -94,30 +94,33 @@ artificialReferences(std::map<TSize, Pair<TSeq> > & refs,
         }
 
         TSeq contig = contigs[loc.contig];
-        if (loc.contigOri == loc.chrOri) reverseComplement(contig);
+        if (loc.contigOri == loc.chrOri)
+            reverseComplement(contig);
 
         if (loc.chrOri)
         {
             TSeq chrInfix;
             readRegion(chrInfix, fai, idx, loc.chrStart + options.readLength, loc.chrEnd+options.maxInsertSize);
-            refOffsets[it->first] = Pair<TPos>(loc.chrStart + options.readLength, 0);
+            locInfo.refOffset = loc.chrStart + options.readLength;
             
             Pair<size_t> splitPosPair;
             if (alignContigPrefixToRef(splitPosPair, chrInfix, contig, scsc))
             {
-                refOffsets[it->first].i1 += splitPosPair.i1;
-                refOffsets[it->first].i2 += splitPosPair.i2;
+                locInfo.refOffset += splitPosPair.i1;
+                locInfo.contigOffset += splitPosPair.i2;
 
                 TSeq concatSeq = infix(chrInfix, std::max(0, (int)splitPosPair.i1 - (int)options.readLength), splitPosPair.i1);
                 concatSeq += suffix(contig, splitPosPair.i2);
-                refs[it->first] = Pair<TSeq>(concatSeq, infix(chrInfix, std::max(0, (int)splitPosPair.i1 - (int)options.readLength), splitPosPair.i1));
+                locInfo.refSeq = concatSeq;
+                locInfo.concatPos = splitPosPair.i1 - std::max(0, (int)splitPosPair.i1 - (int)options.readLength);
                 
                 concatGroups.insert(*it);
                 groups.erase(it++);
             }
             else
             {
-                refs[it->first] = Pair<TSeq>(chrInfix, contig);
+                locInfo.refSeq = chrInfix;
+                locInfo.contigSeq = contig;
                 ++it;
             }
         }
@@ -125,24 +128,26 @@ artificialReferences(std::map<TSize, Pair<TSeq> > & refs,
         {
             TSeq chrInfix;
             readRegion(chrInfix, fai, idx, loc.chrStart - options.maxInsertSize, loc.chrEnd);
-            refOffsets[it->first] = Pair<TPos>(loc.chrStart - options.maxInsertSize, 0);
+            locInfo.refOffset = loc.chrStart - options.maxInsertSize;
             
             Pair<size_t> splitPosPair;
             if (alignContigSuffixToRef(splitPosPair, chrInfix, contig, scsc))
             {
-                refOffsets[it->first].i1 += splitPosPair.i1;
-                refOffsets[it->first].i2 += splitPosPair.i2;
+                locInfo.refOffset += splitPosPair.i1;
+                locInfo.contigOffset += splitPosPair.i2;
 
                 TSeq concatSeq = prefix(contig, splitPosPair.i2);
                 concatSeq += infix(chrInfix, splitPosPair.i1, std::min(splitPosPair.i1 + options.readLength, length(chrInfix)));
-                refs[it->first] = Pair<TSeq>(concatSeq, prefix(contig, splitPosPair.i2));
+                locInfo.refSeq = concatSeq;
+                locInfo.concatPos = splitPosPair.i2;
                 
                 concatGroups.insert(*it);
                 groups.erase(it++);
             }
             else
             {
-                refs[it->first] = Pair<TSeq>(contig, chrInfix);
+                locInfo.refSeq = chrInfix;
+                locInfo.contigSeq = contig;
                 ++it;
             }
         }
@@ -155,13 +160,16 @@ artificialReferences(std::map<TSize, Pair<TSeq> > & refs,
 // Function bestSplitPosition()
 // ==========================================================================
 
-template<typename TPos, typename TSize>
+template<typename TPos, typename TSize1, typename TSize2>
 bool
-bestSplitPosition(TPos & splitPos, TSize & maxCount, TSize & totalCount, std::map<TPos, unsigned> const & map)
+bestSplitPosition(TPos & splitPos, TSize1 & maxCount, TSize1 & totalCount, std::map<TPos, TSize2> const & map)
 {
-    typedef typename std::map<TPos, unsigned>::const_iterator TIter;
+    typedef typename std::map<TPos, TSize2>::const_iterator TIter;
     
     if (map.size() == 0) return 1;
+
+    totalCount = 0;
+    maxCount = 0;
 
     TIter it = map.begin();
     TIter itEnd = map.end();
@@ -204,7 +212,7 @@ initVcfStream(TStream & vcfStream, CharString & filename)
 
 template<typename TStream, typename TPos, typename TScore, typename TSize, typename TSize1>
 void
-writeVcf(TStream & vcfStream, bool split,
+writeVcf(TStream & vcfStream,
          CharString & chr, CharString & contig, TPos chrPos, TPos contigPos, bool chrOri, bool contigOri,
          TScore & score, TSize numReads, TSize1 splitReads, unsigned splitReadsSamePosition, bool groupRepresentative)
 {
@@ -244,10 +252,13 @@ writeVcf(TStream & vcfStream, bool split,
     info << "AS=" << score << ";" << "RP=" << numReads << ";";
     if (splitReads != 0)
     {
-        if (split) info << "SR=" << splitReads << ";" << "SP=" << splitReadsSamePosition << ";";
-        else info << "CR=" << splitReads << ";";
+        if (splitReadsSamePosition != 0)
+            info << "SR=" << splitReads << ";" << "SP=" << splitReadsSamePosition << ";";
+        else
+            info << "CR=" << splitReads << ";";
     }
-    if (!groupRepresentative) info << "GROUPED;";
+    if (!groupRepresentative)
+        info << "GROUPED;";
     record.info = info.str();
 
     writeRecord(vcfStream, record, context, Vcf());
@@ -257,61 +268,58 @@ writeVcf(TStream & vcfStream, bool split,
 // Function findBestSplit()
 // ==========================================================================
 
-template<typename TSize, typename TPos>
+template<typename TSize, typename TSeq, typename TPos>
 bool
 findBestSplitAndWriteVcf(std::fstream & vcfStream,
-                         bool split,
                          String<Location> & locations,
                          std::map<TSize, std::set<TSize> > &  groups,
-                         std::set<TSize> & highCoverageLocs,
-                         std::map<TSize, std::map<Pair<TPos>, unsigned> > & splitPosMaps,
-                         std::map<TSize, Pair<TPos> > & refOffsets,
+                         std::map<TSize, LocationInfo<TSeq, TPos, TSize> > & locInfos,
+                         //std::set<TSize> & highCoverageLocs,
+                         //std::map<TSize, std::map<Pair<TPos>, unsigned> > & splitPosMaps,
+                         //std::map<TSize, Pair<TPos> > & refOffsets,
                          PlacingOptions & options)
 {
     for (typename std::map<TSize, std::set<TSize> >::iterator it = groups.begin(); it != groups.end(); ++it)
     {
-        if (highCoverageLocs.count(it->first) > 0)
+        LocationInfo<TSeq, TPos, TSize> & locInfo = locInfos[it->first];
+        if (locInfo.highCoverage)
             continue;
 
         unsigned maxCount = 0;
-        unsigned totalCount = 0;
-        Pair<TPos> splitPos;
+        unsigned totalCount = locInfo.splitReadCount;
+        Pair<TPos> splitPos = Pair<TPos>(locInfo.refOffset, locInfo.contigOffset);
 
         Location loc = locations[it->first];
-        if (bestSplitPosition(splitPos, maxCount, totalCount, splitPosMaps[it->first]) == 0)
+        if (locInfo.concatPos != 0 || bestSplitPosition(splitPos, maxCount, totalCount, locInfo.splitPosMap) == 0)
         {
-            // Add region offset to split pos.
-            splitPos.i1 += refOffsets[it->first].i1;
-            splitPos.i2 += refOffsets[it->first].i2;
-
             // Write record for group representative
-            writeVcf(vcfStream, split, loc.chr, loc.contig, splitPos.i1, splitPos.i2, loc.chrOri, loc.contigOri,
+            writeVcf(vcfStream, loc.chr, loc.contig, splitPos.i1, splitPos.i2, loc.chrOri, loc.contigOri,
                      loc.score, loc.numReads, totalCount, maxCount, true);
 
             // Write records for group members
             for (typename std::set<TSize>::iterator it2 = (it->second).begin(); it2 != (it->second).end(); ++it2)
             {
                 loc = locations[*it2];
-                writeVcf(vcfStream, split, loc.chr, loc.contig, splitPos.i1, splitPos.i2, loc.chrOri, loc.contigOri,
+                writeVcf(vcfStream, loc.chr, loc.contig, splitPos.i1, splitPos.i2, loc.chrOri, loc.contigOri,
                          loc.score, loc.numReads, totalCount, maxCount, false);
             }
         }
         else
         {
             if (loc.chrOri)
-                writeVcf(vcfStream, split, loc.chr, loc.contig, loc.chrEnd + options.readLength, maxValue<TPos>(), loc.chrOri, loc.contigOri,
+                writeVcf(vcfStream, loc.chr, loc.contig, loc.chrEnd + options.readLength, maxValue<TPos>(), loc.chrOri, loc.contigOri,
                          loc.score, loc.numReads, 0, 0u, true);
             else
-                writeVcf(vcfStream, split, loc.chr, loc.contig, loc.chrStart, maxValue<TPos>(), loc.chrOri, loc.contigOri,
+                writeVcf(vcfStream, loc.chr, loc.contig, loc.chrStart, maxValue<TPos>(), loc.chrOri, loc.contigOri,
                          loc.score, loc.numReads, 0, 0u, true);
             for (typename std::set<TSize>::iterator it2 = (it->second).begin(); it2 != (it->second).end(); ++it2)
             {
                 loc = locations[*it2];
                 if (loc.chrOri)
-                    writeVcf(vcfStream, split, loc.chr, loc.contig, loc.chrEnd + options.readLength, maxValue<TPos>(), loc.chrOri, loc.contigOri,
+                    writeVcf(vcfStream, loc.chr, loc.contig, loc.chrEnd + options.readLength, maxValue<TPos>(), loc.chrOri, loc.contigOri,
                              loc.score, loc.numReads, 0, 0u, false);
                 else
-                    writeVcf(vcfStream, split, loc.chr, loc.contig, loc.chrStart, maxValue<TPos>(), loc.chrOri, loc.contigOri,
+                    writeVcf(vcfStream, loc.chr, loc.contig, loc.chrStart, maxValue<TPos>(), loc.chrOri, loc.contigOri,
                              loc.score, loc.numReads, 0, 0u, false);
             }
         }
@@ -364,18 +372,13 @@ int popins_place(int argc, char const ** argv)
     if (options.verbose)
         std::cerr << "[" << time(0) << "] " << "Collecting reference sequences for locations from " << options.referenceFile << std::endl;
 
-    std::map<TSize, Pair<TSeq> > artificialRefs;
-    std::map<TSize, Pair<TPos> > refOffsets;
-    if (artificialReferences(artificialRefs, refOffsets, concatGroups, groups, locations, contigs, options) != 0)
+    std::map<TSize, LocationInfo<TSeq, TPos, TSize> > locInfos;
+    if (artificialReferences(locInfos, concatGroups, groups, locations, contigs, options) != 0)
         return 1;
     clear(contigs);
 
     // Split alignment per individual.
-    std::set<TSize> highCoverageLocs;
-    std::map<TSize, std::map<Pair<TPos>, unsigned> > splitPosMaps;
-    //resize(splitPosMaps, length(locations));
-    //if (splitAlignmentAllBamFiles(splitPosMaps, highCoverageLocs, locations, groups, artificialRefs, options) != 0)
-    if (findSplitReads(splitPosMaps, highCoverageLocs, concatGroups, groups, locations, artificialRefs, options) != 0)
+    if (findSplitReads(locInfos, concatGroups, groups, locations, options) != 0)
         return 1;
 
     // Open the output file.
@@ -388,9 +391,9 @@ int popins_place(int argc, char const ** argv)
         std::cerr << "[" << time(0) << "] " << "Identifying best split positions and writing output to "
                                             << options.vcfInsertionsFile << std::endl;
 
-    if (findBestSplitAndWriteVcf(vcfStream, true, locations, groups, highCoverageLocs, splitPosMaps, refOffsets, options) != 0)
+    if (findBestSplitAndWriteVcf(vcfStream, locations, groups, locInfos, options) != 0)
         return 1;
-    if (findBestSplitAndWriteVcf(vcfStream, false, locations, concatGroups, highCoverageLocs, splitPosMaps, refOffsets, options) != 0)
+    if (findBestSplitAndWriteVcf(vcfStream, locations, concatGroups, locInfos, options) != 0)
         return 1;
 
     return 0;
