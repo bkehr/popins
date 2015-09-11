@@ -78,7 +78,7 @@ The place command identifies the positions of (super-)contigs in the reference g
 If a file with merged locations (-ml option) does not already exist, it requires the -l option to be set and merges locations files.
 If bam files with all reads of the individuals are specified, it determines exact positions of insertions from split read alignments for each contig end.
 Both steps can be run separately or in a single program call.
-The split alignment can be done in batches (e.g. 100 locations per batch) if the locations files have been merged before.
+The split alignment can be done in batches by genomic region (e.g. only locations in chr3:40000000-41000000) if the locations files have been merged before.
 It outputs a vcf record for each identified position, which references contigs and contig positions in the (super-)contigs file.
 
 
