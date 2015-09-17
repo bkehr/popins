@@ -78,8 +78,8 @@ The place command identifies the positions of (super-)contigs in the reference g
 If a file with merged locations (-ml option) does not already exist, it requires the -l option to be set and merges locations files.
 If bam files with all reads of the individuals are specified, it determines exact positions of insertions from split read alignments for each contig end.
 Both steps can be run separately or in a single program call.
-The split alignment can be done in batches (e.g. 100 locations per batch) if the locations files have been merged before.
-It outputs a vcf and a fa record for each identified position.
+The split alignment can be done in batches by genomic region (e.g. only locations in chr3:40000000-41000000) if the locations files have been merged before.
+It outputs a vcf record for each identified position, which references contigs and contig positions in the (super-)contigs file.
 
 
 ### The genotype command
@@ -94,13 +94,13 @@ It outputs VCF records with the genotype likelihoods in GT:PL format for the ind
 References
 ----------
 
-Kehr B., Melsted P., Jónasdóttir A., Jónasdóttir A., Sigurðsson A., Gylfason A., Guðbjartsson D., Halldórsson B. V., Stefánsson K.
+Kehr B., Melsted P., Halldórsson B. V. (2015).
+PopIns: population-scale detection of novel sequence insertions.
+Bioinformatics, btv273.
+
+Kehr B., Melsted P., Jónasdóttir A., Jónasdóttir A., Sigurðsson A., Gylfason A., Guðbjartsson D., Halldórsson B. V., Stefánsson K. (2014).
 Detecting novel sequence insertions in 3000 individuals from short read sequencing data. (Abstract/Program #38).
 Presented at the 64th Annual Meeting of The American Society of Human Genetics, October 20, 2014, San Diego, CA.
-
-Kehr B., Melsted P., Halldórsson B. V.
-PopIns: population-scale detection of novel sequence insertions.
-Submitted.
 
 
 Contact

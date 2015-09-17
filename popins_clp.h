@@ -14,6 +14,9 @@ inline bool exists(CharString const & filename)
   return (stat(toCString(filename), &buffer) == 0);
 }
 
+
+// ==========================================================================
+// Function readFileNames()
 // ==========================================================================
 
 bool
@@ -45,13 +48,15 @@ readFileNames(String<CharString> & files, CharString const & filenameFile)
     return 0;
 }
 
-// --------------------------------------------------------------------------
+// ==========================================================================
 
-bool
-readFileNames(String<CharString> & files, String<unsigned> & numPerFile, CharString const & filenameFile)
+template <typename TValue>
+bool readFileNames(String<CharString> & files, String<TValue> & values)
 {
-    if (filenameFile == "") return 0;
+    if (length(files) > 1) return 0;
 
+    // Open input file
+    CharString filenameFile = files[0];
     std::fstream stream(toCString(filenameFile), std::fstream::in);
     if (!stream.is_open())
     {
@@ -60,32 +65,85 @@ readFileNames(String<CharString> & files, String<unsigned> & numPerFile, CharStr
     }
     
     RecordReader<std::fstream, SinglePass<> > reader(stream);
+    clear(files);
     
     while (!atEnd(reader))
     {
+        // Read the file name
         CharString file;
         int res = readUntilWhitespace(file, reader);
         if (res != 0)
         {
-            std::cerr << "ERROR while reading filename from " << filenameFile << std::endl;
+            std::cerr << "ERROR: Failed reading filename from " << filenameFile << std::endl;
             return 1;
         }
         appendValue(files, file);
         
-        skipWhitespaces(reader);
+        skipBlanks(reader);
         
+        // Read the value for this filename
         CharString buffer;
         res = readLine(buffer, reader);
-        if (res != 0)
+        if (res != 0 || length(buffer) == 0)
         {
-            std::cerr << "ERROR while reading number of contigs for " << file << " from " << filenameFile << std::endl;
+            std::cerr << "ERROR: Failed reading second column of " << filenameFile << std::endl;
             return 1;
         }
-        unsigned num;
-        lexicalCast2<unsigned>(num, buffer);
-        appendValue(numPerFile, num);
+        TValue val;
+        lexicalCast2<TValue>(val, buffer);
+        appendValue(values, val);
     }
     
+    return 0;
+}
+
+// ==========================================================================
+
+bool
+parseInterval(Triple<CharString, unsigned, unsigned> & out, CharString & in)
+{
+    Iterator<CharString, Rooted>::Type it = begin(in, Rooted());
+
+    unsigned colonPos = 0;
+    while (it != end(in))
+    {
+        if (*it == ':')
+        {
+            colonPos = position(it);
+            break;
+        }
+        ++it;
+    }
+
+    if (colonPos == 0)
+    {
+        out.i1 = in;
+        out.i2 = 0;
+        out.i3 = maxValue<unsigned>();
+        return 0;
+    }
+
+    unsigned dashPos = 0;  
+    while (it != end(in))
+    {
+        if (*it == '-')
+        {
+            dashPos = position(it);
+            break;
+        }
+        ++it;
+    }
+
+    if (dashPos == 0)
+    {
+        std::cerr << "ERROR: Interval is not in format CHR:BEG-END." << std::endl;
+        return 1;
+    }
+
+    out.i1 = prefix(in, colonPos);
+    out.i2 = lexicalCast<unsigned>(infix(in, colonPos + 1, dashPos));
+    out.i3 = lexicalCast<unsigned>(suffix(in, dashPos + 1));
+
     return 0;
 }
 
@@ -112,17 +170,16 @@ struct AssemblyOptions {
 
 struct MergingOptions {
     String<CharString> contigFiles;
-    String<unsigned> contigsPerFile;
-    CharString contigFilesFile;
     String<CharString> componentFiles;
-
     CharString outputFile;
+    CharString skippedFile;
     std::fstream outputStream;
+    std::fstream skippedStream;
     bool verbose;
     bool veryVerbose;
 
-    int batchIndex;
-    int batches;
+    unsigned batchIndex;
+    unsigned batches;
     
     double errorRate;
     int minimalLength;
@@ -131,10 +188,11 @@ struct MergingOptions {
     int errorPenalty;
     int minScore;
     int minTipScore;
+    double minEntropy;
 
     MergingOptions() :
         outputFile("supercontigs.fa"), verbose(false), veryVerbose(false), batchIndex(0), batches(1),
-        errorRate(0.01), minimalLength(60), qgramLength(47), matchScore(1), errorPenalty(-5), minScore(90), minTipScore(30)
+        errorRate(0.01), minimalLength(60), qgramLength(47), matchScore(1), errorPenalty(-5), minScore(90), minTipScore(30), minEntropy(0.75)
     {} 
 };
 
@@ -157,14 +215,15 @@ struct PlacingOptions {
     CharString referenceFile;
     
     String<CharString> bamFiles;
+    String<double> bamAvgCov;
 
     CharString locationsFile;          // merged from all individuals
     String<CharString> locationsFiles; // one file per individual
     CharString vcfInsertionsFile;
-    CharString faInsertionsFile;
     
-    unsigned batchIndex;
-    unsigned batchSize;
+    //unsigned batchIndex;
+    //unsigned batchSize;
+    Triple<CharString, unsigned, unsigned> interval; // chrom, beginPos, endPos
     
     double minLocScore;
     
@@ -176,8 +235,8 @@ struct PlacingOptions {
     bool verbose;
     
     PlacingOptions() :
-        locationsFile("locations.txt"), vcfInsertionsFile("insertions.vcf"), faInsertionsFile("insertions.fa"),
-        batchIndex(0), batchSize(maxValue<unsigned>()), minLocScore(0.3), readLength(100), maxInsertSize(800), maxSplitReads(1000),
+        locationsFile("locations.txt"), vcfInsertionsFile("insertions.vcf"),
+        minLocScore(0.3), readLength(100), maxInsertSize(800), maxSplitReads(1000),
         verbose(false)
     {}
 };
@@ -200,6 +259,7 @@ struct GenotypingOptions {
     int bpQclip;
     int minSeqLen;
     double minReadProb;
+    int maxBARcount;
 
     int regionWindowSize;
     bool addReadGroup;
@@ -212,7 +272,7 @@ struct GenotypingOptions {
 
     GenotypingOptions() : 
         sampleName("sample"), match(1), mismatch(-4), gapOpen(-10), gapExtend(-1), minAlignScore(55),
-        maxInsertSize( 500 ), bpQclip(0), minSeqLen(10), minReadProb(0.0001),
+        maxInsertSize( 500 ), bpQclip(0), minSeqLen(10), minReadProb(0.0001), maxBARcount(200),
         regionWindowSize(50), addReadGroup(false), verbose(false),
         callBoth(false), useReadCounts(false), fullOverlap(false)
     {}
@@ -316,6 +376,8 @@ setupParser(ArgumentParser & parser, MergingOptions & options)
     addOption(parser, ArgParseOption("p", "penalty", "Error penalty for Smith-Waterman alignment.", ArgParseArgument::INTEGER, "INT"));
     addOption(parser, ArgParseOption("s", "minScore", "Minimal score for Smith-Waterman alignment.", ArgParseArgument::INTEGER, "INT"));
     addOption(parser, ArgParseOption("t", "minTipScore", "Minimal score for tips in supercontig graph.", ArgParseArgument::INTEGER, "INT"));
+    addOption(parser, ArgParseOption("y", "minEntropy", "Minimal entropy for discarding low-complexity sequences. Choose as 0.0 to disable filter.", ArgParseArgument::DOUBLE, "FLOAT"));
+    
     
     // Program mode options
     addSection(parser, "Program mode options");
@@ -326,6 +388,7 @@ setupParser(ArgumentParser & parser, MergingOptions & options)
     // Output file options.
     addSection(parser, "Output options");
     addOption(parser, ArgParseOption("o", "outFile", "Name of output file. Either in text format for components or fasta format for the supercontigs.", ArgParseArgument::OUTPUTFILE, "OUTPUTFILE"));
+    addOption(parser, ArgParseOption("os", "skippedFile", "Name of output file for skipped contigs. Default: no output of skipped contigs.", ArgParseArgument::OUTPUTFILE, "OUTPUTFILE"));
     addOption(parser, ArgParseOption("v", "verbose", "Enable verbose screen output."));
     addOption(parser, ArgParseOption("vv", "veryVerbose", "Enable very verbose screen output."));
 
@@ -344,7 +407,10 @@ setupParser(ArgumentParser & parser, MergingOptions & options)
     setMinValue(parser, "l", "3");
     setMinValue(parser, "k", "3");
     setMinValue(parser, "t", "0");
+    setMinValue(parser, "y", "0");
+    setMaxValue(parser, "y", "1");
     setValidValues(parser, "o", "txt fa fna fasta");
+    setValidValues(parser, "os", "fa fna fasta");
 
     // Set default values.
     setDefaultValue(parser, "e", options.errorRate);
@@ -354,6 +420,7 @@ setupParser(ArgumentParser & parser, MergingOptions & options)
     setDefaultValue(parser, "p", options.errorPenalty);
     setDefaultValue(parser, "s", options.minScore);
     setDefaultValue(parser, "t", options.minTipScore);
+    setDefaultValue(parser, "y", options.minEntropy);
     setDefaultValue(parser, "b", options.batches);
     setDefaultValue(parser, "i", options.batchIndex);
     setDefaultValue(parser, "o", "supercontigs.fa or components_<BATCH INDEX>.txt");
@@ -405,9 +472,10 @@ setupParser(ArgumentParser & parser, PlacingOptions & options)
     addDescription(parser, "Finds the positions of (super-)contigs in the reference genome. Merges files with "
                            "approximate locations computed from anchoring read pairs if a file with locations does not "
                            "already exist. Determines exact positions of insertions by split aligning reads at each "
-                           "contig end if bam files with all reads of the individuals are specified. Outputs a vcf and "
-                           "fa record for each identified position. The split alignment  can be done in batches (e.g. "
-                           "100 locations per batch) if the approximate locations have been computed before.");
+                           "contig end if bam files with all reads of the individuals are specified. Outputs a vcf "
+                           "record for each identified position. The contig position in the vcf record refers to the "
+                           "sequence in the (super-)contigs file. The split alignment can be done in batches (e.g. 100 "
+                           "locations per batch) if the approximate locations have been computed before.");
 
     // Require fasta file with merged contigs as arguments.
     addArgument(parser, ArgParseArgument(ArgParseArgument::INPUTFILE, "CONTIGFILE"));
@@ -419,8 +487,9 @@ setupParser(ArgumentParser & parser, PlacingOptions & options)
     addOption(parser, ArgParseOption("ml", "locations", "Name of file with approximate insertion locations merged from all individuals. Computed if not exists.", ArgParseArgument::INPUTFILE, "LOCATIONFILE"));
     addOption(parser, ArgParseOption("m", "minScore", "Minimal score of a location to be passed to split mapping.", ArgParseArgument::DOUBLE, "FLOAT"));
     addOption(parser, ArgParseOption("b", "bamFiles", "File listing original, full bam files of individuals, one per line. Specify to determine exact insertion positions from split reads.", ArgParseArgument::INPUTFILE, "FILE"));
-    addOption(parser, ArgParseOption("s", "batchSize", "Number of locations per batch. Specify to split computation into smaller batches. Requires locations file to exist, and specification of bam files, and batch number.", ArgParseArgument::INTEGER, "INT"));
-    addOption(parser, ArgParseOption("i", "batchIndex", "Number of batch. Specify to split computation into smaller batches. Requires locations file to exist, and specification of bam files and batch size.", ArgParseArgument::INTEGER, "INT"));
+    //addOption(parser, ArgParseOption("s", "batchSize", "Number of locations per batch. Specify to split computation into smaller batches. Requires locations file to exist, and specification of bam files, and batch number.", ArgParseArgument::INTEGER, "INT"));
+    //addOption(parser, ArgParseOption("i", "batchIndex", "Number of batch. Specify to split computation into smaller batches. Requires locations file to exist, and specification of bam files and batch size.", ArgParseArgument::INTEGER, "INT"));
+    addOption(parser, ArgParseOption("i", "interval", "Genomic interval. Specify to split split alignment into smaller batches. Requires locations file to exist, and specification of bam files.", ArgParseArgument::STRING, "CHR:BEG-END"));
 
     addOption(parser, ArgParseOption("r", "readLength", "The length of the reads.", ArgParseArgument::INTEGER, "INT"));
     addOption(parser, ArgParseOption("e", "maxInsertSize", "The maximal expected insert size of the read pairs.", ArgParseArgument::INTEGER, "INT"));
@@ -428,12 +497,10 @@ setupParser(ArgumentParser & parser, PlacingOptions & options)
 
     // Output file options.
     addSection(parser, "Output options");
-    addOption(parser, ArgParseOption("ov", "outVcf", "Name of output file for vcf records.", ArgParseArgument::OUTPUTFILE, "VCFFILE"));
-    addOption(parser, ArgParseOption("of", "outFa", "Name of output file for insertion sequences.", ArgParseArgument::OUTPUTFILE, "FAFILE"));
+    addOption(parser, ArgParseOption("o", "out", "Name of vcf output file.", ArgParseArgument::OUTPUTFILE, "VCFFILE"));
     addOption(parser, ArgParseOption("v", "verbose", "Enable verbose output."));
 
-    setValidValues(parser, "of", "fa fna fasta");
-    setValidValues(parser, "ov", "vcf");
+    setValidValues(parser, "o", "vcf");
     setMinValue(parser, "m", "0");
     setMaxValue(parser, "m", "1");
 
@@ -443,8 +510,7 @@ setupParser(ArgumentParser & parser, PlacingOptions & options)
     setDefaultValue(parser, "r", options.readLength);
     setDefaultValue(parser, "e", options.maxInsertSize);
     setDefaultValue(parser, "p", options.maxSplitReads);
-    setDefaultValue(parser, "ov", options.vcfInsertionsFile);
-    setDefaultValue(parser, "of", options.faInsertionsFile);
+    setDefaultValue(parser, "o", options.vcfInsertionsFile);
 }
 
 void
@@ -482,6 +548,7 @@ setupParser(ArgumentParser & parser, GenotypingOptions & options)
     addOption(parser, ArgParseOption("q", "qual", "Quality score threshold for read trimming.", ArgParseArgument::INTEGER, "INT"));
     addOption(parser, ArgParseOption("l", "minSeqLen", "Minimum read length after trimming.", ArgParseArgument::INTEGER, "INT"));
     addOption(parser, ArgParseOption("pm", "minreadprob", "Minimum read probability.", ArgParseArgument::DOUBLE, "DOUBLE"));
+    addOption(parser, ArgParseOption("mb", "maxBARcount", "Maximum number of reads to consider in region window.", ArgParseArgument::INTEGER, "INT"));
 
     addSection(parser, "Misc options");
     addOption(parser, ArgParseOption("v", "verbose", "Enable verbose output."));
@@ -506,6 +573,7 @@ setupParser(ArgumentParser & parser, GenotypingOptions & options)
     setDefaultValue(parser, "insertSize", options.maxInsertSize);
     setDefaultValue(parser, "qual", options.bpQclip);
     setDefaultValue(parser, "minreadprob", options.minReadProb);
+    setDefaultValue(parser, "maxBARcount", options.maxBARcount);
     setDefaultValue(parser, "window", options.regionWindowSize);
     setDefaultValue(parser, "samplename", options.sampleName);
 }
@@ -542,15 +610,7 @@ getOptionValues(AssemblyOptions & options, ArgumentParser const & parser)
 int
 getOptionValues(MergingOptions & options, ArgumentParser & parser)
 {
-    if (getArgumentValueCount(parser, 0) == 1)
-    {
-         getArgumentValue(options.contigFilesFile, parser, 0);
-         if (readFileNames(options.contigFiles, options.contigsPerFile, options.contigFilesFile) != 0) return 1;
-    }
-    else
-    {
-        options.contigFiles = getArgumentValues(parser, 0);
-    }
+    options.contigFiles = getArgumentValues(parser, 0);
     
     // Get parameter values.
     if (isSet(parser, "errRate"))
@@ -567,6 +627,8 @@ getOptionValues(MergingOptions & options, ArgumentParser & parser)
         getOptionValue(options.errorPenalty, parser, "penalty");
     if (isSet(parser, "minTipScore"))
         getOptionValue(options.minTipScore, parser, "minTipScore");
+    if (isSet(parser, "minEntropy"))
+        getOptionValue(options.minEntropy, parser, "minEntropy");
     
     // Get program mode options.
     if (isSet(parser, "batchIndex") && isSet(parser, "batches"))
@@ -611,6 +673,8 @@ getOptionValues(MergingOptions & options, ArgumentParser & parser)
     // Get output options.
     if (isSet(parser, "outFile"))
         getOptionValue(options.outputFile, parser, "outFile");
+    if (isSet(parser, "skippedFile"))
+        getOptionValue(options.skippedFile, parser, "skippedFile");
     if (isSet(parser, "verbose"))
         options.verbose = true;
     if (isSet(parser, "veryVerbose"))
@@ -651,7 +715,8 @@ getOptionValues(PlacingOptions & options, ArgumentParser & parser)
     {
         CharString locationsFilesFile;
         getOptionValue(locationsFilesFile, parser, "locationsFiles");
-        if (readFileNames(options.locationsFiles, locationsFilesFile) != 0) return 1;
+        if (readFileNames(options.locationsFiles, locationsFilesFile) != 0)
+            return 1;
     }
     
     if (isSet(parser, "locations"))
@@ -667,33 +732,23 @@ getOptionValues(PlacingOptions & options, ArgumentParser & parser)
 
     if (isSet(parser, "bamFiles"))
     {
-        CharString bamFilesFile;
-        getOptionValue(bamFilesFile, parser, "bamFiles");
-        if (readFileNames(options.bamFiles, bamFilesFile) != 0) return 1;
+        resize(options.bamFiles, 1);
+        getOptionValue(options.bamFiles[0], parser, "bamFiles");
+        if (readFileNames(options.bamFiles, options.bamAvgCov) != 0)
+            return 1;
     }
-    if (!isSet(parser, "bamFiles") && (isSet(parser, "batchIndex") || isSet(parser, "batchSize")))
+    if (!isSet(parser, "bamFiles") && isSet(parser, "interval"))
     {
         std::cerr << "ERROR: Bam files with all reads of individuals not specified." << std::endl;
         return 1;
     }
 
-    if (isSet(parser, "batchIndex"))
+    if (isSet(parser, "interval"))
     {
-        if (!isSet(parser, "batchSize"))
-        {
-            std::cerr << "ERROR: Batch size not specified." << std::endl;
+        CharString interval;
+        getOptionValue(interval, parser, "interval");
+        if (parseInterval(options.interval, interval) != 0)
             return 1;
-        }
-        getOptionValue(options.batchIndex, parser, "batchIndex");
-    }
-    if (isSet(parser, "batchSize"))
-    {
-        if (!isSet(parser, "batchIndex"))
-        {
-            std::cerr << "ERROR: Batch index not specified." << std::endl;
-            return 1;
-        }
-        getOptionValue(options.batchSize, parser, "batchSize");
     }
 
     if (isSet(parser, "readLength"))
@@ -703,10 +758,8 @@ getOptionValues(PlacingOptions & options, ArgumentParser & parser)
     if (isSet(parser, "maxSplitReads"))
         getOptionValue(options.maxSplitReads, parser, "maxSplitReads");
 
-    if (isSet(parser, "outVcf"))
-        getOptionValue(options.vcfInsertionsFile, parser, "outVcf");
-    if (isSet(parser, "outFa"))
-        getOptionValue(options.faInsertionsFile, parser, "outFa");
+    if (isSet(parser, "out"))
+        getOptionValue(options.vcfInsertionsFile, parser, "out");
         
     options.verbose = isSet(parser, "verbose");
 
@@ -737,6 +790,8 @@ getOptionValues(GenotypingOptions & options, ArgumentParser & parser)
         getOptionValue(options.maxInsertSize, parser, "insertSize");
     if (isSet(parser, "minreadprob"))
         getOptionValue(options.minReadProb, parser, "minreadprob");
+    if (isSet(parser, "maxBARcount"))
+        getOptionValue(options.maxBARcount, parser, "maxBARcount");
     if (isSet(parser, "qual"))
         getOptionValue(options.bpQclip, parser, "qual");
     if (isSet(parser, "minSeqLen"))

@@ -12,6 +12,28 @@
 using namespace seqan;
 
 // ==========================================================================
+// struct GenomicInterval
+// ==========================================================================
+
+struct GenomicInterval
+{
+    typedef Position<CharString>::Type TPos;
+    
+    CharString chr;
+    TPos begin;
+    TPos end;
+    bool ori;
+    
+    GenomicInterval(CharString & c, TPos b, TPos e, bool o) :
+        chr(c), begin(b), end(e), ori(o)
+    {}
+    
+    GenomicInterval(GenomicInterval const & other) :
+        chr(other.chr), begin(other.begin), end(other.end), ori(other.ori)
+    {}
+};
+
+// ==========================================================================
 // struct AnchoringRecord
 // ==========================================================================
 
@@ -19,6 +41,7 @@ struct AnchoringRecord
 {
     typedef Position<CharString>::Type TPos;
 
+    // TODO replace by GenomicInterval
     CharString chr;
     TPos chrStart;
     TPos chrEnd;
@@ -36,6 +59,7 @@ struct Location
 {
     typedef Position<CharString>::Type TPos;
 
+    // TODO replace by GenomicInterval
     CharString chr;
     TPos chrStart;
     TPos chrEnd;
@@ -571,7 +595,7 @@ readLocation(Location & loc, RecordReader<std::fstream, SinglePass<> > & reader,
 // ==========================================================================
 
 int
-readLocations(String<Location> & locations, CharString & locationsFile, unsigned batchSize, unsigned batchIndex)
+readLocations(String<Location> & locations, CharString & locationsFile, Triple<CharString, unsigned, unsigned> & interval)
 {
     std::fstream stream(toCString(locationsFile), std::ios::in);
     if (!stream.good())
@@ -583,17 +607,10 @@ readLocations(String<Location> & locations, CharString & locationsFile, unsigned
 
     for (unsigned line = 0; !atEnd(reader); ++line)
     {
-        if (batchSize != maxValue<unsigned>() && line < batchIndex*batchSize)
-        {
-            skipLine(reader);
-            continue;
-        }
-
-        if (line >= batchIndex*batchSize+batchSize) break;
-
         Location loc;
         if (readLocation(loc, reader, locationsFile) != 0) return 1;
-        appendValue(locations, loc);
+        if (loc.chr == interval.i1 && loc.chrStart >= interval.i2 && loc.chrStart < interval.i3)
+            appendValue(locations, loc);
     }
     return 0;
 }
@@ -820,6 +837,213 @@ mergeLocations(std::fstream & stream, String<Location> & locations, String<CharS
     if (verbose) std::cerr << "[" << time(0) << "] " << "Merging temporary location files." << std::endl;
     if (mergeLocationsBatch(stream, locations, tmpFiles, 0, length(tmpFiles)) != 0) return 1;
     for (unsigned i = 0; i < length(tmpFiles); ++i) remove(toCString(tmpFiles[i]));
+
+    return 0;
+}
+
+// ==========================================================================
+
+bool
+overlaps(GenomicInterval & i1, GenomicInterval & i2)
+{
+    if (i1.chr != i2.chr) return false;
+    if (i1.ori != i2.ori) return false;
+    if (i1.end <= i2.begin) return false;
+    if (i2.end <= i1.begin) return false;
+    return true;
+}
+
+// --------------------------------------------------------------------------
+
+template<typename TSize, typename TSeq>
+void
+verifyCandidateGroup(std::map<TSize, std::set<TSize> > & groups, String<TSize> & candidates, String<Location> & locations, std::map<CharString, TSeq> & contigs)
+{
+    std::map<TSize, Pair<TSize> > aligned; // which location aligns to which other location with which offset (loc1 <- Pair(loc2, offset))
+    
+    for (TSize i = 0; i < length(candidates)-1; ++i)
+    {
+        TSeq contig_i = contigs[locations[candidates[i]].contig];
+        if (locations[candidates[i]].contigOri) reverseComplement(contig_i);
+
+        for (TSize j = i+1; j < length(candidates); ++j)
+        {
+            if (aligned.count(candidates[j]) > 0) continue;
+            
+            TSeq contig_j = contigs[locations[candidates[j]].contig];
+            if (locations[candidates[j]].contigOri) reverseComplement(contig_j);
+
+            Align<TSeq> align;
+            resize(rows(align), 2);
+            assignSource(row(align, 0), prefix(contig_i, std::min((TSize)200, length(contig_i))));
+            assignSource(row(align, 1), prefix(contig_j, std::min((TSize)200, length(contig_j))));
+
+            int score = globalAlignment(align, Score<int, Simple>(1, -2, -1, -4), AlignConfig<true, true, true, true>());
+
+            if (score < 50) continue;
+
+            TSize alignBegin = std::max(toViewPosition(row(align, 0), 0), toViewPosition(row(align, 1), 0));
+            TSize alignEnd = std::min(toViewPosition(row(align, 0), length(contig_i)), toViewPosition(row(align, 1), length(contig_j)));
+//            std::cerr << "Score: " << score << ", Relative score: " << (score / ((double) alignEnd - alignBegin)) << std::endl;
+//            std::cerr << align << std::endl;
+            
+            if (score / ((double) alignEnd - alignBegin) < 0.8) continue;
+
+            // add to map
+            if (toViewPosition(row(align, 0), 0) == 0)
+                aligned[candidates[j]] = Pair<TSize>(candidates[i], toViewPosition(row(align, 1), 0));
+            else
+                aligned[candidates[j]] = Pair<TSize>(candidates[i], toViewPosition(row(align, 0), 0));
+            break;
+        }
+    }
+    
+    
+    // Make the groups from aligned
+    typename Iterator<String<TSize> >::Type it = begin(candidates);
+    typename Iterator<String<TSize> >::Type itEnd = end(candidates);
+    while (it != itEnd)
+    {
+        if (aligned.count(*it) == 0)
+        {
+            groups[*it];
+            ++it;
+        }
+        else
+        {
+            TSize i = aligned[*it].i1;
+            if (aligned.count(i) > 0)
+            {
+                aligned[*it].i1 = aligned[i].i1;
+                aligned[*it].i2 += aligned[i].i2;
+            }
+            else // i is group representative
+            {
+                groups[i].insert(*it);
+                ++it;
+            }
+        }
+    }
+}
+
+// ==========================================================================
+// Function groupLocations()
+// ==========================================================================
+
+template<typename TSize, typename TSeq>
+void
+groupLocations(std::map<TSize, std::set<TSize> > & groups, String<Location> & locations, std::map<CharString, TSeq> & contigs)
+{
+    String<TSize> candidates;
+    appendValue(candidates, 0);
+    GenomicInterval interval(locations[0].chr, locations[0].chrStart, locations[0].chrEnd, locations[0].chrOri);
+    for (TSize i = 1; i < length(locations); ++i)
+    {
+        // Find candidate group of locations that overlap on reference
+        for (; i < length(locations); ++i)
+        {
+            GenomicInterval locInterval(locations[i].chr, locations[i].chrStart, locations[i].chrEnd, locations[i].chrOri);
+            if (!overlaps(interval, locInterval))
+            {
+                interval = locInterval;
+                break;
+            }
+            interval.begin = _min(interval.begin, locInterval.begin);
+            interval.end = _max(interval.end, locInterval.end);
+            appendValue(candidates, i);
+        }
+        verifyCandidateGroup(groups, candidates, locations, contigs);
+        clear(candidates);
+
+        if (i < length(locations))
+            appendValue(candidates, i);
+    }
+    
+    if (length(candidates) > 0)
+        verifyCandidateGroup(groups, candidates, locations, contigs);
+
+//    // Debug code: Output groups.
+//    for(typename std::map<TSize, std::set<TSize> >::iterator it = groups.begin(); it != groups.end(); ++it)
+//    {
+//        std::cerr << it->first << " <-";
+//        for(typename std::set<TSize>::iterator it2 = (it->second).begin(); it2 != (it->second).end(); ++it2)
+//            std::cerr << " " << *it2;
+//        std::cerr << std::endl;
+//    }
+}
+
+// =======================================================================================
+// Function loadLocations()
+// =======================================================================================
+
+int
+loadLocations(String<Location> & locations, PlacingOptions & options)
+{
+    if (!exists(options.locationsFile))
+    {
+        if (length(options.locationsFiles) == 0)
+        {
+            std::cerr << "ERROR: Locations file " << options.locationsFile << "does not exist. Specify -l option to create it." << std::endl;
+            return -1;
+        }
+
+        // Open output file.
+        std::fstream stream(toCString(options.locationsFile), std::ios::out);
+        if (!stream.good())
+        {
+            std::cerr << "ERROR: Could not open locations file " << options.locationsFile << " for writing." << std::endl;
+            return -1;
+        }
+
+        // Merge approximate locations and write them to a file.
+        if (options.verbose) std::cerr << "[" << time(0) << "] " << "Merging locations files." << std::endl;
+        if (mergeLocations(stream, locations, options.locationsFiles, options.locationsFile, options.verbose) != 0) return -1;
+    }
+    else
+    {
+        if (options.verbose) std::cerr << "[" << time(0) << "] " << "Locations file exists." << std::endl;
+    }
+
+    if (length(options.bamFiles) == 0)
+    {
+        if (options.verbose) std::cerr << "[" << time(0) << "] " << "No split mapping. Specify -b option for split mapping." << std::endl;
+        return 1;
+    }
+    
+    // Read the locations file.
+    if (length(locations) == 0)
+    {
+        if (options.verbose) std::cerr << "[" << time(0) << "] " << "Reading locations in " << options.interval.i1 << ":" << options.interval.i2 << "-" << options.interval.i3
+                                                                 << " from " << options.locationsFile << std::endl;
+        if (readLocations(locations, options.locationsFile, options.interval) != 0) return -1;
+        if (options.verbose) std::cerr << "[" << time(0) << "] " << length(locations) << " locations loaded." << std::endl;
+    }
+    else
+    {
+        if (options.verbose) std::cerr << "[" << time(0) << "] " << "Sorting locations." << std::endl;
+        LocationPosLess less;
+        std::stable_sort(begin(locations, Standard()), end(locations, Standard()), less);
+    }
+
+    // Discard locations with score below options.minLocScore or OTHER or longer than 2*maxInsertSize // TODO: move this to reading function!
+    unsigned i = 0;
+    while (i < length(locations))
+    {
+        if (locations[i].score < options.minLocScore || locations[i].chr == "OTHER" ||
+            locations[i].chrEnd - locations[i].chrStart > 2*options.maxInsertSize)
+            replace(locations, i, i+1, String<Location>());
+        else ++i;
+    }
+
+    if (length(locations) == 0)
+    {
+        std::cerr << "[" << time(0) << "] " << "No locations on genome left after filtering for score >= " << options.minLocScore << std::endl;
+        return 1;
+    }
+    
+    if (options.verbose)
+        std::cerr << "[" << time(0) << "] " << "Keeping " << length(locations) << " locations with score >= "
+                  << options.minLocScore << " and shorter than " << (2*options.maxInsertSize) << std::endl;
 
     return 0;
 }
