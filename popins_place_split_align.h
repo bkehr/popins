@@ -133,7 +133,8 @@ bool
 isCandidateSplitRead(BamAlignmentRecord & record, bool locOri)
 {
     // Check cigar.
-    if (length(record.cigar) == 1)
+    if (length(record.cigar) == 1 || (length(record.cigar) == 3 &&
+        record.cigar[1].count < 10 && (record.cigar[1].operation == 'D' || record.cigar[1].operation == 'I')))
         return false; // read matches the reference
 
     // Check flags.
