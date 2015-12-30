@@ -30,7 +30,7 @@ Installation
    Also set the paths to bwa, velveth/velvetg, samtools, and sickle if they are not in your PATH variable.
 4. Run 'make' in the popins directory.
 
-If everything is setup correclty, this will create the binary 'popins'.
+If everything is setup correctly, this will create the binary 'popins'.
 
 
 Usage
