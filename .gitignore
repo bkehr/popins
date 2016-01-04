@@ -3,3 +3,4 @@ adapter_removal
 *.o
 all.dep
 popins
+.*
