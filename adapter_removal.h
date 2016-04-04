@@ -352,7 +352,7 @@ removeAdapter(BamAlignmentRecord & record,
         // Check for adapter at begin of read.
         if (hasFlagFirst(record))
         {
-            // Compute alignemnt score to TruSeq (excluding barcode)
+            // Compute alignment score to TruSeq (excluding barcode)
             if (startsWithTruSeq(complSeq, tag) == 0) return 2;
         }
         else
@@ -363,7 +363,7 @@ removeAdapter(BamAlignmentRecord & record,
             if (score > (int)length(universal) - 5) return 2;
         }
         
-        // Search prefex of complemented read in *TruSeq* index.
+        // Search prefix of complemented read in *TruSeq* index.
         reverse(complSeq);
         //TComplSequence complSeq(record.seq);
         TSize adaptLen = prefixMatchLength(indexTruSeqs, complSeq);
