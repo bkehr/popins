@@ -330,7 +330,7 @@ avgQuality(CharString & qual, Pair<CigarElement<>::TCount> & interval)
         totalQual += *it;
         ++it;
     }
-    return totalQual/(interval.i2-interval.i1);
+    return totalQual / (interval.i2 - interval.i1);
 }
 
 // ==========================================================================
@@ -352,36 +352,102 @@ alignmentScore(BamAlignmentRecord & record)
 
 // ==========================================================================
 
+bool
+isGoodQuality(BamAlignmentRecord & record, Pair<CigarElement<>::TCount> & interval)
+{
+if (record.mapQ == 0)
+return false;
+
+if (interval.i2 - interval.i1 < 50)
+return false;
+
+if (interval.i2 - interval.i1 < length(record.seq) / 2)
+return false;
+
+if (avgQuality(record.qual, interval) <= 20)
+return false;
+
+if (alignmentScore(record) < 0.8 * (interval.i2 - interval.i1))
+return false;
+
+return true;
+}
+
+// ==========================================================================
+
+unsigned
+distanceToContigEnd(BamAlignmentRecord & record,
+Pair<CigarElement<>::TCount> & interval,
+StringSet<CharString> & names,
+std::map<CharString, unsigned> & contigLengths)
+{
+if (hasFlagRC(record))
+{
+unsigned endPos = record.beginPos + interval.i2 - interval.i1;
+return contigLengths[names[record.rID]] - endPos;
+}
+else
+{
+return record.beginPos;
+}
+}
+
+// ==========================================================================
+
 inline int
-readAnchoringRecord(AnchoringRecord & record, BamStream & stream, StringSet<CharString> & names)//, unsigned bamStreamIndex)
+readAnchoringRecord(AnchoringRecord & record,
+std::map<Triple<CharString, CharString, unsigned>, unsigned> & goodReads,
+BamStream & stream,
+StringSet<CharString> & names,
+std::map<CharString, unsigned> & contigLengths)
 {
     BamAlignmentRecord r;
     while (!atEnd(stream))
     {
         if (readRecord(r, stream) != 0)
         {
-            std::cerr << "ERROR: Could not read bam alignment record." << std::endl;
+            std::cerr << "ERROR: Could not read BAM alignment record." << std::endl;
             return 1;
         }
         
-        if (r.rID == r.rNextId || r.rNextId == -1 || r.rID == -1) continue;
-        
-        if (isComponentOrNode(names[r.rNextId]))   // rNextId is NODE or COMP
+        if (r.rID == r.rNextId || r.rNextId == -1 || r.rID == -1)
+        continue;
+
+        Pair<CigarElement<>::TCount> interval = mappedInterval(r.cigar);
+        if (!isGoodQuality(r, interval))
+        continue;
+
+        bool isContig = isComponentOrNode(names[r.rID]);
+
+        if (isContig && distanceToContigEnd(r, interval, names, contigLengths) > 500)
+        continue;
+
+       Triple<CharString, CharString, unsigned> nameChrPos = Triple<CharString, CharString, unsigned>(r.qName, names[r.rNextId], r.pNext);
+        if (goodReads.count(nameChrPos) == 0)
         {
-            Pair<CigarElement<>::TCount> interval = mappedInterval(r.cigar);
-            if (interval.i2 - interval.i1 >= 50 && interval.i2 - interval.i1 >= length(r.seq) / 2 &&
-                avgQuality(r.qual, interval) > 20 &&
-                alignmentScore(r) > 0.8 * (interval.i2-interval.i2))
-            {
-                record.chr = names[r.rID];
-                record.chrStart = r.beginPos + interval.i1;
-                record.chrEnd = r.beginPos + interval.i2;
-                record.chrOri = !hasFlagRC(r);
-                record.contig = names[r.rNextId];
-                record.contigOri = !hasFlagNextRC(r);
-                //record.bamStreamIndex = bamStreamIndex;
-                return 0;
-            }
+         goodReads[ Triple<CharString, CharString, unsigned>(r.qName, names[r.rID], r.beginPos)] = r.beginPos + interval.i2 - interval.i1;
+        }
+        else if (isContig)
+        {
+        record.chr = names[r.rNextId];
+        record.chrStart = r.pNext;
+        record.chrEnd = goodReads[nameChrPos];
+        record.chrOri = !hasFlagNextRC(r);
+        record.contig = names[r.rID];
+        record.contigOri = !hasFlagRC(r);
+
+        return 0;
+        }
+        else
+        {
+            record.chr = names[r.rID];
+            record.chrStart = r.beginPos;
+            record.chrEnd = r.beginPos + interval.i2 - interval.i1;
+            record.chrOri = !hasFlagRC(r);
+            record.contig = names[r.rNextId];
+            record.contigOri = !hasFlagNextRC(r);
+
+            return 0;
         }
     }
     return 2;
@@ -423,7 +489,6 @@ addReadToLocs(String<Location> & locs, AnchoringRecord & record)
 int
 findLocations(String<Location> & locations, CharString & nonRefFile)
 {
-    typedef Iterator<String<CharString> >::Type TIter;
     typedef Pair<CharString, unsigned> TContigEnd;
     typedef std::map<TContigEnd, unsigned> TMap;
     typedef TMap::iterator TMapIter;
@@ -434,6 +499,11 @@ findLocations(String<Location> & locations, CharString & nonRefFile)
         std::cerr << "ERROR: Could not open input bam file " << nonRefFile << std::endl;
         return 1;
     }
+
+    std::map<CharString, unsigned> contigLengths;
+    for (unsigned  i = 0; i < length(inStream.header.sequenceInfos); ++i)
+    contigLengths[inStream.header.sequenceInfos[i].i1] = inStream.header.sequenceInfos[i].i2;
+
     StringSet<CharString> names = nameStore(inStream.bamIOContext);
 
     String<String<Location> > locs;
@@ -442,9 +512,10 @@ findLocations(String<Location> & locations, CharString & nonRefFile)
 
     unsigned i = 0;
     AnchoringRecord record;
+    std::map<Triple<CharString, CharString, unsigned>, unsigned> goodReads; // Triple(qName, chrom, beginPos) -> alignEndPos
     while (!atEnd(inStream))
     {
-        readAnchoringRecord(record, inStream, names);
+        readAnchoringRecord(record, goodReads, inStream, names, contigLengths);
         if (record.chrOri)
         {
             if (record.contigOri) i = 0;
