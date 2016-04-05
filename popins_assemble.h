@@ -192,33 +192,57 @@ readRecordAndCorrectRIds(BamAlignmentRecord & record,
 
 inline void
 mergeHeaders(BamHeader & header,
-             StringSet<CharString> & nameStor,
+             StringSet<CharString> & nameStore,
              NameStoreCache<StringSet<CharString> > & nameStoreCache,
              BamHeader const & header1,
              BamHeader const & header2)
 {
-    header = header1;
-    for (unsigned i = 0; i < length(header2.records); ++i)
-    {
-        if (header2.records[i].type == 1)
-            appendValue(header.records, header2.records[i]);
-    }
-    BamHeaderRecordTypeLess less;
-    std::stable_sort(begin(header.records, Standard()), end(header.records, Standard()), less);
-
     // Write sequenceInfos, name store and cache for this header.
     unsigned idx = 0;
-    for (unsigned i = 0; i < length(header.sequenceInfos); ++i)
-        if (!getIdByName(nameStor, header.sequenceInfos[i].i1, idx, nameStoreCache))
-            appendName(nameStor, header.sequenceInfos[i].i1, nameStoreCache);
+    for (unsigned i = 0; i < length(header1.sequenceInfos); ++i)
+    {
+        if (!getIdByName(nameStore, header1.sequenceInfos[i].i1, idx, nameStoreCache))
+        {
+            appendName(nameStore, header1.sequenceInfos[i].i1, nameStoreCache);
+            appendValue(header.sequenceInfos, header1.sequenceInfos[i]);
+        }
+    }
+
     for (unsigned i = 0; i < length(header2.sequenceInfos); ++i)
     {
-        if (!getIdByName(nameStor, header2.sequenceInfos[i].i1, idx, nameStoreCache))
+        if (!getIdByName(nameStore, header2.sequenceInfos[i].i1, idx, nameStoreCache))
         {
-            appendName(nameStor, header2.sequenceInfos[i].i1, nameStoreCache);
+            appendName(nameStore, header2.sequenceInfos[i].i1, nameStoreCache);
             appendValue(header.sequenceInfos, header2.sequenceInfos[i]);
         }
     }
+
+    // Copy all other than sequence records from header1 and header2.
+    for (unsigned i = 0; i < length(header1.records); ++i)
+    {
+        if (header1.records[i].type != BamHeaderRecordType::BAM_HEADER_REFERENCE)
+            appendValue(header.records, header1.records[i]);
+    }
+    for (unsigned i = 0; i < length(header2.records); ++i)
+    {
+        if (header2.records[i].type != BamHeaderRecordType::BAM_HEADER_REFERENCE && header2.records[i].type != BamHeaderRecordType::BAM_HEADER_FIRST)
+            appendValue(header.records, header2.records[i]);
+    }
+
+    // Add a record for each sequence in sequenceInfos.
+    for (unsigned i = 0; i < length(header.sequenceInfos); ++i)
+    {
+        BamHeaderRecord r;
+        r.type = BamHeaderRecordType::BAM_HEADER_REFERENCE;
+        setTagValue("SN", header.sequenceInfos[i].i1, r);
+        std::stringstream ss;
+        ss << header.sequenceInfos[i].i2;
+        setTagValue("LN", ss.str(), r);
+        appendValue(header.records, r);
+    }
+
+    BamHeaderRecordTypeLess less;
+    std::stable_sort(begin(header.records, Standard()), end(header.records, Standard()), less);
 }
 
 // ==========================================================================
