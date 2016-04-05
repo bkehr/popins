@@ -229,7 +229,6 @@ inline typename Size<TSequence>::Type
 prefixMatchLength(Index<TIndexSeq, TSpec> & suffixIndex, TSequence const & seq)
 {
     typedef typename Size<TSequence>::Type TSize;
-    typedef typename Position<TSequence>::Type TPos;
     typedef Index<TIndexSeq, TSpec> TIndex;
 
 
@@ -340,7 +339,7 @@ removeAdapter(BamAlignmentRecord & record,
 {
     typedef typename Size<TSequence>::Type TSize;
     typedef ModifiedString<const TSequence, ModReverse> TRevSequence;
-    typedef ModifiedString<const TSequence, ModComplementDna5> TComplSequence;
+//  typedef ModifiedString<const TSequence, ModComplementDna5> TComplSequence;
 //  typedef ModifiedString<const TComplSequence, ModReverse> TRevComplSequence; // TODO: This modifier seems to be buggy!
     
     TSize seqLen = length(record.seq);

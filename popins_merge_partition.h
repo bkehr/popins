@@ -135,8 +135,6 @@ pairwiseAlignment(TSeq & contig1,
                   int upperDiag,
                   TValueScore minScore)
 {
-    typedef typename Position<TSeq>::Type TPos;
-
     // setup alignment object
     Align<TSeq, ArrayGaps> align;
     resize(rows(align), 2);
@@ -460,7 +458,6 @@ readAndMergeComponents(std::map<TSize, ContigComponent<TSequence> > & components
                        bool verbose)
 {
     typedef std::map<TSize, ContigComponent<TSequence> > TComponents;
-    typedef typename std::set<Pair<TSize> >::iterator TPairsIterator;
     typedef typename TComponents::iterator TCompIterator;
 
     std::cerr << "[" << time(0) << "] " << "Reading and merging components files" << std::endl;

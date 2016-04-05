@@ -382,7 +382,6 @@ findSplitReads(std::map<TSize, LocationInfo<TSeq, TPos, TSize> > & locInfos,
                String<Location> & locations,
                PlacingOptions & options)
 {
-    typedef typename Iterator<String<CharString> >::Type TFileIter;
     typedef typename std::map<TSize, std::set<TSize> >::iterator TGroupsIter;
 
     BamInfo bam;

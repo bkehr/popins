@@ -351,28 +351,24 @@ int popins_place(int argc, char const ** argv)
         return 0;
 
     // Load the contig file.
+    std::map<CharString, TSeq> contigs;
     if (options.verbose)
         std::cerr << "[" << time(0) << "] " << "Reading contig sequences from " << options.supercontigFile << std::endl;
-
-    std::map<CharString, TSeq> contigs;
     if (loadSequences(contigs, options.supercontigFile) != 0)
         return 1;
     
     // Determine groups of locations that overlap and where the contig prefix is highly similar
+    std::map<TSize, std::set<TSize> > groups, concatGroups;
     if (options.verbose)
         std::cerr << "[" << time(0) << "] " << "Grouping locations by reference position and contig sequence... " << std::flush;
-
-    std::map<TSize, std::set<TSize> > groups, concatGroups;
     groupLocations(groups, locations, contigs);
-
     if (options.verbose)
         std::cerr << groups.size() << " groups." << std::endl;
 
     // Concatenate the artificial reference for each location.
+    std::map<TSize, LocationInfo<TSeq, TPos, TSize> > locInfos;
     if (options.verbose)
         std::cerr << "[" << time(0) << "] " << "Collecting reference sequences for locations from " << options.referenceFile << std::endl;
-
-    std::map<TSize, LocationInfo<TSeq, TPos, TSize> > locInfos;
     if (artificialReferences(locInfos, concatGroups, groups, locations, contigs, options) != 0)
         return 1;
     clear(contigs);
@@ -390,7 +386,6 @@ int popins_place(int argc, char const ** argv)
     if (options.verbose)
         std::cerr << "[" << time(0) << "] " << "Identifying best split positions and writing output to "
                                             << options.vcfInsertionsFile << std::endl;
-
     if (findBestSplitAndWriteVcf(vcfStream, locations, groups, locInfos, options) != 0)
         return 1;
     if (findBestSplitAndWriteVcf(vcfStream, locations, concatGroups, locInfos, options) != 0)
