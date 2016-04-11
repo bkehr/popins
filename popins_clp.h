@@ -20,7 +20,7 @@ inline bool exists(CharString const & filename)
 // ==========================================================================
 
 bool
-readFileNames(String<CharString> & files, CharString const & filenameFile)
+readFileNames(String<CharString> & files, CharString & filenameFile)
 {
     if (filenameFile == "") return 0;
 
@@ -32,7 +32,7 @@ readFileNames(String<CharString> & files, CharString const & filenameFile)
     }
     
     RecordReader<std::fstream, SinglePass<> > reader(stream);
-    
+
     while (!atEnd(reader))
     {
         CharString file;
@@ -721,12 +721,7 @@ getOptionValues(PlacingOptions & options, ArgumentParser & parser)
     
     if (isSet(parser, "locations"))
         getOptionValue(options.locationsFile, parser, "locations");
-    if (!exists(options.locationsFile) && (isSet(parser, "batchIndex") || isSet(parser, "batchSize")))
-    {
-        std::cerr << "ERROR: Locations file " << options.locationsFile << " does not exist."
-                  <<       " Please compute locations before splitting exact positioning into batches." << std::endl;
-        return 1;
-    }
+
     if (isSet(parser, "minScore"))
         getOptionValue(options.minLocScore, parser, "minScore");
 
