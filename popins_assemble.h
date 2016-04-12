@@ -39,14 +39,23 @@ remapping(Triple<CharString> & fastqFilesTemp,
           CharString const & tempDir,
           unsigned humanSeqs,
           unsigned threads,
-          CharString & memory)
+          CharString & memory,
+          CharString & prefix)
 {
     std::stringstream cmd;
 
-    CharString remappedSam = getFileName(tempDir, "remapped.sam");
-    CharString remappedBam = getFileName(tempDir, "remapped.bam");
-    CharString remappedBai = getFileName(tempDir, "remapped.bam.bai");
-    CharString remappedUnsortedBam = getFileName(tempDir, "remapped_unsorted.bam");
+    CharString f1 = prefix;
+    f1 += "remapped.sam";
+    CharString remappedSam = getFileName(tempDir, f1);
+    CharString f2 = prefix;
+    f2 += "remapped.bam";
+    CharString remappedBam = getFileName(tempDir, f2);
+    CharString f3 = prefix;
+    f3 += "remapped.bam.bai";
+    CharString remappedBai = getFileName(tempDir, f3);
+    CharString f4 = prefix;
+    f4 += "remapped_unsorted.bam";
+    CharString remappedUnsortedBam = getFileName(tempDir, f4);
 
     // Run BWA on unmapped reads (pairs).
     std::cerr << "[" << time(0) << "] Remapping unmapped reads using " << BWA << std::endl;
@@ -557,8 +566,9 @@ int popins_assemble(int argc, char const ** argv)
 
             // Align with bwa, update fastq files of unaligned reads, and sort remaining bam records by read name.
             CharString remappedBam = getFileName(tmpDir, "remapped.bam");
+            CharString prefix = "";
             if (remapping(fastqFilesTemp, fastqFiles, options.referenceFile, tmpDir,
-                          options.humanSeqs, options.threads, options.memory) != 0)
+                          options.humanSeqs, options.threads, options.memory, prefix) != 0)
                 return 1;
 
             // Set the mate's location and merge non_ref.bam and remapped.bam into a single file.
@@ -645,8 +655,9 @@ int popins_assemble(int argc, char const ** argv)
 
                 // Align with bwa, update fastq files of unaligned reads, and sort remaining bam records by read name.
                 CharString remappedMPBam = getFileName(tmpDir, "MP.remapped.bam");
+                CharString prefix = "MP.";
                 if (remapping(fastqMPFilesTemp, fastqMPFiles, options.referenceFile, tmpDir,
-                              options.humanSeqs, options.threads, options.memory) != 0)
+                              options.humanSeqs, options.threads, options.memory, prefix) != 0)
                     return 1;
 
                 // Set the mate's location and merge non_ref.bam and remapped.bam into a single file.
