@@ -30,7 +30,7 @@ readFileNames(String<CharString> & files, CharString & filenameFile)
         std::cerr << "ERROR: Could not open file listing files " << filenameFile << std::endl;
         return 1;
     }
-    
+
     RecordReader<std::fstream, SinglePass<> > reader(stream);
 
     while (!atEnd(reader))
@@ -44,7 +44,7 @@ readFileNames(String<CharString> & files, CharString & filenameFile)
         }
         appendValue(files, file);
     }
-    
+
     return 0;
 }
 
@@ -63,10 +63,10 @@ bool readFileNames(String<CharString> & files, String<TValue> & values)
         std::cerr << "ERROR: Could not open file listing files " << filenameFile << std::endl;
         return 1;
     }
-    
+
     RecordReader<std::fstream, SinglePass<> > reader(stream);
     clear(files);
-    
+
     while (!atEnd(reader))
     {
         // Read the file name
@@ -78,9 +78,9 @@ bool readFileNames(String<CharString> & files, String<TValue> & values)
             return 1;
         }
         appendValue(files, file);
-        
+
         skipBlanks(reader);
-        
+
         // Read the value for this filename
         CharString buffer;
         res = readLine(buffer, reader);
@@ -93,7 +93,7 @@ bool readFileNames(String<CharString> & files, String<TValue> & values)
         lexicalCast2<TValue>(val, buffer);
         appendValue(values, val);
     }
-    
+
     return 0;
 }
 
@@ -123,7 +123,7 @@ parseInterval(Triple<CharString, unsigned, unsigned> & out, CharString & in)
         return 0;
     }
 
-    unsigned dashPos = 0;  
+    unsigned dashPos = 0;
     while (it != end(in))
     {
         if (*it == '-')
@@ -153,18 +153,20 @@ parseInterval(Triple<CharString, unsigned, unsigned> & out, CharString & in)
 
 struct AssemblyOptions {
     CharString mappingFile;
+    CharString matepairFile;
     CharString referenceFile;
     CharString workingDirectory;
     CharString tmpDir;
-    
+
     unsigned kmerLength;
     CharString adapters;
     int humanSeqs;
     unsigned threads;
     CharString memory;
-    
+    bool matepair;
+
     AssemblyOptions () :
-        kmerLength(47), humanSeqs(maxValue<int>()), threads(1), memory("500000000")
+        kmerLength(47), humanSeqs(maxValue<int>()), threads(1), memory("500000000"), matepair(false)
     {}
 };
 
@@ -180,7 +182,7 @@ struct MergingOptions {
 
     unsigned batchIndex;
     unsigned batches;
-    
+
     double errorRate;
     int minimalLength;
     unsigned qgramLength;
@@ -193,7 +195,7 @@ struct MergingOptions {
     MergingOptions() :
         outputFile("supercontigs.fa"), verbose(false), veryVerbose(false), batchIndex(0), batches(1),
         errorRate(0.01), minimalLength(60), qgramLength(47), matchScore(1), errorPenalty(-5), minScore(90), minTipScore(30), minEntropy(0.75)
-    {} 
+    {}
 };
 
 struct ContigMapOptions {
@@ -204,7 +206,7 @@ struct ContigMapOptions {
     CharString memory;
     CharString tmpDir;
     bool allAlignment;
-    
+
     ContigMapOptions() :
         threads(1), memory("500000000"), allAlignment(false)
     {}
@@ -213,27 +215,27 @@ struct ContigMapOptions {
 struct PlacingOptions {
     CharString supercontigFile;
     CharString referenceFile;
-    
+
     String<CharString> bamFiles;
     String<double> bamAvgCov;
 
     CharString locationsFile;          // merged from all individuals
     String<CharString> locationsFiles; // one file per individual
     CharString vcfInsertionsFile;
-    
+
     //unsigned batchIndex;
     //unsigned batchSize;
     Triple<CharString, unsigned, unsigned> interval; // chrom, beginPos, endPos
-    
+
     double minLocScore;
-    
+
     unsigned readLength;
     unsigned maxInsertSize;
-    
+
     unsigned maxSplitReads;
-    
+
     bool verbose;
-    
+
     PlacingOptions() :
         locationsFile("locations.txt"), vcfInsertionsFile("insertions.vcf"),
         minLocScore(0.3), readLength(100), maxInsertSize(800), maxSplitReads(1000),
@@ -270,7 +272,7 @@ struct GenotypingOptions {
     bool useReadCounts;
     bool fullOverlap;
 
-    GenotypingOptions() : 
+    GenotypingOptions() :
         sampleName("sample"), match(1), mismatch(-4), gapOpen(-10), gapExtend(-1), minAlignScore(55),
         maxInsertSize( 500 ), bpQclip(0), minSeqLen(10), minReadProb(0.0001), maxBARcount(200),
         regionWindowSize(50), addReadGroup(false), verbose(false),
@@ -307,10 +309,10 @@ setupParser(ArgumentParser & parser, AssemblyOptions & options)
 {
     setShortDescription(parser, "Assembly of unmapped reads.");
     setVersion(parser, VERSION);
-    setDate(parser, VERSION_DATE); 
+    setDate(parser, VERSION_DATE);
 
     // Define usage line and long description.
-    addUsageLine(parser, "[\\fIOPTIONS\\fP] \\fIBAM FILE\\fP");
+    addUsageLine(parser, "[\\fIOPTIONS\\fP] \\fIBAM FILE\\fP [\\fIMP BAM FILE\\fP]");
     addDescription(parser, "Finds the unmapped reads in a bam files. If a fasta file is specified, the unmapped reads "
                            "will first be remapped to this reference using bwa and only reads that remain unmapped are "
                            "further processed. All unmapped reads are quality filtered using sickle and passed to "
@@ -318,32 +320,33 @@ setupParser(ArgumentParser & parser, AssemblyOptions & options)
 
     // Require a bam file as argument.
     addArgument(parser, ArgParseArgument(ArgParseArgument::INPUTFILE, "BAMFILE"));
-    
-    
+    addArgument(parser, ArgParseArgument(ArgParseArgument::INPUTFILE, "MPFILE"));
+
     // Setup the options.
     addOption(parser, ArgParseOption("d", "directory", "Path to working directory.", ArgParseArgument::STRING, "PATH"));
     setDefaultValue(parser, "directory", "current directory");
-    
+
     addOption(parser, ArgParseOption("tmp", "tmpdir", "Path to a temporary directory ending with XXXXXX.", ArgParseArgument::STRING, "PATH"));
     setDefaultValue(parser, "tmpdir", "same as working directory");
-    
+
     addOption(parser, ArgParseOption("k", "kmerLength", "The k-mer size for velvet assembly.", ArgParseArgument::INTEGER, "INT"));
     setDefaultValue(parser, "kmerLength", options.kmerLength);
-    
+
     addOption(parser, ArgParseOption("a", "adapters", "Enable adapter removal for Illumina reads. Default: \\fIno adapter removal\\fP.", ArgParseArgument::STRING, "STR"));
     setValidValues(parser, "adapters", "HiSeq HiSeqX");
 
     addOption(parser, ArgParseOption("r", "reference", "Fasta file with reference sequences for remapping. Default: \\fIno remapping\\fP.", ArgParseArgument::INPUTFILE, "FILE"));
     setValidValues(parser, "reference", "fa fna fasta");
-    
+
     addOption(parser, ArgParseOption("f", "filter", "Consider reads with low quality alignments as unmapped only for first INT sequences in the reference file. Requires reference file for remapping to be set.", ArgParseArgument::INTEGER, "INT"));
 
     addOption(parser, ArgParseOption("t", "threads", "Number of threads to use for bwa.", ArgParseArgument::INTEGER, "INT"));
     setDefaultValue(parser, "threads", options.threads);
     setMinValue(parser, "threads", "1");
-    
+
     addOption(parser, ArgParseOption("m", "memory", "Maximum memory for samtools sort.", ArgParseArgument::STRING, "STR"));
     setDefaultValue(parser, "memory", options.memory);
+    addOption(parser, ArgParseOption("", "matepair", "Use matepair data for assembly."));
 }
 
 void
@@ -351,8 +354,8 @@ setupParser(ArgumentParser & parser, MergingOptions & options)
 {
     setShortDescription(parser, "Merging of insertion contigs into supercontigs.");
     setVersion(parser, VERSION);
-    setDate(parser, VERSION_DATE); 
-    
+    setDate(parser, VERSION_DATE);
+
     // Define usage line and long description.
     addUsageLine(parser, "[\\fIOPTIONS\\fP] \\fIFA FILE 1\\fP ... \\fIFA FILE N\\fP");
     addUsageLine(parser, "[\\fIOPTIONS\\fP] \\fIFILE LIST FILE\\fP");
@@ -363,10 +366,10 @@ setupParser(ArgumentParser & parser, MergingOptions & options)
                            "partitions the sequences into sets of similar sequences using the SWIFT filtering "
                            "approach, and then aligns each set of sequences into a graph of supercontigs. These two "
                            "steps of the algorithm can be split into several program calls (see Note below).");
-                           
+
     // Require a list of fasta files as argument.
     addArgument(parser, ArgParseArgument(ArgParseArgument::INPUTFILE, "FAFILE", true));
-    
+
     // Program parameters
     addSection(parser, "Parameters");
     addOption(parser, ArgParseOption("e", "errRate", "Maximal error rate for SWIFT filtering.", ArgParseArgument::DOUBLE, "FLOAT"));
@@ -377,14 +380,14 @@ setupParser(ArgumentParser & parser, MergingOptions & options)
     addOption(parser, ArgParseOption("s", "minScore", "Minimal score for Smith-Waterman alignment.", ArgParseArgument::INTEGER, "INT"));
     addOption(parser, ArgParseOption("t", "minTipScore", "Minimal score for tips in supercontig graph.", ArgParseArgument::INTEGER, "INT"));
     addOption(parser, ArgParseOption("y", "minEntropy", "Minimal entropy for discarding low-complexity sequences. Choose as 0.0 to disable filter.", ArgParseArgument::DOUBLE, "FLOAT"));
-    
-    
+
+
     // Program mode options
     addSection(parser, "Program mode options");
     addOption(parser, ArgParseOption("b", "batches", "Total number of batches (see Note below).", ArgParseArgument::INTEGER, "INT"));
     addOption(parser, ArgParseOption("i", "batchIndex", "Batch number (see Note below).", ArgParseArgument::INTEGER, "INT"));
     addOption(parser, ArgParseOption("c", "componentFiles", "List of files written by the partioning step. Either the name of a single file that lists one component filename per line, or multiple names of component files, i.e. -c <FILE1> -c <FILE2> ...", ArgParseArgument::INPUTFILE, "FILE", true));
-    
+
     // Output file options.
     addSection(parser, "Output options");
     addOption(parser, ArgParseOption("o", "outFile", "Name of output file. Either in text format for components or fasta format for the supercontigs.", ArgParseArgument::OUTPUTFILE, "OUTPUTFILE"));
@@ -431,8 +434,8 @@ setupParser(ArgumentParser & parser, ContigMapOptions & options)
 {
     setShortDescription(parser, "Alignment of unmapped reads to assembled contigs.");
     setVersion(parser, VERSION);
-    setDate(parser, VERSION_DATE); 
-    
+    setDate(parser, VERSION_DATE);
+
     // Define usage line and long description.
     addUsageLine(parser, "[\\fIOPTIONS\\fP] \\fIFA FILE\\fP");
     addDescription(parser, "Aligns unmapped reads from fastq files in working directory to a set of contigs specified "
@@ -445,7 +448,7 @@ setupParser(ArgumentParser & parser, ContigMapOptions & options)
 
     // Setup the option.
     addOption(parser, ArgParseOption("d", "directory", "Path to working directory.", ArgParseArgument::STRING, "PATH"));
-    setDefaultValue(parser, "directory", "current directory"); 
+    setDefaultValue(parser, "directory", "current directory");
 
     addOption(parser, ArgParseOption("tmp", "tmpdir", "Path to a temporary directory ending with XXXXXX.", ArgParseArgument::STRING, "PATH"));
     setDefaultValue(parser, "tmpdir", "same as working directory");
@@ -453,7 +456,7 @@ setupParser(ArgumentParser & parser, ContigMapOptions & options)
     addOption(parser, ArgParseOption("t", "threads", "Number of threads to use for bwa.", ArgParseArgument::INTEGER, "INT"));
     setDefaultValue(parser, "threads", options.threads);
     setMinValue(parser, "threads", "1");
-    
+
     addOption(parser, ArgParseOption("m", "memory", "Maximum memory for samtools sort.", ArgParseArgument::STRING, "STR"));
     setDefaultValue(parser, "memory", options.memory);
 
@@ -466,7 +469,7 @@ setupParser(ArgumentParser & parser, PlacingOptions & options)
 {
     setShortDescription(parser, "Finding positions of contigs in reference genome.");
     setVersion(parser, VERSION);
-    setDate(parser, VERSION_DATE); 
+    setDate(parser, VERSION_DATE);
 
     addUsageLine(parser, "[\\fIOPTIONS\\fP] \\fICONTIGFILE\\fP \\fIREFFILE\\fP");
     addDescription(parser, "Finds the positions of (super-)contigs in the reference genome. Merges files with "
@@ -518,8 +521,8 @@ setupParser(ArgumentParser & parser, GenotypingOptions & options)
 {
     setShortDescription(parser, "Genotyping an individual for the insertions.");
     setVersion(parser, VERSION);
-    setDate(parser, VERSION_DATE); 
-    
+    setDate(parser, VERSION_DATE);
+
     addUsageLine(parser, "[\\fIOPTIONS\\fP] \\fIFASTAFILE\\fP \\fIBAMFILE\\fP \\fIFASTAFILEALT\\fP \\fIBAMFILEALT\\fP \\fIVCFFILE\\fP");
     addDescription(parser, "The genotype command takes as input a fasta file of the reference genome, a bam file of a "
                            "single individual, the fasta file with the supercontigs, the bam file of contig mapped and "
@@ -527,14 +530,14 @@ setupParser(ArgumentParser & parser, GenotypingOptions & options)
                            "positions. It computes genotype likelihoods by aligning all reads from each insertion "
                            "location and contig to the reference and to the alternative insertion sequence. It outputs "
                            "VCF records with the genotype likelihoods in GT:PL format for the individual to std::out.");
-    
+
     // Require five files as arguments.
     addArgument(parser, ArgParseArgument(ArgParseArgument::INPUTFILE, "fastafile"));
     addArgument(parser, ArgParseArgument(ArgParseArgument::INPUTFILE, "bamfile"));
     addArgument(parser, ArgParseArgument(ArgParseArgument::INPUTFILE, "fastafilealt"));
     addArgument(parser, ArgParseArgument(ArgParseArgument::INPUTFILE, "bamfilealt"));
     addArgument(parser, ArgParseArgument(ArgParseArgument::INPUTFILE, "vcffile"));
-    
+
     // Options.
     addSection(parser, "Alignment options");
     addOption(parser, ArgParseOption("m", "match", "Cost of match.", ArgParseArgument::INTEGER, "INT"));
@@ -560,7 +563,7 @@ setupParser(ArgumentParser & parser, GenotypingOptions & options)
     addOption(parser, ArgParseOption("b", "callboth", "callboth"));
     hideOption(parser, "b");
     addOption(parser, ArgParseOption("r", "readcounts", "use read counts"));
-    hideOption(parser, "r");    
+    hideOption(parser, "r");
     addOption(parser, ArgParseOption("f", "fulloverlap", "full overlap of read"));
     hideOption(parser, "f");
 
@@ -586,7 +589,7 @@ int
 getOptionValues(AssemblyOptions & options, ArgumentParser const & parser)
 {
     getArgumentValue(options.mappingFile, parser, 0);
-    
+
     if (isSet(parser, "reference"))
         getOptionValue(options.referenceFile, parser, "reference");
     if (isSet(parser, "kmerLength"))
@@ -603,6 +606,12 @@ getOptionValues(AssemblyOptions & options, ArgumentParser const & parser)
         getOptionValue(options.threads, parser, "threads");
     if (isSet(parser, "memory"))
         getOptionValue(options.memory, parser, "memory");
+    if (isSet(parser, "matepair")) {
+        options.matepair = true;
+        if (!getArgumentValue(options.matepairFile, parser, 1)) {
+          return 1;
+        }
+    }
 
     return 0;
 }
@@ -611,7 +620,7 @@ int
 getOptionValues(MergingOptions & options, ArgumentParser & parser)
 {
     options.contigFiles = getArgumentValues(parser, 0);
-    
+
     // Get parameter values.
     if (isSet(parser, "errRate"))
         getOptionValue(options.errorRate, parser, "errRate");
@@ -629,7 +638,7 @@ getOptionValues(MergingOptions & options, ArgumentParser & parser)
         getOptionValue(options.minTipScore, parser, "minTipScore");
     if (isSet(parser, "minEntropy"))
         getOptionValue(options.minEntropy, parser, "minEntropy");
-    
+
     // Get program mode options.
     if (isSet(parser, "batchIndex") && isSet(parser, "batches"))
     {
@@ -658,7 +667,7 @@ getOptionValues(MergingOptions & options, ArgumentParser & parser)
         std::cerr << "ERROR: Please specify both options --batchIndex and --batches." << std::endl;
         return 1;
     }
-    
+
     if (isSet(parser, "componentFiles"))
     {
         options.componentFiles = getOptionValues(parser, "componentFiles");
@@ -682,7 +691,7 @@ getOptionValues(MergingOptions & options, ArgumentParser & parser)
         options.verbose = true;
         options.veryVerbose = true;
     }
-    
+
     return 0;
 }
 
@@ -690,7 +699,7 @@ int
 getOptionValues(ContigMapOptions & options, ArgumentParser & parser)
 {
     getArgumentValue(options.contigFile, parser, 0);
-    
+
     if (isSet(parser, "directory"))
         getOptionValue(options.workingDirectory, parser, "directory");
     if (isSet(parser, "tmpdir"))
@@ -710,7 +719,7 @@ getOptionValues(PlacingOptions & options, ArgumentParser & parser)
 {
     getArgumentValue(options.supercontigFile, parser, 0);
     getArgumentValue(options.referenceFile, parser, 1);
-    
+
     if (isSet(parser, "locationsFiles"))
     {
         CharString locationsFilesFile;
@@ -718,7 +727,7 @@ getOptionValues(PlacingOptions & options, ArgumentParser & parser)
         if (readFileNames(options.locationsFiles, locationsFilesFile) != 0)
             return 1;
     }
-    
+
     if (isSet(parser, "locations"))
         getOptionValue(options.locationsFile, parser, "locations");
 
@@ -755,7 +764,7 @@ getOptionValues(PlacingOptions & options, ArgumentParser & parser)
 
     if (isSet(parser, "out"))
         getOptionValue(options.vcfInsertionsFile, parser, "out");
-        
+
     options.verbose = isSet(parser, "verbose");
 
     return 0;
@@ -769,7 +778,7 @@ getOptionValues(GenotypingOptions & options, ArgumentParser & parser)
     getArgumentValue(options.altFastaFile, parser, 2);
     getArgumentValue(options.altBamFile, parser, 3);
     getArgumentValue(options.vcfFile, parser, 4);
-    
+
     if (isSet(parser, "match"))
         getOptionValue(options.match, parser, "match");
     if (isSet(parser, "mismatch"))
@@ -793,7 +802,7 @@ getOptionValues(GenotypingOptions & options, ArgumentParser & parser)
         getOptionValue(options.minSeqLen, parser, "minSeqLen");
     if (isSet(parser, "samplename"))
         getOptionValue(options.sampleName, parser, "samplename");
-        
+
     if(isSet(parser, "window"))
         getOptionValue( options.regionWindowSize, parser, "window");
     options.addReadGroup = isSet(parser, "addreadgroup");
@@ -824,12 +833,12 @@ int parseCommandLine(TOptions & options, int argc, char const ** argv)
     // Setup the parser.
     ArgumentParser parser(toCString(prog_name));
     setupParser(parser, options);
-    
+
     // Parse the command line.
     ArgumentParser::ParseResult res = parse(parser, argc, argv);
     if (res != ArgumentParser::PARSE_OK)
         return 1;
-    
+
     // Collect the option values.
     if (getOptionValues(options, parser) != 0)
         return 1;
