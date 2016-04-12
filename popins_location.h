@@ -5,6 +5,7 @@
 
 #include <seqan/sequence.h>
 #include <seqan/stream.h>
+#include <seqan/bam_io.h>
 
 #ifndef POPINS_LOCATION_H_
 #define POPINS_LOCATION_H_
@@ -71,6 +72,7 @@ struct Location
     unsigned numReads;
     double score;
     
+    std::map<CharString, unsigned> bestSamples;
     unsigned fileIndex;
     
     Location ()
@@ -295,11 +297,11 @@ mappedInterval(String<CigarElement<> > & cigar)
         
         switch ((*it).operation)
         {
-        case 'S': case 'H':
+        case 'S':
             if (it == begin(cigar))
                 beginPos += (*it).count;
             break;
-        case 'D':
+        case 'D': case 'H':
             len -= (*it).count;
             break;
         case 'M': case 'I':
@@ -355,51 +357,48 @@ alignmentScore(BamAlignmentRecord & record)
 bool
 isGoodQuality(BamAlignmentRecord & record, Pair<CigarElement<>::TCount> & interval)
 {
-if (record.mapQ == 0)
-return false;
+    if (interval.i2 - interval.i1 < 50)
+        return false;
 
-if (interval.i2 - interval.i1 < 50)
-return false;
+    if (interval.i2 - interval.i1 < length(record.seq) / 2)
+        return false;
 
-if (interval.i2 - interval.i1 < length(record.seq) / 2)
-return false;
+    if (avgQuality(record.qual, interval) <= 20)
+        return false;
 
-if (avgQuality(record.qual, interval) <= 20)
-return false;
+    if (alignmentScore(record) < 0.8 * (interval.i2 - interval.i1))
+        return false;
 
-if (alignmentScore(record) < 0.8 * (interval.i2 - interval.i1))
-return false;
-
-return true;
+    return true;
 }
 
 // ==========================================================================
 
 unsigned
 distanceToContigEnd(BamAlignmentRecord & record,
-Pair<CigarElement<>::TCount> & interval,
-StringSet<CharString> & names,
-std::map<CharString, unsigned> & contigLengths)
+        Pair<CigarElement<>::TCount> & interval,
+        StringSet<CharString> & names,
+        std::map<CharString, unsigned> & contigLengths)
 {
-if (hasFlagRC(record))
-{
-unsigned endPos = record.beginPos + interval.i2 - interval.i1;
-return contigLengths[names[record.rID]] - endPos;
-}
-else
-{
-return record.beginPos;
-}
+    if (hasFlagRC(record))
+    {
+        return record.beginPos;
+    }
+    else
+    {
+        unsigned endPos = record.beginPos + interval.i2 - interval.i1;
+        return contigLengths[names[record.rID]] - endPos;
+    }
 }
 
 // ==========================================================================
 
 inline int
 readAnchoringRecord(AnchoringRecord & record,
-std::map<Triple<CharString, CharString, unsigned>, unsigned> & goodReads,
-BamStream & stream,
-StringSet<CharString> & names,
-std::map<CharString, unsigned> & contigLengths)
+        std::map<Triple<CharString, CharString, unsigned>, unsigned> & goodReads,
+        BamStream & stream,
+        StringSet<CharString> & names,
+        std::map<CharString, unsigned> & contigLengths)
 {
     BamAlignmentRecord r;
     while (!atEnd(stream))
@@ -409,34 +408,37 @@ std::map<CharString, unsigned> & contigLengths)
             std::cerr << "ERROR: Could not read BAM alignment record." << std::endl;
             return 1;
         }
-        
+
         if (r.rID == r.rNextId || r.rNextId == -1 || r.rID == -1)
-        continue;
+            continue;
 
         Pair<CigarElement<>::TCount> interval = mappedInterval(r.cigar);
         if (!isGoodQuality(r, interval))
-        continue;
+            continue;
 
         bool isContig = isComponentOrNode(names[r.rID]);
 
-        if (isContig && distanceToContigEnd(r, interval, names, contigLengths) > 500)
-        continue;
+        if (!isContig && r.mapQ == 0)
+            continue;
 
-       Triple<CharString, CharString, unsigned> nameChrPos = Triple<CharString, CharString, unsigned>(r.qName, names[r.rNextId], r.pNext);
+        if (isContig && distanceToContigEnd(r, interval, names, contigLengths) > 500)
+            continue;
+
+        Triple<CharString, CharString, unsigned> nameChrPos = Triple<CharString, CharString, unsigned>(r.qName, names[r.rNextId], r.pNext);
         if (goodReads.count(nameChrPos) == 0)
         {
-         goodReads[ Triple<CharString, CharString, unsigned>(r.qName, names[r.rID], r.beginPos)] = r.beginPos + interval.i2 - interval.i1;
+            goodReads[ Triple<CharString, CharString, unsigned>(r.qName, names[r.rID], r.beginPos)] = r.beginPos + interval.i2 - interval.i1;
         }
         else if (isContig)
         {
-        record.chr = names[r.rNextId];
-        record.chrStart = r.pNext;
-        record.chrEnd = goodReads[nameChrPos];
-        record.chrOri = !hasFlagNextRC(r);
-        record.contig = names[r.rID];
-        record.contigOri = !hasFlagRC(r);
+            record.chr = names[r.rNextId];
+            record.chrStart = r.pNext;
+            record.chrEnd = goodReads[nameChrPos];
+            record.chrOri = !hasFlagNextRC(r);
+            record.contig = names[r.rID];
+            record.contigOri = !hasFlagRC(r);
 
-        return 0;
+            return 0;
         }
         else
         {
@@ -656,6 +658,73 @@ readLocation(Location & loc, RecordReader<std::fstream, SinglePass<> > & reader,
         return 1;
     }
     lexicalCast2<double>(loc.score, buffer);
+
+    if (value(reader) != '\r' && value(reader) != '\n') // if not at end of line
+    {
+        skipWhitespaces(reader);
+
+        CharString sampleName;
+        if (readUntilChar(sampleName, reader, ':') != 0)
+        {
+            std::cerr << "ERROR: Reading SAMPLE_ID from locations file " << locationsFile << " failed." << std::endl;
+            return 1;
+        }
+        if (loc.bestSamples.count(sampleName) != 0)
+        {
+            std::cerr << "ERROR: Sample " << sampleName << " listed twice in " << locationsFile << " for " << loc.chr << ":" << loc.chrStart << "-" << loc.chrEnd << "." << std::endl;
+            return 1;
+        }
+        skipChar(reader, ':');
+
+        CharString numBuffer;
+        if (readDigits(numBuffer, reader) != 0)
+        {
+            std::cerr << "ERROR: Reading NUM_READS for sample " << sampleName << " from locations file " << locationsFile << " failed." << std::endl;
+            return 1;
+        }
+        unsigned readCount;
+        lexicalCast2<unsigned>(readCount, numBuffer);
+        loc.bestSamples[sampleName] = readCount;
+
+        while (value(reader) != '\r' && value(reader) != '\n') // while not at end of line
+        {
+            skipChar(reader, ',');
+
+            clear(sampleName);
+            if (readUntilChar(sampleName, reader, ':') != 0)
+            {
+                std::cerr << "ERROR: Reading next SAMPLE_ID from locations file " << locationsFile << " failed." << std::endl;
+                return 1;
+            }
+            if (loc.bestSamples.count(sampleName) != 0)
+            {
+                std::cerr << "ERROR: Sample " << sampleName << " listed twice in " << locationsFile << " for " << loc.chr << ":" << loc.chrStart << "-" << loc.chrEnd << "." << std::endl;
+                return 1;
+            }
+            skipChar(reader, ':');
+
+            clear(numBuffer);
+            if (readDigits(numBuffer, reader) != 0)
+            {
+                std::cerr << "ERROR: Reading NUM_READS for sample " << sampleName << " from locations file " << locationsFile << " failed." << std::endl;
+                return 1;
+            }
+            lexicalCast2<unsigned>(readCount, numBuffer);
+            loc.bestSamples[sampleName] = readCount;
+        }
+    }
+    else
+    {
+        CharString sampleName = locationsFile; // TODO: Replace by an actual sample ID.
+        if (suffix(sampleName, length(sampleName) - 14) == "/locations.txt")
+            sampleName = prefix(sampleName, length(sampleName) - 14);
+        if (loc.bestSamples.count(sampleName) != 0)
+        {
+            std::cerr << "ERROR: Sample " << sampleName << " listed twice in " << locationsFile << " for " << loc.chr << ":" << loc.chrStart << "-" << loc.chrEnd << "." << std::endl;
+            return 1;
+        }
+        loc.bestSamples[sampleName] = loc.numReads;
+    }
     skipLine(reader);
 
     return 0;
@@ -711,6 +780,20 @@ writeLocations(std::fstream & stream, String<Location> & locations)
         stream << "\t" << ((*it).contigOri ? "+" : "-");
         stream << "\t" << (*it).numReads;
         if ((*it).score != -1) stream << "\t" << (*it).score;
+        if (length((*it).bestSamples) > 0)
+        {
+            String<Pair<unsigned, CharString> > bestSamples;
+            for (std::map<CharString, unsigned>::iterator bsIt = (*it).bestSamples.begin(); bsIt != (*it).bestSamples.end(); ++bsIt)
+                appendValue(bestSamples, Pair<unsigned, CharString>(bsIt->second, bsIt->first));
+
+            std::stable_sort(begin(bestSamples), end(bestSamples), std::greater<Pair<unsigned, CharString> >());
+            if (length(bestSamples) > 100)
+                resize(bestSamples, 100);
+
+            stream << "\t" << bestSamples[0].i2 << ":" << bestSamples[0].i1;
+            for (unsigned i = 1; i < length(bestSamples); ++i)
+                stream << "," << bestSamples[i].i2 << ":" << bestSamples[i].i1;
+        }
         stream << std::endl;
     }
     
@@ -752,6 +835,14 @@ addLocation(Location & prevLoc, String<Location> & locations, Location & loc)
     {
         prevLoc.chrEnd = std::max(prevLoc.chrEnd, loc.chrEnd);
         prevLoc.numReads += loc.numReads;
+
+        for (std::map<CharString, unsigned>::iterator bsIt = loc.bestSamples.begin(); bsIt != loc.bestSamples.end(); ++bsIt)
+        {
+            if (prevLoc.bestSamples.count(bsIt->first) == 0)
+                prevLoc.bestSamples[bsIt->first] = bsIt->second;
+            else
+                prevLoc.bestSamples[bsIt->first] += bsIt->second;
+        }
     }
 }
 
