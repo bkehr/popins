@@ -1,3 +1,6 @@
+#ifndef POPINS_LOCATION_H_
+#define POPINS_LOCATION_H_
+
 #include <iostream>
 #include <sstream>
 #include <fstream>
@@ -6,9 +9,6 @@
 #include <seqan/sequence.h>
 #include <seqan/stream.h>
 #include <seqan/bam_io.h>
-
-#ifndef POPINS_LOCATION_H_
-#define POPINS_LOCATION_H_
 
 using namespace seqan;
 
@@ -244,6 +244,46 @@ struct LocationTypeGreater : public std::binary_function <Location, Location, bo
         return compare(a, b) == -1;
     }
 };
+
+// ==========================================================================
+// Struct LocationsFilter
+// ==========================================================================
+
+struct LocationsFilter
+{
+	bool other;
+	unsigned minReads;
+	double minScore;
+	unsigned maxLength;
+
+	LocationsFilter() :
+		other(true), minReads(1), minScore(0), maxLength(-1)
+	{}
+
+	LocationsFilter(unsigned r, double s, unsigned l) :
+		other(false), minReads(r), minScore(s), maxLength(l)
+	{}
+
+};
+
+// ==========================================================================
+// Function passesFilter()
+// ==========================================================================
+
+bool
+passesFilter(Location & loc, LocationsFilter & filter)
+{
+    if (loc.numReads < filter.minReads || loc.score < filter.minScore)
+    	return false;
+
+    if (!filter.other && loc.chr == "OTHER")
+    	return false;
+
+    if (loc.chrEnd - loc.chrStart > filter.maxLength)
+    	return false;
+
+	return true;
+}
 
 // ==========================================================================
 
@@ -731,11 +771,22 @@ readLocation(Location & loc, RecordReader<std::fstream, SinglePass<> > & reader,
 }
 
 // ==========================================================================
+// Function appendLocation()
+// ==========================================================================
+
+void
+appendLocation(String<Location> & locs, Location & loc)
+{
+	appendValue(locs, loc);
+}
+
+// ==========================================================================
 // Function readLocations()
 // ==========================================================================
 
+template<typename TLoc>
 int
-readLocations(String<Location> & locations, CharString & locationsFile, Triple<CharString, unsigned, unsigned> & interval)
+readLocations(String<TLoc> & locations, CharString & locationsFile, LocationsFilter & filterParams)
 {
     std::fstream stream(toCString(locationsFile), std::ios::in);
     if (!stream.good())
@@ -748,11 +799,75 @@ readLocations(String<Location> & locations, CharString & locationsFile, Triple<C
     for (unsigned line = 0; !atEnd(reader); ++line)
     {
         Location loc;
-        if (readLocation(loc, reader, locationsFile) != 0) return 1;
-        if (loc.chr == interval.i1 && loc.chrStart >= interval.i2 && loc.chrStart < interval.i3)
-            appendValue(locations, loc);
+
+        if (readLocation(loc, reader, locationsFile) != 0)
+        	return 1;
+
+        if (passesFilter(loc, filterParams))
+        	appendLocation(locations, loc);
     }
     return 0;
+}
+
+template<typename TLoc>
+int
+readLocations(String<TLoc> & locations, CharString & locationsFile, Triple<CharString, unsigned, unsigned> & interval, LocationsFilter & filterParams)
+{
+    std::fstream stream(toCString(locationsFile), std::ios::in);
+    if (!stream.good())
+    {
+        std::cerr << "ERROR: Could not open locations file " << locationsFile << std::endl;
+        return 1;
+    }
+    RecordReader<std::fstream, SinglePass<> > reader(stream);
+
+    for (unsigned line = 0; !atEnd(reader); ++line)
+    {
+        Location loc;
+
+        if (readLocation(loc, reader, locationsFile) != 0)
+        	return 1;
+
+        if (passesFilter(loc, filterParams) && loc.chr == interval.i1 && loc.chrStart >= interval.i2 && loc.chrStart < interval.i3)
+        	appendLocation(locations, loc);
+    }
+    return 0;
+}
+
+// ==========================================================================
+// Function writeLoc()
+// ==========================================================================
+
+void
+writeLoc(std::fstream & stream, Location & loc)
+{
+    stream << loc.chr;
+    if (loc.chr != "OTHER")
+    {
+        stream << ":";
+        stream << loc.chrStart << "-";
+        stream << loc.chrEnd;
+    }
+    stream << "\t" << (loc.chrOri ? "+" : "-");
+    stream << "\t" << loc.contig;
+    stream << "\t" << (loc.contigOri ? "+" : "-");
+    stream << "\t" << loc.numReads;
+    if (loc.score != -1) stream << "\t" << loc.score;
+    if (length(loc.bestSamples) > 0)
+    {
+    	String<Pair<unsigned, CharString> > bestSamples;
+    	for (std::map<CharString, unsigned>::iterator bsIt = loc.bestSamples.begin(); bsIt != loc.bestSamples.end(); ++bsIt)
+    		appendValue(bestSamples, Pair<unsigned, CharString>(bsIt->second, bsIt->first));
+
+    	std::stable_sort(begin(bestSamples), end(bestSamples), std::greater<Pair<unsigned, CharString> >());
+    	if (length(bestSamples) > 100)
+    		resize(bestSamples, 100);
+
+    	stream << "\t" << bestSamples[0].i2 << ":" << bestSamples[0].i1;
+    	for (unsigned i = 1; i < length(bestSamples); ++i)
+    		stream << "," << bestSamples[i].i2 << ":" << bestSamples[i].i1;
+    }
+    stream << std::endl;
 }
 
 // ==========================================================================
@@ -767,35 +882,7 @@ writeLocations(std::fstream & stream, String<Location> & locations)
     // Iterate over locations to output them one per line.
     TIterator itEnd = end(locations);
     for (TIterator it = begin(locations); it != itEnd; ++it)
-    {
-        stream << (*it).chr;
-        if ((*it).chr != "OTHER")
-        {
-            stream << ":";
-            stream << (*it).chrStart << "-";
-            stream << (*it).chrEnd;
-        }
-        stream << "\t" << ((*it).chrOri ? "+" : "-");
-        stream << "\t" << (*it).contig;
-        stream << "\t" << ((*it).contigOri ? "+" : "-");
-        stream << "\t" << (*it).numReads;
-        if ((*it).score != -1) stream << "\t" << (*it).score;
-        if (length((*it).bestSamples) > 0)
-        {
-            String<Pair<unsigned, CharString> > bestSamples;
-            for (std::map<CharString, unsigned>::iterator bsIt = (*it).bestSamples.begin(); bsIt != (*it).bestSamples.end(); ++bsIt)
-                appendValue(bestSamples, Pair<unsigned, CharString>(bsIt->second, bsIt->first));
-
-            std::stable_sort(begin(bestSamples), end(bestSamples), std::greater<Pair<unsigned, CharString> >());
-            if (length(bestSamples) > 100)
-                resize(bestSamples, 100);
-
-            stream << "\t" << bestSamples[0].i2 << ":" << bestSamples[0].i1;
-            for (unsigned i = 1; i < length(bestSamples); ++i)
-                stream << "," << bestSamples[i].i2 << ":" << bestSamples[i].i1;
-        }
-        stream << std::endl;
-    }
+    	writeLoc(stream, *it);
     
     return 0;
 }
@@ -1132,82 +1219,6 @@ groupLocations(std::map<TSize, std::set<TSize> > & groups, String<Location> & lo
 //            std::cerr << " " << *it2;
 //        std::cerr << std::endl;
 //    }
-}
-
-// =======================================================================================
-// Function loadLocations()
-// =======================================================================================
-
-int
-loadLocations(String<Location> & locations, PlacingOptions & options)
-{
-    if (!exists(options.locationsFile))
-    {
-        if (length(options.locationsFiles) == 0)
-        {
-            std::cerr << "ERROR: Locations file " << options.locationsFile << "does not exist. Specify -l option to create it." << std::endl;
-            return -1;
-        }
-
-        // Open output file.
-        std::fstream stream(toCString(options.locationsFile), std::ios::out);
-        if (!stream.good())
-        {
-            std::cerr << "ERROR: Could not open locations file " << options.locationsFile << " for writing." << std::endl;
-            return -1;
-        }
-
-        // Merge approximate locations and write them to a file.
-        if (options.verbose) std::cerr << "[" << time(0) << "] " << "Merging locations files." << std::endl;
-        if (mergeLocations(stream, locations, options.locationsFiles, options.locationsFile, options.verbose) != 0) return -1;
-    }
-    else
-    {
-        if (options.verbose) std::cerr << "[" << time(0) << "] " << "Locations file exists." << std::endl;
-    }
-
-    if (length(options.bamFiles) == 0)
-    {
-        if (options.verbose) std::cerr << "[" << time(0) << "] " << "No split mapping. Specify -b option for split mapping." << std::endl;
-        return 1;
-    }
-    
-    // Read the locations file.
-    if (length(locations) == 0)
-    {
-        if (options.verbose) std::cerr << "[" << time(0) << "] " << "Reading locations in " << options.interval.i1 << ":" << options.interval.i2 << "-" << options.interval.i3
-                                                                 << " from " << options.locationsFile << std::endl;
-        if (readLocations(locations, options.locationsFile, options.interval) != 0) return -1;
-        if (options.verbose) std::cerr << "[" << time(0) << "] " << length(locations) << " locations loaded." << std::endl;
-    }
-    else
-    {
-        if (options.verbose) std::cerr << "[" << time(0) << "] " << "Sorting locations." << std::endl;
-        LocationPosLess less;
-        std::stable_sort(begin(locations, Standard()), end(locations, Standard()), less);
-    }
-
-    // Discard locations with score below options.minLocScore or OTHER or longer than 2*maxInsertSize // TODO: move this to reading function!
-    unsigned i = 0;
-    while (i < length(locations))
-    {
-        if (locations[i].score < options.minLocScore || locations[i].chr == "OTHER" ||
-            locations[i].chrEnd - locations[i].chrStart > 2*options.maxInsertSize)
-            replace(locations, i, i+1, String<Location>());
-        else ++i;
-    }
-
-    if (length(locations) == 0)
-    {
-        std::cerr << "[" << time(0) << "] " << "No locations on genome left after filtering for score >= " << options.minLocScore << std::endl;
-        return 1;
-    }
-    
-    if (options.verbose)
-        std::cerr << "[" << time(0) << "] " << "Keeping " << length(locations) << " locations with score >= "
-                  << options.minLocScore << " and shorter than " << (2*options.maxInsertSize) << std::endl;
-
-    return 0;
 }
 
 #endif // #ifndef POPINS_LOCATION_H_

@@ -3,6 +3,8 @@
 #ifndef POPINS_CLP_H_
 #define POPINS_CLP_H_
 
+#include <string>
+
 using namespace seqan;
 
 // ==========================================================================
@@ -14,6 +16,21 @@ inline bool exists(CharString const & filename)
   return (stat(toCString(filename), &buffer) == 0);
 }
 
+// ==========================================================================
+// Function checkFileEnding()
+// ==========================================================================
+
+bool
+checkFileEnding(CharString & filename, std::string ending)
+{
+	std::string name = toCString(filename);
+	size_t dotPos = name.find_last_of('.');
+
+	if (dotPos == std::string::npos)
+		return false;
+
+	return name.substr(dotPos + 1, 3) == ending;
+}
 
 // ==========================================================================
 // Function readFileNames()
@@ -213,21 +230,25 @@ struct ContigMapOptions {
 };
 
 struct PlacingOptions {
+    CharString locationsFile;           // merged from all individuals
+    String<CharString> locationsFiles;  // one file per individual
+
+    CharString outFile;
+    bool isVcf;
+
+    CharString groupsFile;
+
     CharString supercontigFile;
     CharString referenceFile;
 
-    String<CharString> bamFiles;
-    String<double> bamAvgCov;
+    CharString bamFile;	 			    // for one individual
+    double bamAvgCov;		 		    // for one individual
+    CharString splitAlignFile;	 	    // for one individual
 
-    CharString locationsFile;          // merged from all individuals
-    String<CharString> locationsFiles; // one file per individual
-    CharString vcfInsertionsFile;
-
-    //unsigned batchIndex;
-    //unsigned batchSize;
     Triple<CharString, unsigned, unsigned> interval; // chrom, beginPos, endPos
 
     double minLocScore;
+    unsigned minAnchorReads;
 
     unsigned readLength;
     unsigned maxInsertSize;
@@ -237,8 +258,8 @@ struct PlacingOptions {
     bool verbose;
 
     PlacingOptions() :
-        locationsFile("locations.txt"), vcfInsertionsFile("insertions.vcf"),
-        minLocScore(0.3), readLength(100), maxInsertSize(800), maxSplitReads(1000),
+        groupsFile("groups.txt"), bamFile(""),
+        minLocScore(0.3), minAnchorReads(2), readLength(100), maxInsertSize(800), maxSplitReads(1000),
         verbose(false)
     {}
 };
@@ -471,49 +492,51 @@ setupParser(ArgumentParser & parser, PlacingOptions & options)
     setVersion(parser, VERSION);
     setDate(parser, VERSION_DATE);
 
-    addUsageLine(parser, "[\\fIOPTIONS\\fP] \\fICONTIGFILE\\fP \\fIREFFILE\\fP");
-    addDescription(parser, "Finds the positions of (super-)contigs in the reference genome. Merges files with "
+    addUsageLine(parser, "[\\fIOPTIONS\\fP] \\fILOCFILE\\fP \\fIOUTPUTFILE\\fP");
+    addUsageLine(parser, "[\\fIOPTIONS\\fP] -c \\fICONTIGFILE\\fP -r \\fIGENOME\\fP \\fILOCFILE\\fP \\fIOUTPUTFILE\\fP");
+    addDescription(parser, "Places (super-)contigs into the reference genome. Merges files with "
                            "approximate locations computed from anchoring read pairs if a file with locations does not "
-                           "already exist. Determines exact positions of insertions by split aligning reads at each "
+                           "already exist. TODO"/*Determines exact positions of insertions by split aligning reads at each " // TODO
                            "contig end if bam files with all reads of the individuals are specified. Outputs a vcf "
                            "record for each identified position. The contig position in the vcf record refers to the "
                            "sequence in the (super-)contigs file. The split alignment can be done in batches (e.g. 100 "
-                           "locations per batch) if the approximate locations have been computed before.");
+                           "locations per batch) if the approximate locations have been computed before."*/);
 
-    // Require fasta file with merged contigs as arguments.
-    addArgument(parser, ArgParseArgument(ArgParseArgument::INPUTFILE, "CONTIGFILE"));
-    addArgument(parser, ArgParseArgument(ArgParseArgument::INPUTFILE, "REFFILE"));
+    // Require a locations file and an output file as argument.
+    addArgument(parser, ArgParseArgument(ArgParseArgument::INPUTFILE, "LOCFILE")); // Name of locations file OR name of file listing locations files, one per line.
+    addArgument(parser, ArgParseArgument(ArgParseArgument::INPUTFILE, "OUTFILE")); // Name of output file. Either vcf or text file listing locations.
 
     // Setup (input) options.
     addSection(parser, "Main options");
-    addOption(parser, ArgParseOption("l", "locationsFiles", "Name of file listing locations files for individuals, one per line.", ArgParseArgument::INPUTFILE, "FILE"));
-    addOption(parser, ArgParseOption("ml", "locations", "Name of file with approximate insertion locations merged from all individuals. Computed if not exists.", ArgParseArgument::INPUTFILE, "LOCATIONFILE"));
-    addOption(parser, ArgParseOption("m", "minScore", "Minimal score of a location to be passed to split mapping.", ArgParseArgument::DOUBLE, "FLOAT"));
-    addOption(parser, ArgParseOption("b", "bamFiles", "File listing original, full bam files of individuals, one per line. Specify to determine exact insertion positions from split reads.", ArgParseArgument::INPUTFILE, "FILE"));
-    //addOption(parser, ArgParseOption("s", "batchSize", "Number of locations per batch. Specify to split computation into smaller batches. Requires locations file to exist, and specification of bam files, and batch number.", ArgParseArgument::INTEGER, "INT"));
-    //addOption(parser, ArgParseOption("i", "batchIndex", "Number of batch. Specify to split computation into smaller batches. Requires locations file to exist, and specification of bam files and batch size.", ArgParseArgument::INTEGER, "INT"));
-    addOption(parser, ArgParseOption("i", "interval", "Genomic interval. Specify to split split alignment into smaller batches. Requires locations file to exist, and specification of bam files.", ArgParseArgument::STRING, "CHR:BEG-END"));
+    addOption(parser, ArgParseOption("c", "contigFile", "Name of (super-)contigs file.", ArgParseArgument::INPUTFILE, "FILE"));
+    addOption(parser, ArgParseOption("r", "genomeFile", "Name of reference genome file.", ArgParseArgument::INPUTFILE, "FILE"));
+    addOption(parser, ArgParseOption("m", "minScore", "Minimal anchoring score for a location.", ArgParseArgument::DOUBLE, "FLOAT"));
+    addOption(parser, ArgParseOption("n", "minReads", "Minimal number of anchoring read pairs for a location.", ArgParseArgument::INTEGER, "INT"));
+    addOption(parser, ArgParseOption("b", "bamFile", "Full BAM file of an individual. Specify to determine exact insertion positions from split reads.", ArgParseArgument::INPUTFILE, "FILE"));
+    addOption(parser, ArgParseOption("d", "bamCov", "Average coverage of the genome in the BAM file. Required if -b option specified.", ArgParseArgument::DOUBLE, "FLOAT"));
 
-    addOption(parser, ArgParseOption("r", "readLength", "The length of the reads.", ArgParseArgument::INTEGER, "INT"));
+    addOption(parser, ArgParseOption("l", "readLength", "The length of the reads.", ArgParseArgument::INTEGER, "INT"));
     addOption(parser, ArgParseOption("e", "maxInsertSize", "The maximal expected insert size of the read pairs.", ArgParseArgument::INTEGER, "INT"));
     addOption(parser, ArgParseOption("p", "maxSplitReads", "The maximum number of reads to split-align per location.", ArgParseArgument::INTEGER, "INT"));
 
     // Output file options.
     addSection(parser, "Output options");
-    addOption(parser, ArgParseOption("o", "out", "Name of vcf output file.", ArgParseArgument::OUTPUTFILE, "VCFFILE"));
+    addOption(parser, ArgParseOption("g", "groups", "Name of groups output file.", ArgParseArgument::OUTPUTFILE, "FILE"));
     addOption(parser, ArgParseOption("v", "verbose", "Enable verbose output."));
 
-    setValidValues(parser, "o", "vcf");
     setMinValue(parser, "m", "0");
     setMaxValue(parser, "m", "1");
 
+    setValidValues(parser, "c", "fa fna fasta");
+    setValidValues(parser, "r", "fa fna fasta");
+
     // Set default values.
-    setDefaultValue(parser, "ml", options.locationsFile);
     setDefaultValue(parser, "m", options.minLocScore);
-    setDefaultValue(parser, "r", options.readLength);
+    setDefaultValue(parser, "n", options.minAnchorReads);
+    setDefaultValue(parser, "l", options.readLength);
     setDefaultValue(parser, "e", options.maxInsertSize);
     setDefaultValue(parser, "p", options.maxSplitReads);
-    setDefaultValue(parser, "o", options.vcfInsertionsFile);
+    setDefaultValue(parser, "g", options.groupsFile);
 }
 
 void
@@ -717,53 +740,55 @@ getOptionValues(ContigMapOptions & options, ArgumentParser & parser)
 int
 getOptionValues(PlacingOptions & options, ArgumentParser & parser)
 {
-    getArgumentValue(options.supercontigFile, parser, 0);
-    getArgumentValue(options.referenceFile, parser, 1);
+    getArgumentValue(options.locationsFile, parser, 0);
+    getArgumentValue(options.outFile, parser, 1);
 
-    if (isSet(parser, "locationsFiles"))
+    options.isVcf = checkFileEnding(options.outFile, "vcf");
+
+    if (isSet(parser, "contigFile") && isSet(parser, "genomeFile"))
+    {
+    	getOptionValue(options.supercontigFile, parser, "contigFile");
+    	getOptionValue(options.referenceFile, parser, "genomeFile");
+
+		if (isSet(parser, "maxInsertSize"))
+			getOptionValue(options.maxInsertSize, parser, "maxInsertSize");
+
+		if (isSet(parser, "bamFile"))
+		{
+			getOptionValue(options.bamFile, parser, "bamFile");
+
+			if (isSet(parser, "bamCov"))
+				getOptionValue(options.bamAvgCov, parser, "bamCov");
+			if (isSet(parser, "maxSplitReads"))
+				getOptionValue(options.maxSplitReads, parser, "maxSplitReads");
+			if (isSet(parser, "readLength"))
+				getOptionValue(options.readLength, parser, "readLength");
+
+			if (options.isVcf)
+			{
+		        CharString locationsFilesFile;
+		        if (readFileNames(options.locationsFiles, options.locationsFile) != 0)
+		            return 1;
+			}
+		}
+		if (isSet(parser, "minScore"))
+			getOptionValue(options.minLocScore, parser, "minScore");
+		if (isSet(parser, "minReads"))
+			getOptionValue(options.minAnchorReads, parser, "minReads");
+		if (isSet(parser, "groups"))
+			getOptionValue(options.groupsFile, parser, "groups");
+    }
+    else if (isSet(parser, "contigFile") || isSet(parser, "genomeFile"))
+    {
+    	std::cerr << "ERROR: Please specify both the -c (--contigFile) and -r (--genomeFile) options or none of the two." << std::endl;
+    	return 1;
+    }
+    else
     {
         CharString locationsFilesFile;
-        getOptionValue(locationsFilesFile, parser, "locationsFiles");
-        if (readFileNames(options.locationsFiles, locationsFilesFile) != 0)
+        if (readFileNames(options.locationsFiles, options.locationsFile) != 0)
             return 1;
     }
-
-    if (isSet(parser, "locations"))
-        getOptionValue(options.locationsFile, parser, "locations");
-
-    if (isSet(parser, "minScore"))
-        getOptionValue(options.minLocScore, parser, "minScore");
-
-    if (isSet(parser, "bamFiles"))
-    {
-        resize(options.bamFiles, 1);
-        getOptionValue(options.bamFiles[0], parser, "bamFiles");
-        if (readFileNames(options.bamFiles, options.bamAvgCov) != 0)
-            return 1;
-    }
-    if (!isSet(parser, "bamFiles") && isSet(parser, "interval"))
-    {
-        std::cerr << "ERROR: Bam files with all reads of individuals not specified." << std::endl;
-        return 1;
-    }
-
-    if (isSet(parser, "interval"))
-    {
-        CharString interval;
-        getOptionValue(interval, parser, "interval");
-        if (parseInterval(options.interval, interval) != 0)
-            return 1;
-    }
-
-    if (isSet(parser, "readLength"))
-        getOptionValue(options.readLength, parser, "readLength");
-    if (isSet(parser, "maxInsertSize"))
-        getOptionValue(options.maxInsertSize, parser, "maxInsertSize");
-    if (isSet(parser, "maxSplitReads"))
-        getOptionValue(options.maxSplitReads, parser, "maxSplitReads");
-
-    if (isSet(parser, "out"))
-        getOptionValue(options.vcfInsertionsFile, parser, "out");
 
     options.verbose = isSet(parser, "verbose");
 
