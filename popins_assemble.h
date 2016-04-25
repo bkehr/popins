@@ -96,6 +96,7 @@ remapping(Triple<CharString> & fastqFilesTemp,
     std::cerr << "[" << time(0) << "] Sorting " << remappedUnsortedBam << " using " << SAMTOOLS << std::endl;
     cmd.str("");
     cmd << SAMTOOLS << " sort -@ " << threads << " -m " << memory << " " << remappedUnsortedBam << " " << tempDir << "/remapped";
+    cmd << SAMTOOLS << " sort -@ " << threads << " -m " << memory << " " << remappedUnsortedBam << " " << tempDir << "/" << prefix << "remapped";
     if (system(cmd.str().c_str()) != 0)
     {
         std::cerr << "ERROR while sorting BWA output " << remappedUnsortedBam << std::endl;
