@@ -1,3 +1,12 @@
+// ##########################################################################
+// ### This is a modified version of the file                             ###
+// ### seqan-trunk/extras/include/seqan/dp_scout_split.h                  ###
+// ### from the seqan library, version 1.4.2                              ###
+// ### Only line 134 has been commented with respect to the original file ###
+// ### See file align_split_interface.h for more changes.                 ###
+// ##########################################################################
+
+
 // ==========================================================================
 //                 SeqAn - The Library for Sequence Analysis
 // ==========================================================================
@@ -110,7 +119,7 @@ public:
 template <typename TDPCell, typename TTraceMatrixNavigator>
 inline void
 _scoutBestScore(DPScout_<TDPCell, SplitAlignmentScout> & dpScout, TDPCell const & activeCell,
-                TTraceMatrixNavigator const & navigator, bool isLastColumn = false, bool isLastRow = false)
+                TTraceMatrixNavigator const & navigator, bool /*isLastColumn = false*/, bool /*isLastRow = false*/)
 {
     //typedef typename Value<TDPCell>::Type TScoreValue;
     // Note that the underlying matrix has the coordinates flipped.  We use posH/posV as we would in pairwise alignments
@@ -122,7 +131,7 @@ _scoutBestScore(DPScout_<TDPCell, SplitAlignmentScout> & dpScout, TDPCell const 
     i = std::max(i, _scoreOfCell(activeCell));
 
     // We track only the last row for the best traceback score.
-    if (isLastColumn || isLastRow)
+    //if (isLastColumn || isLastRow)
     {
         typedef DPScout_<TDPCell, SplitAlignmentScout> TDPScout;
         typedef typename TDPScout::TParent TParent;

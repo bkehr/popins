@@ -251,18 +251,18 @@ struct LocationTypeGreater : public std::binary_function <Location, Location, bo
 
 struct LocationsFilter
 {
-	bool other;
-	unsigned minReads;
-	double minScore;
-	unsigned maxLength;
+    bool other;
+    unsigned minReads;
+    double minScore;
+    unsigned maxLength;
 
-	LocationsFilter() :
-		other(true), minReads(1), minScore(0), maxLength(-1)
-	{}
+    LocationsFilter() :
+        other(true), minReads(1), minScore(0), maxLength(-1)
+    {}
 
-	LocationsFilter(unsigned r, double s, unsigned l) :
-		other(false), minReads(r), minScore(s), maxLength(l)
-	{}
+    LocationsFilter(unsigned r, double s, unsigned l) :
+        other(false), minReads(r), minScore(s), maxLength(l)
+    {}
 
 };
 
@@ -274,15 +274,15 @@ bool
 passesFilter(Location & loc, LocationsFilter & filter)
 {
     if (loc.numReads < filter.minReads || loc.score < filter.minScore)
-    	return false;
+        return false;
 
     if (!filter.other && loc.chr == "OTHER")
-    	return false;
+        return false;
 
     if (loc.chrEnd - loc.chrStart > filter.maxLength)
-    	return false;
+        return false;
 
-	return true;
+    return true;
 }
 
 // ==========================================================================
@@ -777,7 +777,7 @@ readLocation(Location & loc, RecordReader<std::fstream, SinglePass<> > & reader,
 void
 appendLocation(String<Location> & locs, Location & loc)
 {
-	appendValue(locs, loc);
+    appendValue(locs, loc);
 }
 
 // ==========================================================================
@@ -801,10 +801,10 @@ readLocations(String<TLoc> & locations, CharString & locationsFile, LocationsFil
         Location loc;
 
         if (readLocation(loc, reader, locationsFile) != 0)
-        	return 1;
+            return 1;
 
         if (passesFilter(loc, filterParams))
-        	appendLocation(locations, loc);
+            appendLocation(locations, loc);
     }
     return 0;
 }
@@ -826,10 +826,10 @@ readLocations(String<TLoc> & locations, CharString & locationsFile, Triple<CharS
         Location loc;
 
         if (readLocation(loc, reader, locationsFile) != 0)
-        	return 1;
+            return 1;
 
         if (passesFilter(loc, filterParams) && loc.chr == interval.i1 && loc.chrStart >= interval.i2 && loc.chrStart < interval.i3)
-        	appendLocation(locations, loc);
+            appendLocation(locations, loc);
     }
     return 0;
 }
@@ -855,17 +855,17 @@ writeLoc(std::fstream & stream, Location & loc)
     if (loc.score != -1) stream << "\t" << loc.score;
     if (length(loc.bestSamples) > 0)
     {
-    	String<Pair<unsigned, CharString> > bestSamples;
-    	for (std::map<CharString, unsigned>::iterator bsIt = loc.bestSamples.begin(); bsIt != loc.bestSamples.end(); ++bsIt)
-    		appendValue(bestSamples, Pair<unsigned, CharString>(bsIt->second, bsIt->first));
+        String<Pair<unsigned, CharString> > bestSamples;
+        for (std::map<CharString, unsigned>::iterator bsIt = loc.bestSamples.begin(); bsIt != loc.bestSamples.end(); ++bsIt)
+            appendValue(bestSamples, Pair<unsigned, CharString>(bsIt->second, bsIt->first));
 
-    	std::stable_sort(begin(bestSamples), end(bestSamples), std::greater<Pair<unsigned, CharString> >());
-    	if (length(bestSamples) > 100)
-    		resize(bestSamples, 100);
+        std::stable_sort(begin(bestSamples), end(bestSamples), std::greater<Pair<unsigned, CharString> >());
+        if (length(bestSamples) > 100)
+            resize(bestSamples, 100);
 
-    	stream << "\t" << bestSamples[0].i2 << ":" << bestSamples[0].i1;
-    	for (unsigned i = 1; i < length(bestSamples); ++i)
-    		stream << "," << bestSamples[i].i2 << ":" << bestSamples[i].i1;
+        stream << "\t" << bestSamples[0].i2 << ":" << bestSamples[0].i1;
+        for (unsigned i = 1; i < length(bestSamples); ++i)
+            stream << "," << bestSamples[i].i2 << ":" << bestSamples[i].i1;
     }
     stream << std::endl;
 }
@@ -882,7 +882,7 @@ writeLocations(std::fstream & stream, String<Location> & locations)
     // Iterate over locations to output them one per line.
     TIterator itEnd = end(locations);
     for (TIterator it = begin(locations); it != itEnd; ++it)
-    	writeLoc(stream, *it);
+        writeLoc(stream, *it);
     
     return 0;
 }

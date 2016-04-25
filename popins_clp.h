@@ -1,3 +1,4 @@
+#include <seqan/file.h>
 #include <seqan/arg_parse.h>
 
 #ifndef POPINS_CLP_H_
@@ -23,13 +24,13 @@ inline bool exists(CharString const & filename)
 bool
 checkFileEnding(CharString & filename, std::string ending)
 {
-	std::string name = toCString(filename);
-	size_t dotPos = name.find_last_of('.');
+    std::string name = toCString(filename);
+    size_t dotPos = name.find_last_of('.');
 
-	if (dotPos == std::string::npos)
-		return false;
+    if (dotPos == std::string::npos)
+        return false;
 
-	return name.substr(dotPos + 1, 3) == ending;
+    return name.substr(dotPos + 1, 3) == ending;
 }
 
 // ==========================================================================
@@ -223,9 +224,10 @@ struct ContigMapOptions {
     CharString memory;
     CharString tmpDir;
     bool allAlignment;
+    bool keepNonRefNew;
 
     ContigMapOptions() :
-        threads(1), memory("500000000"), allAlignment(false)
+        threads(1), memory("500000000"), allAlignment(false), keepNonRefNew(false)
     {}
 };
 
@@ -241,9 +243,11 @@ struct PlacingOptions {
     CharString supercontigFile;
     CharString referenceFile;
 
-    CharString bamFile;	 			    // for one individual
-    double bamAvgCov;		 		    // for one individual
-    CharString splitAlignFile;	 	    // for one individual
+    CharString bamFile;                     // for one individual
+    String<CharString> bamFiles;
+    double bamAvgCov;                     // for one individual
+    String<double> bamAvgCovs;
+    CharString splitAlignFile;             // for one individual
 
     Triple<CharString, unsigned, unsigned> interval; // chrom, beginPos, endPos
 
@@ -253,13 +257,11 @@ struct PlacingOptions {
     unsigned readLength;
     unsigned maxInsertSize;
 
-    unsigned maxSplitReads;
-
     bool verbose;
 
     PlacingOptions() :
-        groupsFile("groups.txt"), bamFile(""),
-        minLocScore(0.3), minAnchorReads(2), readLength(100), maxInsertSize(800), maxSplitReads(1000),
+        locationsFile("locations.txt"), groupsFile("groups.txt"), bamFile(""),
+        minLocScore(0.3), minAnchorReads(2), readLength(100), maxInsertSize(800),
         verbose(false)
     {}
 };
@@ -483,6 +485,9 @@ setupParser(ArgumentParser & parser, ContigMapOptions & options)
 
     addOption(parser, ArgParseOption("a", "all", "Use bwa-mem's -a option to output all alignments of a read."));
     setDefaultValue(parser, "all", "false");
+
+    addOption(parser, ArgParseOption("n", "nonRefNew", "Do not delete the non_ref_new.bam file after writing locations."));
+    setDefaultValue(parser, "nonRefNew", "false");
 }
 
 void
@@ -494,17 +499,31 @@ setupParser(ArgumentParser & parser, PlacingOptions & options)
 
     addUsageLine(parser, "[\\fIOPTIONS\\fP] \\fILOCFILE\\fP \\fIOUTPUTFILE\\fP");
     addUsageLine(parser, "[\\fIOPTIONS\\fP] -c \\fICONTIGFILE\\fP -r \\fIGENOME\\fP \\fILOCFILE\\fP \\fIOUTPUTFILE\\fP");
-    addDescription(parser, "Places (super-)contigs into the reference genome. Merges files with "
-                           "approximate locations computed from anchoring read pairs if a file with locations does not "
-                           "already exist. TODO"/*Determines exact positions of insertions by split aligning reads at each " // TODO
-                           "contig end if bam files with all reads of the individuals are specified. Outputs a vcf "
-                           "record for each identified position. The contig position in the vcf record refers to the "
-                           "sequence in the (super-)contigs file. The split alignment can be done in batches (e.g. 100 "
-                           "locations per batch) if the approximate locations have been computed before."*/);
+    addDescription(parser, "Places (super-)contigs into the reference genome and writes a VCF file with records for "
+                           "placed contig ends. The command consists of four steps that can be run in one program "
+                           "call or in separate calls. To run all four steps together, the options -l, -b, -c, and -r "
+                           "need to be specified and the \\fIOUTPUTFILE\\fP's ending needs to be 'vcf'. The \\fILOCFILE\\fP has "
+                           "to list the location files for all samples. When running the steps separately, the "
+                           "specified parameters determine which step is being run:");
+    addDescription(parser, "1. First, the contig locations determined for all samples (files listed in \\fILOCFILE\\fP) need "
+                           "to be merged into one set of locations (written to \\fIOUTPUTFILE\\fP).");
+    addDescription(parser, "2. Then, prefixes/suffixes of all contigs (specify with -c option) are aligned to these "
+                           "locations (specify as \\fILOCFILE\\fP) in the reference genome (specify with -r option) and VCF "
+                           "records are written to \\fIOUTPUTFILE\\fP if the alignment is successful. The \\fIOUTPUTFILE\\fP's "
+                           "ending has to be 'vcf'. Additional output files \\fIlocations_unplaced.txt\\fP are being written "
+                           "for each sample.");
+    addDescription(parser, "3. Next, contigs (specify -c option) that do not align to the reference genome (specify "
+                           "-r option) are passed on to split-read alignment. This step is run by sample. The "
+                           "sample's original BAM file needs to be specified. The program arguments, the \\fILOCFILE\\fP "
+                           "and \\fIOUTPUTFILE\\fP, need to be the sample's \\fIlocations_unplaced.txt\\fP file and a "
+                           "\\fIlocations_placed.txt\\fP file for the sample.");
+    addDescription(parser, "4. Finally, the results from split-read alignment (the \\fIlocations_placed.txt\\fP files) of all "
+                           "samples (input files listed in \\fILOCFILE\\fP) are being combined and appended to the "
+                           "\\fIOUTPUTFILE\\fP (file ending has to be 'vcf').");
 
     // Require a locations file and an output file as argument.
     addArgument(parser, ArgParseArgument(ArgParseArgument::INPUTFILE, "LOCFILE")); // Name of locations file OR name of file listing locations files, one per line.
-    addArgument(parser, ArgParseArgument(ArgParseArgument::INPUTFILE, "OUTFILE")); // Name of output file. Either vcf or text file listing locations.
+    addArgument(parser, ArgParseArgument(ArgParseArgument::INPUTFILE, "OUTFILE")); // Name of output file. Either VCF or text file listing locations.
 
     // Setup (input) options.
     addSection(parser, "Main options");
@@ -515,12 +534,12 @@ setupParser(ArgumentParser & parser, PlacingOptions & options)
     addOption(parser, ArgParseOption("b", "bamFile", "Full BAM file of an individual. Specify to determine exact insertion positions from split reads.", ArgParseArgument::INPUTFILE, "FILE"));
     addOption(parser, ArgParseOption("d", "bamCov", "Average coverage of the genome in the BAM file. Required if -b option specified.", ArgParseArgument::DOUBLE, "FLOAT"));
 
-    addOption(parser, ArgParseOption("l", "readLength", "The length of the reads.", ArgParseArgument::INTEGER, "INT"));
+    addOption(parser, ArgParseOption("len", "readLength", "The length of the reads.", ArgParseArgument::INTEGER, "INT"));
     addOption(parser, ArgParseOption("e", "maxInsertSize", "The maximal expected insert size of the read pairs.", ArgParseArgument::INTEGER, "INT"));
-    addOption(parser, ArgParseOption("p", "maxSplitReads", "The maximum number of reads to split-align per location.", ArgParseArgument::INTEGER, "INT"));
 
     // Output file options.
     addSection(parser, "Output options");
+    addOption(parser, ArgParseOption("l", "locations", "Name of merged locations file if placing is run in one program call.", ArgParseArgument::OUTPUTFILE, "FILE"));
     addOption(parser, ArgParseOption("g", "groups", "Name of groups output file.", ArgParseArgument::OUTPUTFILE, "FILE"));
     addOption(parser, ArgParseOption("v", "verbose", "Enable verbose output."));
 
@@ -533,10 +552,10 @@ setupParser(ArgumentParser & parser, PlacingOptions & options)
     // Set default values.
     setDefaultValue(parser, "m", options.minLocScore);
     setDefaultValue(parser, "n", options.minAnchorReads);
-    setDefaultValue(parser, "l", options.readLength);
+    setDefaultValue(parser, "len", options.readLength);
     setDefaultValue(parser, "e", options.maxInsertSize);
-    setDefaultValue(parser, "p", options.maxSplitReads);
     setDefaultValue(parser, "g", options.groupsFile);
+    setDefaultValue(parser, "l", options.locationsFile);
 }
 
 void
@@ -729,6 +748,8 @@ getOptionValues(ContigMapOptions & options, ArgumentParser & parser)
         getOptionValue(options.tmpDir, parser, "tmpdir");
     if (isSet(parser, "all"))
         options.allAlignment = true;
+    if (isSet(parser, "nonRefNew"))
+        options.keepNonRefNew = true;
     if (isSet(parser, "threads"))
         getOptionValue(options.threads, parser, "threads");
     if (isSet(parser, "memory"))
@@ -740,6 +761,8 @@ getOptionValues(ContigMapOptions & options, ArgumentParser & parser)
 int
 getOptionValues(PlacingOptions & options, ArgumentParser & parser)
 {
+    CharString locFile = options.locationsFile;
+
     getArgumentValue(options.locationsFile, parser, 0);
     getArgumentValue(options.outFile, parser, 1);
 
@@ -747,44 +770,53 @@ getOptionValues(PlacingOptions & options, ArgumentParser & parser)
 
     if (isSet(parser, "contigFile") && isSet(parser, "genomeFile"))
     {
-    	getOptionValue(options.supercontigFile, parser, "contigFile");
-    	getOptionValue(options.referenceFile, parser, "genomeFile");
+        // Step 2 or 3 or all
+        getOptionValue(options.supercontigFile, parser, "contigFile");
+        getOptionValue(options.referenceFile, parser, "genomeFile");
 
-		if (isSet(parser, "maxInsertSize"))
-			getOptionValue(options.maxInsertSize, parser, "maxInsertSize");
+        if (isSet(parser, "maxInsertSize"))
+            getOptionValue(options.maxInsertSize, parser, "maxInsertSize");
 
-		if (isSet(parser, "bamFile"))
-		{
-			getOptionValue(options.bamFile, parser, "bamFile");
+        if (isSet(parser, "bamFile"))
+        {
+            // Step 3 or all
+            getOptionValue(options.bamFile, parser, "bamFile");
 
-			if (isSet(parser, "bamCov"))
-				getOptionValue(options.bamAvgCov, parser, "bamCov");
-			if (isSet(parser, "maxSplitReads"))
-				getOptionValue(options.maxSplitReads, parser, "maxSplitReads");
-			if (isSet(parser, "readLength"))
-				getOptionValue(options.readLength, parser, "readLength");
+            if (isSet(parser, "bamCov"))
+                getOptionValue(options.bamAvgCov, parser, "bamCov");
+            if (isSet(parser, "readLength"))
+                getOptionValue(options.readLength, parser, "readLength");
 
-			if (options.isVcf)
-			{
-		        CharString locationsFilesFile;
-		        if (readFileNames(options.locationsFiles, options.locationsFile) != 0)
-		            return 1;
-			}
-		}
-		if (isSet(parser, "minScore"))
-			getOptionValue(options.minLocScore, parser, "minScore");
-		if (isSet(parser, "minReads"))
-			getOptionValue(options.minAnchorReads, parser, "minReads");
-		if (isSet(parser, "groups"))
-			getOptionValue(options.groupsFile, parser, "groups");
+            if (options.isVcf)
+            {
+                // All steps
+                if (readFileNames(options.locationsFiles, options.locationsFile) != 0)
+                    return 1;
+
+                if (isSet(parser, "locations"))
+                    getOptionValue(locFile, parser, "locations");
+                options.locationsFile = locFile;
+
+                appendValue(options.bamFiles, options.bamFile);
+                if (readFileNames(options.bamFiles, options.bamAvgCovs) != 0)
+                    return 1;
+            }
+        }
+        if (isSet(parser, "minScore"))
+            getOptionValue(options.minLocScore, parser, "minScore");
+        if (isSet(parser, "minReads"))
+            getOptionValue(options.minAnchorReads, parser, "minReads");
+        if (isSet(parser, "groups"))
+            getOptionValue(options.groupsFile, parser, "groups");
     }
     else if (isSet(parser, "contigFile") || isSet(parser, "genomeFile"))
     {
-    	std::cerr << "ERROR: Please specify both the -c (--contigFile) and -r (--genomeFile) options or none of the two." << std::endl;
-    	return 1;
+        std::cerr << "ERROR: Please specify both the -c (--contigFile) and -r (--genomeFile) options or none of the two." << std::endl;
+        return 1;
     }
     else
     {
+        // Step 1 or 4
         CharString locationsFilesFile;
         if (readFileNames(options.locationsFiles, options.locationsFile) != 0)
             return 1;

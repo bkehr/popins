@@ -19,7 +19,7 @@ struct LocationInfo
     unsigned refPos;
 
     LocationInfo (Location & l, unsigned i, unsigned c) :
-    	loc(l), otherEnd(false), idx(i), contigLength(c), insPos(0), refPos(0)
+        loc(l), otherEnd(false), idx(i), contigLength(c), insPos(0), refPos(0)
     {}
 };
 
@@ -33,7 +33,7 @@ struct LocationInfoPosLess : public std::binary_function<LocationInfo, LocationI
 
     inline bool operator() (LocationInfo const & a, LocationInfo const & b) const
     {
-    	LocationPosLess less;
+        LocationPosLess less;
         return less.compare(a.loc, b.loc) == 1;
     }
 };
@@ -48,7 +48,7 @@ struct LocationInfoTypeLess : public std::binary_function<LocationInfo, Location
 
     inline int compare(LocationInfo const & a, LocationInfo const & b) const
     {
-    	LocationTypeLess less;
+        LocationTypeLess less;
         return less.compare(a.loc, b.loc);
     }
 
@@ -64,7 +64,7 @@ struct LocationInfoTypeLess : public std::binary_function<LocationInfo, Location
 
 struct LocationInfoGreater : public std::binary_function <LocationInfo, LocationInfo, bool>
 {
-	LocationInfoGreater() {}
+    LocationInfoGreater() {}
 
     inline int compare(LocationInfo const & a, LocationInfo const & b) const
     {
@@ -97,7 +97,7 @@ struct LocationInfoGreater : public std::binary_function <LocationInfo, Location
 void
 appendLocation(String<LocationInfo> & locs, Location & loc)
 {
-	appendValue(locs, LocationInfo(loc, length(locs), 0));
+    appendValue(locs, LocationInfo(loc, length(locs), 0));
 }
 
 // ==========================================================================
@@ -128,25 +128,25 @@ template<typename TStream>
 void
 writeVcf(TStream & outStream, LocationInfo & loc, FaiIndex & fai)
 {
-	Dna5String ref = loadInterval(fai, loc.loc.chr, loc.refPos, loc.refPos + 1);
+    Dna5String ref = loadInterval(fai, loc.loc.chr, loc.refPos, loc.refPos + 1);
 
-	outStream << loc.loc.chr;
-	outStream << "\t" << loc.refPos + 1;
-	outStream << "\t" << loc.loc.chr << ":" << loc.refPos + 1 << ":" << "FP";
-	outStream << "\t" << ref;
+    outStream << loc.loc.chr;
+    outStream << "\t" << loc.refPos + 1;
+    outStream << "\t" << loc.loc.chr << ":" << loc.refPos + 1 << ":" << "FP";
+    outStream << "\t" << ref;
 
-	if (loc.loc.chrOri)
-		outStream << "\t" << ref << "[" << loc.loc.contig << (!loc.loc.contigOri?"f":"r") << ":" << loc.insPos << "[";
-	else
-		outStream << "\t" << "]" << loc.loc.contig << (loc.loc.contigOri?"f":"r") << ":" << loc.insPos << "]" << ref;
+    if (loc.loc.chrOri)
+        outStream << "\t" << ref << "[" << loc.loc.contig << (!loc.loc.contigOri?"f":"r") << ":" << loc.insPos << "[";
+    else
+        outStream << "\t" << "]" << loc.loc.contig << (loc.loc.contigOri?"f":"r") << ":" << loc.insPos << "]" << ref;
 
-	outStream << "\t" << ".";
-	outStream << "\t" << ".";
-	if (loc.loc.numReads != 0)
-		outStream << "\t" << "AR=" << loc.loc.numReads << ";AS=" << loc.loc.score; // TODO Write more info fields.
-	else
-		outStream << "\t" << "PAIRED";
-	outStream << std::endl;
+    outStream << "\t" << ".";
+    outStream << "\t" << ".";
+    if (loc.loc.numReads != 0)
+        outStream << "\t" << "AR=" << loc.loc.numReads << ";AS=" << loc.loc.score; // TODO Write more info fields.
+    else
+        outStream << "\t" << "PAIRED";
+    outStream << std::endl;
 }
 
 #endif /* POPINS_LOCATION_INFO_H_ */

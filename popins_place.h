@@ -11,6 +11,8 @@
 #include "popins_location.h"
 #include "popins_location_info.h"
 #include "popins_place_ref_align.h"
+#include "popins_place_split_align.h"
+#include "popins_place_combine.h"
 
 using namespace seqan;
 
@@ -76,28 +78,22 @@ initVcf(TStream & vcfStream, PlacingOptions & options, FaiIndex & fai)
 int
 mergeLocations(String<Location> & locations, PlacingOptions & options)
 {
-	if (length(options.locationsFiles) == 0)
-	{
-		std::cerr << "ERROR: Locations file " << options.locationsFile << "does not exist. Specify -l option to create it." << std::endl;
-		return 1;
-	}
+    // Open output file.
+    std::fstream stream(toCString(options.outFile), std::ios::out);
+    if (!stream.good())
+    {
+        std::cerr << "ERROR: Could not open locations file " << options.locationsFile << " for writing." << std::endl;
+        return 1;
+    }
 
-	// Open output file.
-	std::fstream stream(toCString(options.locationsFile), std::ios::out);
-	if (!stream.good())
-	{
-		std::cerr << "ERROR: Could not open locations file " << options.locationsFile << " for writing." << std::endl;
-		return 1;
-	}
+    // Merge approximate locations and write them to a file.
+    if (options.verbose)
+        std::cerr << "[" << time(0) << "] " << "Merging locations files." << std::endl;
 
-	// Merge approximate locations and write them to a file.
-	if (options.verbose)
-		std::cerr << "[" << time(0) << "] " << "Merging locations files." << std::endl;
+    if (mergeLocations(stream, locations, options.locationsFiles, options.locationsFile, options.verbose) != 0)
+        return 1;
 
-	if (mergeLocations(stream, locations, options.locationsFiles, options.locationsFile, options.verbose) != 0)
-		return 1;
-
-	return 0;
+    return 0;
 }
 
 // =======================================================================================
@@ -113,24 +109,24 @@ loadLocations(String<LocationInfo> & locations, PlacingOptions & options)
         LocationsFilter filter(options.minAnchorReads, options.minLocScore, 2*options.maxInsertSize);
         if (options.interval.i1 == "")
         {
-			if (options.verbose)
-				std::cerr << "[" << time(0) << "] " << "Reading locations from " << options.locationsFile << std::endl;
-        	if (readLocations(locations, options.locationsFile, filter) != 0)
-        		return 1;
+            if (options.verbose)
+                std::cerr << "[" << time(0) << "] " << "Reading locations from " << options.locationsFile << std::endl;
+            if (readLocations(locations, options.locationsFile, filter) != 0)
+                return 1;
         }
-       	else
-		{
-			if (options.verbose)
-				std::cerr << "[" << time(0) << "] " << "Reading locations in " << options.interval.i1 << ":" << options.interval.i2 << "-" << options.interval.i3
-													<< " from " << options.locationsFile << std::endl;
-       		if (readLocations(locations, options.locationsFile, options.interval, filter) != 0)
-       			return 1;
-       	}
+           else
+        {
+            if (options.verbose)
+                std::cerr << "[" << time(0) << "] " << "Reading locations in " << options.interval.i1 << ":" << options.interval.i2 << "-" << options.interval.i3
+                                                    << " from " << options.locationsFile << std::endl;
+               if (readLocations(locations, options.locationsFile, options.interval, filter) != 0)
+                   return 1;
+           }
     }
     else
     {
         if (options.verbose)
-        	std::cerr << "[" << time(0) << "] " << "Sorting locations." << std::endl;
+            std::cerr << "[" << time(0) << "] " << "Sorting locations." << std::endl;
 
         LocationInfoPosLess less;
         std::stable_sort(begin(locations), end(locations), less);
@@ -151,7 +147,7 @@ bool
 loadContigs(std::vector<std::pair<CharString, TSeq> > & contigs,
             String<LocationInfo> & locs,
             CharString & filename,
-			bool verbose)
+            bool verbose)
 {
     typedef std::pair<CharString, TSeq> TPair;
     
@@ -215,11 +211,9 @@ loadContigs(std::vector<std::pair<CharString, TSeq> > & contigs,
 
 int popins_place(int argc, char const ** argv)
 {
-    typedef Dna5String TSeq;
-
     std::fstream vcfStream;
     String<LocationInfo> locs;
-    std::vector<std::pair<CharString, TSeq> > contigs;
+    std::vector<std::pair<CharString, Dna5String> > contigs;
     FaiIndex fai;
 
     // Parse the command line to get option values.
@@ -227,57 +221,68 @@ int popins_place(int argc, char const ** argv)
     if (parseCommandLine(options, argc, argv) != 0)
         return 1;
 
-    // MERGE THE LOCATIONS FROM ALL INDIVIDUALS
+    // Step 1: MERGE THE LOCATIONS FROM ALL INDIVIDUALS
     if (!options.isVcf && length(options.locationsFiles) > 0)
     {
-    	String<Location> locs;
-    	mergeLocations(locs, options);
+        String<Location> locs;
+        mergeLocations(locs, options);
     }
 
     if (length(options.locationsFiles) == 0 || (options.isVcf && options.bamFile != ""))
     {
-    	// Load the locations.
-    	if (loadLocations(locs, options) != 0)
-    		return 1;
+        // Load the locations.
+        if (loadLocations(locs, options) != 0)
+            return 1;
 
-    	// Load the contig file.
-    	if (loadContigs(contigs, locs, options.supercontigFile, options.verbose) != 0)
-    		return 1;
+        // Load the contig file.
+        if (loadContigs(contigs, locs, options.supercontigFile, options.verbose) != 0)
+            return 1;
 
-    	// Open the FAI file of the reference genome.
-    	if (read(fai, toCString(options.referenceFile)) != 0)
-    	{
-    		std::cerr << "ERROR: Could not open FAI index for " << options.referenceFile << std::endl;
-    		return 1;
-    	}
+        // Open the FAI file of the reference genome.
+        if (read(fai, toCString(options.referenceFile)) != 0)
+        {
+            std::cerr << "ERROR: Could not open FAI index for " << options.referenceFile << std::endl;
+            return 1;
+        }
     
-    	if (options.isVcf)
-    	{
-    		// DO THE REFERENCE ALIGNMENT FOR ALL LOCATIONS
-			if (initVcf(vcfStream, options, fai) != 0)
-				return 1;
-			if (popins_place_ref_align(vcfStream, locs, contigs, fai, options) != 0)
-				return 1;
-    	}
+        if (options.isVcf)
+        {
+            // Step 2: DO THE REFERENCE ALIGNMENT FOR ALL LOCATIONS
+            if (initVcf(vcfStream, options, fai) != 0)
+                return 1;
+            if (popins_place_ref_align(vcfStream, locs, contigs, fai, options) != 0)
+                return 1;
+        }
 
-    	// DO THE SPLIT-READ ALIGNMENT FOR AN INDIVIDUAL's LOCATIONS
-    	if (options.bamFile != "")
-    	{
-    		std::cerr << "ERROR: The split-read alignment has not been implemented yet." << std::endl; // TODO
-    		//if (popins_place_split_read_align(options, locs, contigs, fai) != 0)
-    		//    return 1;
-    		return 0;
-    	}
+        // Step 3: DO THE SPLIT-READ ALIGNMENT FOR AN INDIVIDUAL's LOCATIONS
+        if (options.bamFile != "" && length(options.bamFiles) == 0)
+        {
+            if (popins_place_split_read_align(locs, contigs, fai, options) != 0)
+                return 1;
+            return 0;
+        }
+        else if (length(options.bamFiles) > 0)
+        {
+            for (unsigned i = 0; i < length(options.bamFiles); ++i)
+            {
+                clear(locs);
+                // TODO load locations for the sample.
+                options.bamFile = options.bamFiles[i];
+                options.bamAvgCov = options.bamAvgCovs[i];
+                // TODO set output file for the sample options.outFile = ;
+                if (popins_place_split_read_align(locs, contigs, fai, options) != 0)
+                    return 1;
+            }
+        }
     }
 
-    // COMBINE SPLIT-READ ALIGNMENTS FROM ALL INDIVIDUALS
+    // Step 4: COMBINE SPLIT-READ ALIGNMENTS FROM ALL INDIVIDUALS
     if (options.isVcf && length(options.locationsFiles) > 0)
     {
         if (openVcf(vcfStream, options.outFile) != 0)
             return 1;
-        std::cerr << "ERROR: The combination of split-read alignments has not been implemented yet." << std::endl; // TODO
-        //if (popins_place_combine(vcfStream, options) != 0)
-        //    return 1;
+        if (popins_place_combine(vcfStream, options) != 0)
+            return 1;
     }
 
     return 0;

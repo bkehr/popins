@@ -1,133 +1,68 @@
 #ifndef POPINS_PLACE_SPLIT_ALIGN_H_
 #define POPINS_PLACE_SPLIT_ALIGN_H_
 
-#include <seqan/seeds.h>
+#include <seqan/bam_io.h>
 
-#include "align_split.h"
 #include "popins_location.h"
-#include "popins_place_split_align.h"
+#include "align_split.h"
 
 using namespace seqan;
 
+// ---------------------------------------------------------------------------------------
+// Function hasGoodClippedPrefix()
+// ---------------------------------------------------------------------------------------
 
-// ==========================================================================
-// Struct BamInfo
-// ==========================================================================
-
-struct BamInfo
+template<typename TQualString, typename TCigar>
+bool
+hasGoodClippedPrefix(TQualString & qual, TCigar & cigar, unsigned minQual)
 {
-    BamStream stream;
-    BamIndex<Bai> index;
-    unsigned covThresh;
-};
+    typedef typename Iterator<TQualString, Rooted>::Type TIter;
 
-// ==========================================================================
-// Struct LocationInfo
-// ==========================================================================
+    if (cigar[0].operation != 'S')
+        return false;
 
-template<typename TSeq, typename TPos, typename TSize>
-struct LocationInfo
-{
-    TSeq refSeq;
-    TSeq contigSeq;
-    TPos refOffset;
-    TPos contigOffset;
-    TPos concatPos;
+    unsigned windowLength = 10;
+    minQual *= windowLength;
+    unsigned windowQual = 0;
 
-    bool highCoverage;
-    TSize splitReadCount;
-    std::map<Pair<TPos>, TSize> splitPosMap;
-    
-    LocationInfo() :
-        refOffset(0), contigOffset(0), concatPos(0), highCoverage(false), splitReadCount(0)
-    {}
-};
+    TIter it = begin(qual);
+    TIter itEnd = end(qual);
 
-// ==========================================================================
+    for (unsigned i = 0; i < windowLength; ++i, ++it)
+        windowQual += *it;
+
+    TIter it2 = begin(qual, Rooted());
+    while (it != itEnd && windowQual < minQual)
+    {
+        windowQual += (*it) - (*it2);
+        ++it;
+        ++it2;
+    }
+
+    // *it2 now points to the first base in the first window with windowQual >= minQual
+    unsigned goodPos = position(it2);
+
+    if (goodPos >= length(qual) - 30) // 30 or fewer bases of the read are good
+        return false;
+
+    unsigned i = 0;
+    while (i < length(cigar) && cigar[i].count <= goodPos)
+    {
+        goodPos -= cigar[i].count;
+        ++i;
+    }
+    if (length(cigar) - i < 2) // Only matching bases of the read are good.
+        return false;
+
+    return true;
+}
+
+// ---------------------------------------------------------------------------------------
 // Function isCandidateSplitRead()
-// ==========================================================================
+// ---------------------------------------------------------------------------------------
 
-bool
-hasGoodClippedPrefix(BamAlignmentRecord & record, unsigned minQual)
-{
-    if (length(record.cigar) == 2 && record.cigar[0].operation == 'S')
-        return false;
-
-    unsigned windowLength = 10;
-    minQual *= windowLength;
-    unsigned windowQual = 0;
-
-    unsigned left = 0;
-    for (; left < windowLength; ++left)
-        windowQual += record.qual[left];
-
-    while (left < length(record.qual) && windowQual < minQual)
-    {
-        windowQual += record.qual[left] - record.qual[left - windowLength];
-        ++left;
-    }
-    --left; // now points to first good base
-
-    if (left >= windowLength)
-    {
-        if (left >= length(record.qual) - 30) // 30 or fewer bases are good
-            return false;
-
-        unsigned trim = left;
-        unsigned i = 0;
-        while (i < length(record.cigar) && record.cigar[i].count <= trim)
-        {
-            trim -= record.cigar[i].count;
-            ++i;
-        }
-        if (length(record.cigar) - i < 2 || (length(record.cigar) - i == 2 && record.cigar[length(record.cigar) - 1].operation == 'S'))
-            return false;
-    }
-    return true;
-}
-
-// ==========================================================================
-
-bool
-hasGoodClippedSuffix(BamAlignmentRecord & record, unsigned minQual)
-{
-    if (length(record.cigar) == 2 && record.cigar[1].operation == 'S')
-        return false;
-    
-    unsigned windowLength = 10;
-    minQual *= windowLength;
-    unsigned windowQual = 0;
-        
-    int right = length(record.qual) - 1;
-    for (; right >= (int)length(record.qual) - (int)windowLength; --right)
-        windowQual += record.qual[right];
-    
-    while (right >= 0 && windowQual < minQual)
-    {
-        windowQual += record.qual[right] - record.qual[right + windowLength];
-         --right;
-    }    
-    ++right; // now points to last good base
-
-    if ((unsigned)right < length(record.qual) - windowLength)
-    {
-        if (right < 30) // 30 or fewer bases are good
-            return false;
-            
-        unsigned trim = length(record.qual) - 1 - right;
-        int i = length(record.cigar) - 1;
-        while (i >= 0 && record.cigar[i].count <= trim)
-        {
-            trim -= record.cigar[i].count;
-            ++i;
-        }
-        if (i < 2 || (i == 2 && record.cigar[0].operation == 'S'))
-            return false;
-    }
-    return true;
-}
-
-// ==========================================================================
+// Returns true if read is unmapped and it's mate is mapped in correct orientation or
+//              if the read is soft-clipped and the clipped prefix/suffix is of good quality.
 
 bool
 isCandidateSplitRead(BamAlignmentRecord & record, bool locOri)
@@ -160,7 +95,9 @@ isCandidateSplitRead(BamAlignmentRecord & record, bool locOri)
                 return false;
         }
 
-        return hasGoodClippedSuffix(record, 53);
+        ModifiedString<CharString, ModReverse> revQual(record.qual);
+        ModifiedString<String<CigarElement<> >, ModReverse> revCigar(record.cigar);
+        return hasGoodClippedPrefix(revQual, revCigar, 53);
     }
     else
     {
@@ -179,363 +116,348 @@ isCandidateSplitRead(BamAlignmentRecord & record, bool locOri)
                 return false;
         }
 
-        return hasGoodClippedPrefix(record, 53);
+        return hasGoodClippedPrefix(record.qual, record.cigar, 53);
     }
 }
 
-// ==========================================================================
-// Function findsplitReads()
-// ==========================================================================
+// ---------------------------------------------------------------------------------------
+// Function getSplitPosition()
+// ---------------------------------------------------------------------------------------
 
-template<typename TSeq1, typename TPos, typename TSize, typename TSeq2>
-void
-alignRead(LocationInfo<TSeq1, TPos, TSize> & locInfo, TSeq2 & read, bool ori)
+// Case 1: RIGHT end of insertion and contig in forward orientation (contigSuffix)
+
+std::pair<unsigned, unsigned>
+getSplitPosition(Gaps<typename Infix<Dna5String>::Type> & contigGaps,
+        Gaps<Dna5String> & refGaps,
+        unsigned offset)
 {
-    Gaps<TSeq2> readRowLeft;
-    Gaps<TSeq1> refRowLeft;
-    Gaps<TSeq2> readRowRight;
-    Gaps<TSeq1> refRowRight;
-    
-    setSource(readRowLeft, read);
-    setSource(readRowRight, read);
-    
-    if (ori)
-    {
-        setSource(refRowLeft, locInfo.refSeq);
-        setSource(refRowRight, locInfo.contigSeq);
-    }
-    else
-    {
-        setSource(refRowLeft, locInfo.contigSeq);
-        setSource(refRowRight, locInfo.refSeq);
-    }
-
-    Score<int, Simple> scoringScheme(1, -2, -5);
-    int splitScore = splitAlignment(readRowLeft, refRowLeft, readRowRight, refRowRight, scoringScheme);
-
-    if (splitScore < length(read)*0.7)
-        return;
-
-    // Position on the read.
-    TPos readPos = toSourcePosition(readRowLeft, clippedEndPosition(readRowLeft));
-    unsigned minOverhang = 0.1 * length(read);
-    if (readPos < minOverhang || readPos > length(read)-minOverhang)
-        return;
-    
-    // Position on the reference infix and contig.
-    TPos refPos;
-    TPos contigPos;
-
-    if (ori)
-    {
-        refPos = toSourcePosition(refRowLeft, clippedEndPosition(refRowLeft));
-        contigPos = toSourcePosition(refRowRight, 0);
-
-        // Move the split position to the rightmost possible position.
-        while (refPos < length(locInfo.refSeq) && contigPos < length(locInfo.contigSeq) &&
-              locInfo.refSeq[refPos] == locInfo.contigSeq[contigPos])
-        {
-            ++refPos;
-            ++contigPos;
-        }
-
-        if (refPos > length(locInfo.refSeq)-minOverhang || contigPos < minOverhang)
-            return;
-    }
-    else
-    {
-        refPos = toSourcePosition(refRowRight, 0);
-        contigPos = toSourcePosition(refRowLeft, clippedEndPosition(refRowLeft));
-
-        if (contigPos > length(locInfo.contigSeq)-minOverhang || refPos < minOverhang)
-            return;
-    }
-
-    // Increase count for this split positions.
-    Pair<TPos> posPair(refPos + locInfo.refOffset, contigPos + locInfo.contigOffset);
-    if (locInfo.splitPosMap.count(posPair) == 0)
-        locInfo.splitPosMap[posPair] = 1;
-    else
-        ++locInfo.splitPosMap[posPair];
-
-    ++locInfo.splitReadCount;
+    unsigned refPos = offset + toSourcePosition(refGaps, 0);
+    unsigned contigPos = length(host(source(contigGaps))) - length(source(contigGaps)) + toSourcePosition(contigGaps, clippedEndPosition(contigGaps));
+    return std::pair<unsigned, unsigned>(refPos, contigPos);
 }
 
-// ==========================================================================
+// ---------------------------------------------------------------------------------------
 
-template<typename TSeq1, typename TPos, typename TSize, typename TSeq2>
-void
-alignRead(LocationInfo<TSeq1, TPos, TSize> & locInfo, TSeq2 & read)
+// Case 2: LEFT end of insertion and contig in reverse orientation (contigSuffix)  -->  all in RC
+
+std::pair<unsigned, unsigned>
+getSplitPosition(Gaps<typename Infix<Dna5String>::Type> & contigGaps,
+        Gaps<ModifiedString<ModifiedString<Dna5String, ModComplementDna5>, ModReverse> > & refGaps,
+        unsigned offset)
 {
-    Gaps<TSeq2> readRow;
-    Gaps<TSeq1> refRow;
-    setSource(readRow, read);
-    setSource(refRow, locInfo.refSeq);
-
-    Score<int, Simple> scoringScheme(1, -2, -5);
-    int score = globalAlignment(refRow, readRow, scoringScheme, AlignConfig<true, true, true, true>());
-    
-    if (score < length(read) * 0.7)
-        return;
-        
-    unsigned minOverhang = 0.1 * length(read);
-    if (toSourcePosition(refRow, toViewPosition(readRow, 0)) + minOverhang > locInfo.concatPos ||
-        toSourcePosition(refRow, toViewPosition(readRow, length(read))) < locInfo.concatPos + minOverhang)
-        return;
-    
-    ++locInfo.splitReadCount;
+    unsigned refPos = offset + length(source(refGaps)) - toSourcePosition(refGaps, 0) - 1;
+    unsigned contigPos = length(source(contigGaps)) - toSourcePosition(contigGaps, clippedEndPosition(contigGaps));
+    return std::pair<unsigned, unsigned>(refPos, contigPos);
 }
 
-// ==========================================================================
+// ---------------------------------------------------------------------------------------
 
-template<typename TSeq, typename TPos, typename TSize>
+// Case 3: RIGHT end of insertion and contig in reverse orientation (contigPrefix)
+
+std::pair<unsigned, unsigned>
+getSplitPosition(Gaps<ModifiedString<ModifiedString<typename Infix<Dna5String>::Type, ModComplementDna5>, ModReverse> > & contigGaps,
+        Gaps<Dna5String> & refGaps,
+        unsigned offset)
+{
+    unsigned refPos = offset + toSourcePosition(refGaps, 0);
+    unsigned contigPos = length(host(host(host(source(contigGaps))))) - length(source(contigGaps)) + toSourcePosition(contigGaps, clippedEndPosition(contigGaps));
+    return std::pair<unsigned, unsigned>(refPos, contigPos);
+}
+
+// ---------------------------------------------------------------------------------------
+
+// Case 4: LEFT end of insertion and contig in forward orientation (contigPrefix)  -->  all in RC
+
+std::pair<unsigned, unsigned>
+getSplitPosition(Gaps<ModifiedString<ModifiedString<typename Infix<Dna5String>::Type, ModComplementDna5>, ModReverse> > & contigGaps,
+        Gaps<ModifiedString<ModifiedString<Dna5String, ModComplementDna5>, ModReverse> > & refGaps,
+        unsigned offset)
+{
+    unsigned refPos = offset + length(source(refGaps)) - toSourcePosition(refGaps, 0) - 1;
+    unsigned contigPos = length(source(contigGaps)) - toSourcePosition(contigGaps, clippedEndPosition(contigGaps));
+    return std::pair<unsigned, unsigned>(refPos, contigPos);
+}
+
+// ---------------------------------------------------------------------------------------
+// Function alignRead()
+// ---------------------------------------------------------------------------------------
+
+template<typename TContigSeq, typename TRefSeq>
 bool
-alignRegion(LocationInfo<TSeq, TPos, TSize> & locInfo,
-            BamInfo & bam,
-            Location & loc,
-            PlacingOptions & options,
-            bool isConcat)
+alignRead(std::pair<unsigned, unsigned> & insPos, Dna5String readSeq, TContigSeq & contigPrefix, TRefSeq & ref, unsigned refOffset)
 {
-    // Find the rID in bam file for the locations chromosome.
+
+    Gaps<Dna5String> readRowLeft;
+    Gaps<TContigSeq> contigRowLeft;
+    Gaps<Dna5String> readRowRight;
+    Gaps<TRefSeq> refRowRight;
+    
+    setSource(readRowLeft, readSeq);
+    setSource(contigRowLeft, contigPrefix);
+    setSource(readRowRight, readSeq);
+    setSource(refRowRight, ref);
+
+    Score<int, Simple> scoringScheme(1, -3, -4, -5);
+    Pair<int, int> splitScore = splitAlignment(readRowLeft, contigRowLeft, readRowRight, refRowRight, scoringScheme);
+
+//    std::cout << "\nSplit score = " << splitScore.i1 + splitScore.i2 << " (" << splitScore.i1 << " + " << splitScore.i2 << ")" << std::endl;
+//    std::cout << readRowLeft << "\n" << contigRowLeft << "\n\n" << readRowRight << "\n" << refRowRight << std::endl;
+
+    int minOverhang = 0.1 * length(readSeq);
+    if (splitScore.i1 < minOverhang || splitScore.i2 < minOverhang || splitScore.i1 + splitScore.i2 < length(readSeq) * 0.5)
+        return 1;
+
+//    // Split position on the read.
+//    unsigned readPos = toSourcePosition(readRowLeft, clippedEndPosition(readRowLeft));
+//    std::cout << "read pos = " << readPos << "   read len =  " << length(readSeq) << std::endl;
+    
+    // Find the split position on the reference and contig.
+    insPos = getSplitPosition(contigRowLeft, refRowRight, refOffset);
+//    std::cout << "refPos = " << insPos.first << "   contigPos = " << insPos.second << std::endl;
+
+    return 0;
+}
+
+// ---------------------------------------------------------------------------------------
+// Function splitAlignReads()
+// ---------------------------------------------------------------------------------------
+
+template<typename TContigSeq, typename TRefSeq>
+bool
+splitAlignReads(std::map<std::pair<unsigned, unsigned>, unsigned> & insPos,
+        BamStream & bamStream,
+        BamIndex<Bai> & bai,
+        TContigSeq & contigPrefix,
+        TRefSeq & ref,
+        Location & loc,
+        PlacingOptions & options)
+{
+    // Set the coverage threshold for this BAM file for this location to 3 times the average coverage.
+    unsigned covThresh = 3 * options.bamAvgCov * (loc.chrEnd - loc.chrStart) / options.readLength;
+
+    // Find the rID in BAM file for the location's chromosome.
     int rID = 0;
-    BamIOContext<StringSet<CharString> > context = bam.stream.bamIOContext;
+    BamIOContext<StringSet<CharString> > context = bamStream.bamIOContext;
     getIdByName(nameStore(context), loc.chr, rID, nameStoreCache(context));
 
-    // Read the first record to find out read length in this bamfile.
-    BamAlignmentRecord record;
-    if (readRecord(record, bam.stream))
-    {
-        std::cerr << "ERROR: Failed reading record from bam file." << std::endl;
-        return 1;
-    }
-
-    // Narrow down the location to relevant read begin positions.
-    __int32 locStart = 0, locEnd = 0;
-    if (loc.chrOri)
-    {
-        locStart = loc.chrStart + length(record.seq);
-        locEnd = loc.chrEnd + options.maxInsertSize;
-    }
-    else
-    {
-        locStart = loc.chrStart - options.maxInsertSize;
-        locEnd = loc.chrEnd;
-    }
-    
-    // Set the coverage threshold for this bamfile for this location (to 3 times the average coverage).
-    unsigned covThresh = bam.covThresh * (locEnd - locStart) / length(record.seq);
-
-    // Jump to the location in bam file.
+    // Jump to the location in BAM file.
     bool hasAlignments;
-    jumpToRegion(bam.stream, hasAlignments, rID, locStart, locEnd, bam.index);
-    if (!hasAlignments)
-        return 0;
+    jumpToRegion(bamStream, hasAlignments, rID, loc.chrStart, loc.chrEnd, bai);
+
+    unsigned readCount = 0;
 
     // Iterate reads in region and align candidate split reads.
-    unsigned readCount = 0;
-    while (!atEnd(bam.stream))
+    BamAlignmentRecord record;
+    std::pair<unsigned, unsigned> posPair;
+    while (!atEnd(bamStream))
     {
-        // Read record from bamfile.
-        if (readRecord(record, bam.stream))
-        {
-            std::cerr << "ERROR: Failed reading record from bam file." << std::endl;
-            return 1;
-        }
+        // Read record from BAM file.
+        readRecord(record, bamStream);
 
         // Skip records before the region's start.
-        if (record.rID == rID && record.beginPos < locStart)
+        if (record.rID == rID && record.beginPos < loc.chrStart)
             continue;
 
         // Check if read's alignment position is still within the location.
-        if (record.rID != rID || record.beginPos > locEnd)
-            break;
-        
-        // Check for high coverage.
+        if (record.rID != rID || record.beginPos > loc.chrEnd)
+            return 0;
+
+        // Check for too high coverage.
         ++readCount;
         if (readCount > covThresh)
-        {
-            locInfo.highCoverage = true;
-            return 0;
-        }
+            return 1;
 
         // Check quality of record.
         if (!isCandidateSplitRead(record, loc.chrOri))
             continue;
 
+        // Reverse complement record.seq if (loc.chrOri == true).
+        Dna5String readSeq = record.seq;
+        if (loc.chrOri)
+            reverseComplement(readSeq);
+
         // (Split-)Align the read to the reference.
-        if (isConcat)
-            alignRead(locInfo, record.seq);
+        if (alignRead(posPair, readSeq, contigPrefix, ref, loc.chrStart) == 0)
+        {
+            if (insPos.count(posPair) == 0)
+                insPos[posPair] = 1;
+            else
+                ++insPos[posPair];
+        }
+    }
+
+    return 0;
+}
+
+// ---------------------------------------------------------------------------------------
+// Function loadContigAndSplitAlign()
+// ---------------------------------------------------------------------------------------
+
+template<typename TRefSeq>
+bool
+loadContigAndSplitAlign(std::map<std::pair<unsigned, unsigned>, unsigned> & insPos,
+        BamStream & bamStream,
+        BamIndex<Bai> & bai,
+        TRefSeq & ref,
+        Dna5String & contig,
+        Location & loc,
+        PlacingOptions & options)
+{
+    typedef Infix<Dna5String>::Type TInfix;
+    typedef ModifiedString<TInfix, ModComplementDna5> TComplementInfix;
+    typedef ModifiedString<TComplementInfix, ModReverse> TRcInfix;
+
+    unsigned preSufLen = 200;    // TODO: Make this a program parameter.
+
+    if (loc.contigOri)
+    {
+        unsigned suffixBegPos = length(contig) - _min(preSufLen, length(contig));
+        TInfix contigSuffix = infix(contig, suffixBegPos, length(contig));
+        return splitAlignReads(insPos, bamStream, bai, contigSuffix, ref, loc, options);
+    }
+    else
+    {
+        unsigned prefixEndPos = _min(preSufLen, length(contig));
+        TInfix pref = infix(contig, 0, prefixEndPos);
+        TRcInfix contigPrefix(pref);
+        return splitAlignReads(insPos, bamStream, bai, contigPrefix, ref, loc, options);
+    }
+
+}
+
+// ---------------------------------------------------------------------------------------
+// Function loadContigAndSplitAlign()
+// ---------------------------------------------------------------------------------------
+
+template<typename TStream>
+void
+writeLocPos(TStream & outStream,
+        Location & loc,
+        std::map<std::pair<unsigned, unsigned>, unsigned> & insPos,
+        bool highCov)
+{
+    typedef typename std::map<std::pair<unsigned, unsigned>, unsigned>::iterator TIter;
+    outStream << loc.chr;
+    if (loc.chr != "OTHER")
+    {
+        outStream << ":";
+        outStream << loc.chrStart << "-";
+        outStream << loc.chrEnd;
+    }
+    outStream << "\t" << (loc.chrOri ? "+" : "-");
+    outStream << "\t" << loc.contig;
+    outStream << "\t" << (loc.contigOri ? "+" : "-");
+    outStream << "\t" << loc.numReads;
+    outStream << "\t" << loc.score;
+
+    if (highCov)
+    {
+        outStream << "\t" << "high_coverage" << std::endl;
+    }
+    else
+    {
+        TIter it = insPos.begin();
+        TIter itEnd = insPos.end();
+
+        if (it != itEnd)
+        {
+            outStream << "\t" << (it->first).first << "," << (it->first).second << ":" << (it->second);
+            ++it;
+        }
+
+        while (it != itEnd)
+        {
+            outStream << ";" << (it->first).first << "," << (it->first).second << ":" << (it->second);
+            ++it;
+        }
+
+        outStream << std::endl;
+    }
+}
+
+// =======================================================================================
+// Function popins_place_split_read_align()
+// =======================================================================================
+
+bool
+popins_place_split_read_align(String<LocationInfo> & locs,
+        std::vector<std::pair<CharString, Dna5String> > & contigs,
+        FaiIndex & fai,
+        PlacingOptions & options)
+{
+    typedef typename Iterator<String<LocationInfo> >::Type TIter;
+    typedef std::pair<CharString, Dna5String> TPair;
+
+    // Open the BAM file.
+    BamStream bamStream;
+    if (open(bamStream, toCString(options.bamFile)) != 0)
+    {
+        std::cerr << "ERROR: Could not open BAM file " << options.bamFile << std::endl;
+        return 1;
+    }
+
+    // Load the BAI file.
+    BamIndex<Bai> bai;
+    CharString baiFile = options.bamFile;
+    baiFile += ".bai";
+    if (read(bai, toCString(baiFile)) != 0)
+    {
+        std::cerr << "ERROR: Could not read BAI index file " << baiFile << std::endl;
+        return 1;
+    }
+
+    // Open the output file.
+    std::fstream outStream(toCString(options.outFile), std::ios::out);
+    if (!outStream.good())
+    {
+        std::cerr << "ERROR: Could not open output file " << options.outFile << " for writing." << std::endl;
+        return 1;
+    }
+
+    TIter it = begin(locs);
+    TIter itEnd = end(locs);
+
+    while (it != itEnd)
+    {
+        std::map<std::pair<unsigned, unsigned>, unsigned> insPos;
+        bool highCov;
+
+        std::vector<TPair>::iterator contigIt = std::lower_bound(contigs.begin(), contigs.end(), TPair((*it).loc.contig, ""));
+
+        if ((*it).loc.chrOri)
+        {
+            (*it).loc.chrStart += options.readLength;
+            (*it).loc.chrEnd += options.maxInsertSize;
+
+            // Load the genomic region and reverse complement it.
+            Dna5String r = loadInterval(fai, (*it).loc.chr, (*it).loc.chrStart, (*it).loc.chrEnd);
+            ModifiedString<ModifiedString<Dna5String, ModComplementDna5>, ModReverse> ref(r);
+
+            // Load the contig prefix/suffix and split align.
+            highCov = loadContigAndSplitAlign(insPos, bamStream, bai, ref, contigIt->second, (*it).loc, options);
+
+            (*it).loc.chrStart -= options.readLength;
+            (*it).loc.chrEnd -= options.maxInsertSize;
+        }
         else
-            alignRead(locInfo, record.seq, loc.chrOri);
+        {
+            (*it).loc.chrStart -= options.maxInsertSize;
+
+            // Load the genomic region and keep it in forward orientation.
+            Dna5String ref = loadInterval(fai, (*it).loc.chr, (*it).loc.chrStart, (*it).loc.chrEnd);
+
+            // Load the contig prefix/suffix and split align.
+            highCov = loadContigAndSplitAlign(insPos, bamStream, bai, ref, contigIt->second, (*it).loc, options);
+
+            (*it).loc.chrStart += options.maxInsertSize;
+        }
+
+        writeLocPos(outStream, (*it).loc, insPos, highCov);
+
+        ++it;
     }
 
     return 0;
 }
 
-// ==========================================================================
-
-template<typename TSize, typename TSeq, typename TPos>
-bool
-findSplitReads(std::map<TSize, LocationInfo<TSeq, TPos, TSize> > & locInfos,
-               std::map<TSize, std::set<TSize> > & concatGroups,
-               std::map<TSize, std::set<TSize> > & groups,
-               String<Location> & locations,
-               PlacingOptions & options)
-{
-    typedef typename std::map<TSize, std::set<TSize> >::iterator TGroupsIter;
-
-    BamInfo bam;
-
-    // Iterate individuals.
-    for (unsigned b = 0; b < length(options.bamFiles); ++b)
-    {
-        if (options.verbose)
-            std::cerr << "[" << time(0) << "] " << "Split aligning reads from " << options.bamFiles[b] << std::endl;
-        
-        // Open the bam file.
-        if (open(bam.stream, toCString(options.bamFiles[b])) != 0)
-        {
-            std::cerr << "ERROR: Could not open bam file " << options.bamFiles[b] << std::endl;
-            return 1;
-        }
-
-        // Load the bam index.
-        CharString baiFile = options.bamFiles[b];
-        baiFile += ".bai";
-        if (read(bam.index, toCString(baiFile)) != 0)
-        {
-            std::cerr << "ERROR: Could not read BAI index file " << baiFile << std::endl;
-            return 1;
-        }
-
-        // Compute max coverage for this bam file.
-        bam.covThresh = 3 * options.bamAvgCov[b];
-
-        // Iterate groups of locations with concatenated reference and align reads.
-        TGroupsIter cGroupsEnd = concatGroups.end();
-        for (TGroupsIter it = concatGroups.begin(); it != cGroupsEnd; ++it)
-        {
-            TSize g = it->first;
-            if (locInfos[g].highCoverage || locInfos[g].splitReadCount >= options.maxSplitReads)
-                continue;
-            if (alignRegion(locInfos[g], bam, locations[g], options, true) != 0)
-                return 1;
-        }
-
-        // Iterate groups of locations with separate reference and contig sequence and split-align reads.
-        TGroupsIter groupsEnd = groups.end();
-        for (TGroupsIter it = groups.begin(); it != groupsEnd; ++it)
-        {
-            TSize g = it->first;
-            if (locInfos[g].highCoverage || locInfos[g].splitReadCount >= options.maxSplitReads)
-                continue;
-            if (alignRegion(locInfos[g], bam, locations[g], options, false) != 0)
-                return 1;
-        }
-    }
-
-    return 0;
-}
-
-// ==========================================================================
-// Functions  alignContigPrefixToRef()  and  alignContigSuffixToRef()
-// ==========================================================================
-
-template<typename TSeq1, typename TSeq2, typename TScoringScheme>
-bool
-alignContigPrefixToRef(Pair<size_t> & splitPosPair, TSeq1 & refInfix, TSeq2 & contig, TScoringScheme & scsc)
-{
-    Gaps<TSeq1> refRow;
-    Gaps<typename Prefix<TSeq2>::Type> contigRow;
-    
-    typename Prefix<TSeq2>::Type contigPrefix = prefix(contig, 50);
-
-    setSource(refRow, refInfix);
-    setSource(contigRow, contigPrefix);
-    
-    int score = localAlignment(refRow, contigRow, scsc);
-
-    if (score < 15)
-        return false;
-
-    size_t firstContigPos = toSourcePosition(contigRow, 0);
-    
-    if (firstContigPos > 5)
-        return false;
-        
-    size_t lastContigPos = toSourcePosition(contigRow, length(refRow));
-    size_t lastRefPos = toSourcePosition(refRow, length(refRow));
-
-    splitPosPair = Pair<size_t>(lastRefPos, lastContigPos);
-
-    if (lastContigPos > 45) // 45 = length(contigSuffix) - 5
-    {
-        size_t firstRefPos = toSourcePosition(refRow, 0);
-
-        Seed<Simple> seed(firstRefPos, firstContigPos, lastRefPos, lastContigPos);
-        extendSeed(seed, refInfix, contig, EXTEND_RIGHT, scsc, -2 * scoreGap(scsc), GappedXDrop());
-        
-        // Re-align seed sequences to get a clean breakpoint position.
-        Gaps<typename Infix<TSeq1>::Type> refInfixRow;
-        assignSource(refInfixRow, infix(refInfix, beginPositionH(seed), endPositionH(seed)));
-        contigPrefix = prefix(contig, endPositionV(seed));
-        localAlignment(refInfixRow, contigRow, scsc);
-        
-        lastContigPos = toSourcePosition(contigRow, length(refInfixRow));
-        lastRefPos = beginPositionH(seed) + toSourcePosition(refInfixRow, length(refInfixRow));
-    }
-
-    splitPosPair = Pair<size_t>(lastRefPos, lastContigPos);
-    return true;
-}
-
-// ==========================================================================
-
-template<typename TSeq1, typename TSeq2, typename TScoringScheme>
-bool
-alignContigSuffixToRef(Pair<size_t> & splitPosPair, TSeq1 & refInfix, TSeq2 & contig, TScoringScheme & scsc)
-{
-    Gaps<TSeq1> refRow;
-    Gaps<typename Suffix<TSeq2>::Type> contigRow;
-    
-    typename Suffix<TSeq2>::Type contigSuffix = suffix(contig, length(contig) - 50);
-
-    setSource(refRow, refInfix);
-    setSource(contigRow, contigSuffix);
-    
-    int score = localAlignment(refRow, contigRow, scsc);
-
-    if (score < 15)
-        return false;
-
-    size_t lastContigPos = toSourcePosition(contigRow, length(refRow));
-    
-    if (lastContigPos < 45) // 45 = length(contigSuffix) - 5
-        return false;
-        
-    size_t firstContigPos = beginPosition(contigSuffix) + toSourcePosition(contigRow, 0);
-    size_t firstRefPos = toSourcePosition(refRow, 0);
-
-    if (firstContigPos < beginPosition(contigSuffix) + 5)
-    {
-        size_t lastRefPos = toSourcePosition(refRow, length(refRow));
-        lastContigPos += beginPosition(contigSuffix);
-
-        Seed<Simple> seed(firstRefPos, firstContigPos, lastRefPos, lastContigPos);
-        extendSeed(seed, refInfix, contig, EXTEND_LEFT, scsc, -2 * scoreGap(scsc), GappedXDrop());
-        
-        // Re-align seed sequences to get a clean breakpoint position.
-        Gaps<typename Infix<TSeq1>::Type> refInfixRow;
-        assignSource(refInfixRow, infix(refInfix, beginPositionH(seed), toSourcePosition(refRow, length(contigRow))));
-        contigSuffix = suffix(contig, beginPositionV(seed));
-        localAlignment(refInfixRow, contigRow, scsc);
-        
-        firstContigPos = beginPosition(contigSuffix) + toSourcePosition(contigRow, 0);
-        firstRefPos = beginPositionH(seed) + toSourcePosition(refInfixRow, 0);
-    }
-    
-    splitPosPair = Pair<size_t>(firstRefPos, firstContigPos);
-    return true;
-}
-
-#endif // #ifndef POPINS_PLACE_SPLIT_ALIGN_H_
+#endif  // POPINS_PLACE_SPLIT_ALIGN_H_
