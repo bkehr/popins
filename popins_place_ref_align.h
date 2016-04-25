@@ -686,7 +686,7 @@ findRefAlignedGroups(String<String<LocationInfo> > & refAlignedGroups,
         }
         else if (alignsToRef(*it, contigs, fai, options))
         {
-            std::cout << "Ins pos: " << (*it).insPos << std::endl;
+            //std::cout << "Ins pos: " << (*it).insPos << std::endl;
             String<LocationInfo> newGroup;
             appendValue(newGroup, *it);
             appendValue(refAlignedGroups, newGroup);
