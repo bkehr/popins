@@ -105,6 +105,8 @@ loadLocations(String<LocationInfo> & locations, PlacingOptions & options)
 {
     if (length(locations) == 0)
     {
+        if (options.bamFile != "")
+            options.minAnchorReads = 0;
 
         LocationsFilter filter(options.minAnchorReads, options.minLocScore, 2*options.maxInsertSize);
         if (options.interval.i1 == "")

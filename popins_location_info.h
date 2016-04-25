@@ -13,7 +13,7 @@ struct LocationInfo
 {
     Location loc;
     bool otherEnd;
-    unsigned idx;
+    int idx;
     unsigned contigLength;
     int insPos;
     unsigned refPos;

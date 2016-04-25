@@ -18,7 +18,7 @@ using namespace seqan;
 struct SampleLists
 {
     std::vector<CharString> pns;
-    std::vector<std::vector<unsigned> > lists;
+    std::vector<std::vector<int> > lists;
 };
 
 // ---------------------------------------------------------------------------------------
@@ -149,6 +149,29 @@ setContigLengths(String<LocationInfo> & locations,
     return 0;
 }
 
+Location
+otherEnd(Location & loc, unsigned readLength, unsigned maxInsertSize)
+{
+    Location rc = loc;
+
+    rc.contigOri = !loc.contigOri;
+    rc.chrOri = !loc.chrOri;
+    rc.numReads = 0;
+
+    if (loc.chrOri)
+    {
+        rc.chrStart = loc.chrEnd;
+        rc.chrEnd = rc.chrEnd + maxInsertSize + readLength;
+    }
+    else
+    {
+        rc.chrStart = loc.chrStart - maxInsertSize - readLength;
+        rc.chrEnd = loc.chrStart;
+    }
+
+    return rc;
+}
+
 // =======================================================================================
 
 // ---------------------------------------------------------------------------------------
@@ -193,9 +216,9 @@ writeGroup(TStream & outStream, String<LocationInfo> & group, bool isInsertion)
 // ---------------------------------------------------------------------------------------
 
 bool
-writeSplitAlignList(CharString path, std::vector<unsigned> & list, String<LocationInfo> & locations)
+writeSplitAlignList(CharString path, std::vector<int> & list, String<LocationInfo> & locations, PlacingOptions & options)
 {
-    typedef std::vector<unsigned>::iterator TIter;
+    typedef std::vector<int>::iterator TIter;
 
     path += "/locations_unplaced.txt";
     std::fstream outStream(toCString(path), std::ios::out);
@@ -210,7 +233,13 @@ writeSplitAlignList(CharString path, std::vector<unsigned> & list, String<Locati
 
     while (it != itEnd)
     {
-        writeLoc(outStream, locations[*it].loc);
+        if (*it > 0)
+             writeLoc(outStream, locations[(*it) - 1].loc);
+        else
+        {
+            Location loc = otherEnd(locations[-(*it)-1].loc, options.readLength, options.maxInsertSize);
+            writeLoc(outStream, loc);
+        }
         ++it;
     }
 
@@ -268,11 +297,18 @@ setInsPos(LocationInfo & a, LocationInfo & b,
         Dna5String & contigA, Dna5String & contigB,
         Gaps<TSeqA> & gapsA, Gaps<TSeqB> & gapsB)
 {
+    a.refPos = b.refPos;
+
+    if (b.insPos == -1)
+    {
+        a.insPos = -1;
+        return;
+    }
+
     if (a.loc.chrOri)
         a.insPos = toSourcePosition(gapsA, toViewPosition(gapsB, b.insPos));
     else
         a.insPos = length(contigA) - toSourcePosition(gapsA, toViewPosition(gapsB, length(contigB) - b.insPos));
-    a.refPos = b.refPos;
 }
 
 // ---------------------------------------------------------------------------------------
@@ -315,6 +351,14 @@ contigEndsAlign(LocationInfo & a, LocationInfo & b, std::vector<std::pair<CharSt
 
     std::vector<TPair>::iterator itA = std::lower_bound(contigs.begin(), contigs.end(), TPair(a.loc.contig, ""));
     std::vector<TPair>::iterator itB = std::lower_bound(contigs.begin(), contigs.end(), TPair(b.loc.contig, ""));
+
+    if (b.insPos != -1)
+    {
+        if (b.loc.chrOri)
+            preSufLen = _max(preSufLen, b.insPos + 20);
+        else
+            preSufLen = _max(preSufLen, length(itB->second) - b.insPos + 20);
+    }
 
     SEQAN_ASSERT_EQ(a.loc.chrOri, b.loc.chrOri);
 
@@ -598,10 +642,13 @@ addToLists(SampleLists  & splitAlignLists,
     std::map<CharString, unsigned>::iterator it = loc.loc.bestSamples.begin();
     std::map<CharString, unsigned>::iterator itEnd = loc.loc.bestSamples.end();
 
+    std::cout << loc.loc.chr << ":" << loc.loc.chrStart << "\t" << loc.loc.contig << std::endl;
+
     while (it != itEnd)
     {
         std::vector<CharString>::iterator pnIt = std::find(splitAlignLists.pns.begin(), splitAlignLists.pns.end(), it->first);
-        std::vector<std::vector<unsigned> >::iterator listsIt = splitAlignLists.lists.begin() + (pnIt - splitAlignLists.pns.begin());
+        std::cout << "\t" << it->first << std::endl;
+        std::vector<std::vector<int> >::iterator listsIt = splitAlignLists.lists.begin() + (pnIt - splitAlignLists.pns.begin());
 
         (*listsIt).push_back(loc.idx);
         ++it;
@@ -625,21 +672,9 @@ processOtherEnd(TStream & vcfStream,
     {
         // Reverse complement the location.
         LocationInfo rc(loc);
-        rc.loc.contigOri = !loc.loc.contigOri;
-        rc.loc.chrOri = !loc.loc.chrOri;
+        rc.loc = otherEnd(loc.loc, options.readLength, options.maxInsertSize);
         rc.insPos = 0;
-        rc.loc.numReads = 0;
-
-        if (loc.loc.chrOri)
-        {
-            rc.loc.chrStart = loc.loc.chrEnd;
-            rc.loc.chrEnd = rc.loc.chrEnd + options.maxInsertSize + options.readLength;
-        }
-        else
-        {
-            rc.loc.chrStart = loc.loc.chrStart - options.maxInsertSize - options.readLength;
-            rc.loc.chrEnd = loc.loc.chrStart;
-        }
+        rc.idx = -loc.idx;
 
         // Process the reverse complemented location.
         if (alignsToRef(rc, contigs, fai, options))
@@ -894,6 +929,10 @@ popins_place_ref_align(TStream & vcfStream,
     if (options.verbose)
         std::cerr << "[" << time(0) << "] " << "Set other end's bit and sorted locations by reference position." << std::endl;
 
+    // Reset location indices to match sort order.
+    for (unsigned i = 0; i < length(locations); ++i)
+        locations[i].idx = i + 1;
+
     // --- Iterate over locations in sets of overlapping genomic positions.
 
     Iterator<String<LocationInfo> >::Type it = begin(locations);
@@ -943,7 +982,7 @@ popins_place_ref_align(TStream & vcfStream,
     // Write splitAlignLists to output files.
     for (unsigned i = 0; i < splitAlignLists.pns.size(); ++i)
     {
-        if (writeSplitAlignList(splitAlignLists.pns[i], splitAlignLists.lists[i], locations) != 0)
+        if (writeSplitAlignList(splitAlignLists.pns[i], splitAlignLists.lists[i], locations, options) != 0)
             return 1;
     }
 
