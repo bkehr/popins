@@ -242,7 +242,7 @@ int popins_contigmap(int argc, char const ** argv)
     // Sort <WD>/contig_mapped.bam by read name
     std::cerr << "[" << time(0) << "] " << "Sorting " << mappedBamUnsorted << " by read name using " << SAMTOOLS << std::endl;
     cmd.str("");
-    cmd << SAMTOOLS << " sort -n -m " << options.memory << " -o " << options.tmpDir << "/contig_mapped.bam" << " " << mappedBamUnsorted;
+    cmd << SAMTOOLS << " sort -n -@ " << options.threads << " -m " << options.memory << " -o " << options.tmpDir << "/contig_mapped.bam" << " " << mappedBamUnsorted;
     if (system(cmd.str().c_str()) != 0)
     {
         std::cerr << "ERROR while sorting " << mappedBamUnsorted << " by read name using " << SAMTOOLS << std::endl;
@@ -263,7 +263,7 @@ int popins_contigmap(int argc, char const ** argv)
     // Sort <WD>/merged.bam by beginPos, output is <WD>/non_ref.bam.
     std::cerr << "[" << time(0) << "] " << "Sorting " << mergedBam << " using " << SAMTOOLS << std::endl;
     cmd.str("");
-    cmd << SAMTOOLS << " sort -m " << options.memory << " -o " << options.workingDirectory << "/non_ref_new.bam" << " " << mergedBam;
+    cmd << SAMTOOLS << " sort -@ " << options.threads << " -m " << options.memory << " -o " << options.workingDirectory << "/non_ref_new.bam" << " " << mergedBam;
     if (system(cmd.str().c_str()) != 0)
     {
         std::cerr << "ERROR while sorting " << mergedBam << " by beginPos using " << SAMTOOLS << std::endl;
@@ -293,6 +293,10 @@ int popins_contigmap(int argc, char const ** argv)
     findLocations(locations, nonRefNew);
     scoreLocations(locations);
     if (writeLocations(locationsFile, locations) != 0) return 1;
+
+    // Remove the non_ref_new.bam file.
+    if (!options.keepNonRefNew)
+        remove(toCString(nonRefNew));
 
     return 0;
 }

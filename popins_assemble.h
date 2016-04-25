@@ -95,7 +95,7 @@ remapping(Triple<CharString> & fastqFilesTemp,
     // Sort bam file.
     std::cerr << "[" << time(0) << "] Sorting " << remappedUnsortedBam << " using " << SAMTOOLS << std::endl;
     cmd.str("");
-    cmd << SAMTOOLS << " sort -m " << memory << " " << remappedUnsortedBam << " " << tempDir << "/remapped";
+    cmd << SAMTOOLS << " sort -@ " << threads << " -m " << memory << " " << remappedUnsortedBam << " " << tempDir << "/remapped";
     if (system(cmd.str().c_str()) != 0)
     {
         std::cerr << "ERROR while sorting BWA output " << remappedUnsortedBam << std::endl;
@@ -122,7 +122,7 @@ remapping(Triple<CharString> & fastqFilesTemp,
     std::cerr << "[" << time(0) << "] " << "Sorting " << remappedUnsortedBam << " by read name using " << SAMTOOLS << std::endl;
 
     cmd.str("");
-    cmd << SAMTOOLS << " sort -n -m " << memory << " " << remappedUnsortedBam << " " << tempDir << "/remapped";
+    cmd << SAMTOOLS << " sort -n -@ " << threads << " -m " << memory << " " << remappedUnsortedBam << " " << tempDir << "/remapped";
     if (system(cmd.str().c_str()) != 0)
     {
         std::cerr << "ERROR while sorting " << remappedUnsortedBam << std::endl;
@@ -547,9 +547,9 @@ int popins_assemble(int argc, char const ** argv)
         std::cerr << "[" << time(0) << "] " << "Sorting " << matesBam << " using " << SAMTOOLS << std::endl;
         std::stringstream cmd;
         if (options.referenceFile != "")
-            cmd << SAMTOOLS << " sort -n -m " << options.memory << " " << matesBam << " " << tmpDir << "/non_ref_tmp";
+            cmd << SAMTOOLS << " sort -n -@ " << options.threads << " -m " << options.memory << " " << matesBam << " " << tmpDir << "/non_ref_tmp";
         else
-            cmd << SAMTOOLS << " sort -n -m " << options.memory << " " << matesBam << " " << options.workingDirectory << "/non_ref";
+            cmd << SAMTOOLS << " sort -n -@ " << options.threads << " -m " << options.memory << " " << matesBam << " " << options.workingDirectory << "/non_ref";
         if (system(cmd.str().c_str()) != 0)
         {
             std::cerr << "ERROR while sorting " << matesBam << std::endl;
@@ -636,9 +636,9 @@ int popins_assemble(int argc, char const ** argv)
             std::cerr << "[" << time(0) << "] " << "Sorting " << matesMPBam << " using " << SAMTOOLS << std::endl;
             std::stringstream cmd;
             if (options.referenceFile != "")
-                cmd << SAMTOOLS << " sort -n -m " << options.memory << " " << matesMPBam << " " << tmpDir << "/MP.non_ref_tmp";
+                cmd << SAMTOOLS << " sort -n -@ " << options.threads << " -m " << options.memory << " " << matesMPBam << " " << tmpDir << "/MP.non_ref_tmp";
             else
-                cmd << SAMTOOLS << " sort -n -m " << options.memory << " " << matesMPBam << " " << options.workingDirectory << "/MP.non_ref";
+                cmd << SAMTOOLS << " sort -n -@ " << options.threads << " -m " << options.memory << " " << matesMPBam << " " << options.workingDirectory << "/MP.non_ref";
             if (system(cmd.str().c_str()) != 0)
             {
                 std::cerr << "ERROR while sorting " << matesMPBam << std::endl;
