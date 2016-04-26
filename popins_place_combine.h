@@ -404,6 +404,9 @@ popins_place_combine(TStream & vcfStream, PlacingOptions & options)
         return 1;
     }
 
+    if (options.verbose)
+        std::cerr << "[" << time(0) << "] " << "Loading the placed locations from " << length(options.locationsFiles) << " locations files." << std::endl;
+
     // Read placed location files.
     for (unsigned i = 0; i < length(options.locationsFiles); ++i)
     {
@@ -411,11 +414,20 @@ popins_place_combine(TStream & vcfStream, PlacingOptions & options)
             return 1;
     }
 
+    if (options.verbose)
+        std::cerr << "[" << time(0) << "] " << "Sorting " << locs.size() << " placed locations." << std::endl;
+
     // Sort placed locations.
     std::stable_sort(locs.begin(), locs.end(), PlacedLocLess());
 
+    if (options.verbose)
+        std::cerr << "[" << time(0) << "] " << "Combining the placed locations." << std::endl;
+
     // Combine placing of the same locations.
     combineLocations(locs);
+
+    if (options.verbose)
+        std::cerr << "[" << time(0) << "] " << "Writing " << locs.size() << " combined locations to output file '" << options.outFile << "'." << std::endl;
 
     // Choose the best position.
     for (unsigned i = 0; i < length(locs); ++i)
