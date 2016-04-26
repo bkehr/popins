@@ -135,10 +135,20 @@ writeVcf(TStream & outStream, LocationInfo & loc, FaiIndex & fai)
     outStream << "\t" << loc.loc.chr << ":" << loc.refPos + 1 << ":" << "FP";
     outStream << "\t" << ref;
 
-    if (loc.loc.chrOri)
-        outStream << "\t" << ref << "[" << loc.loc.contig << (!loc.loc.contigOri?"f":"r") << ":" << loc.insPos << "[";
+    if (loc.insPos != -1)
+    {
+        if (loc.loc.chrOri)
+            outStream << "\t" << ref << "[" << loc.loc.contig << (!loc.loc.contigOri?"f":"r") << ":" << loc.insPos << "[";
+        else
+            outStream << "\t" << "]" << loc.loc.contig << (loc.loc.contigOri?"f":"r") << ":" << loc.insPos << "]" << ref;
+    }
     else
-        outStream << "\t" << "]" << loc.loc.contig << (loc.loc.contigOri?"f":"r") << ":" << loc.insPos << "]" << ref;
+    {
+        if (loc.loc.chrOri)
+            outStream << "\t" << ref << "[" << loc.loc.contig << (!loc.loc.contigOri?"f":"r") << "[";
+        else
+            outStream << "\t" << "]" << loc.loc.contig << (loc.loc.contigOri?"f":"r") << "]" << ref;
+    }
 
     outStream << "\t" << ".";
     outStream << "\t" << ".";
@@ -146,6 +156,8 @@ writeVcf(TStream & outStream, LocationInfo & loc, FaiIndex & fai)
         outStream << "\t" << "AR=" << loc.loc.numReads << ";AS=" << loc.loc.score; // TODO Write more info fields.
     else
         outStream << "\t" << "PAIRED";
+    if (loc.insPos == -1)
+        outStream << ";RPL";
     outStream << std::endl;
 }
 
