@@ -642,12 +642,9 @@ addToLists(SampleLists  & splitAlignLists,
     std::map<CharString, unsigned>::iterator it = loc.loc.bestSamples.begin();
     std::map<CharString, unsigned>::iterator itEnd = loc.loc.bestSamples.end();
 
-    std::cout << loc.loc.chr << ":" << loc.loc.chrStart << "\t" << loc.loc.contig << std::endl;
-
     while (it != itEnd)
     {
         std::vector<CharString>::iterator pnIt = std::find(splitAlignLists.pns.begin(), splitAlignLists.pns.end(), it->first);
-        std::cout << "\t" << it->first << std::endl;
         std::vector<std::vector<int> >::iterator listsIt = splitAlignLists.lists.begin() + (pnIt - splitAlignLists.pns.begin());
 
         (*listsIt).push_back(loc.idx);
@@ -901,7 +898,7 @@ popins_place_ref_align(TStream & vcfStream,
         PlacingOptions & options)
 {
     if (options.verbose)
-        std::cerr << "[" << time(0) << "] " << "Aligning contigs to reference." << std::endl;
+        std::cerr << "[" << time(0) << "] " << "Aligning contigs to reference:" << std::endl;
 
     // Initialize splitAlignLists with all sample IDs (using locations).
     SampleLists splitAlignLists;
@@ -926,14 +923,16 @@ popins_place_ref_align(TStream & vcfStream,
     // Sort locations by genomic position.
     std::stable_sort(begin(locations), end(locations), LocationInfoPosLess());
 
-    if (options.verbose)
-        std::cerr << "[" << time(0) << "] " << "Set other end's bit and sorted locations by reference position." << std::endl;
-
     // Reset location indices to match sort order.
     for (unsigned i = 0; i < length(locations); ++i)
         locations[i].idx = i + 1;
 
     // --- Iterate over locations in sets of overlapping genomic positions.
+
+    if (options.verbose) std::cerr << "0%   10   20   30   40   50   60   70   80   90   100%" << std::endl;
+    if (options.verbose) std::cerr << "|----|----|----|----|----|----|----|----|----|----|" << std::endl;
+    double fiftieth = length(locations) / 50.0;
+    unsigned progress = 0;
 
     Iterator<String<LocationInfo> >::Type it = begin(locations);
     Iterator<String<LocationInfo> >::Type itEnd = end(locations);
@@ -946,6 +945,7 @@ popins_place_ref_align(TStream & vcfStream,
     CharString prevChromRev = "";
     unsigned prevPosRev = 0;
 
+    unsigned i = 0;
     while (it != itEnd)
     {
         if ((*it).loc.chrOri)
@@ -970,6 +970,13 @@ popins_place_ref_align(TStream & vcfStream,
             prevChromRev = (*it).loc.chr;
             prevPosRev = (*it).loc.chrEnd;
         }
+
+        while (options.verbose && progress * fiftieth < i)
+        {
+            std::cerr << "*" << std::flush;
+            ++progress;
+        }
+        ++i;
         ++it;
     }
 
@@ -978,6 +985,12 @@ popins_place_ref_align(TStream & vcfStream,
 
     if (length(rev) != 0)
         processOverlappingLocs(vcfStream, outGroups, splitAlignLists, rev, contigs, fai, options);
+
+    if (options.verbose)
+    {
+        std::cerr << "*" << std::endl;
+        std::cerr << "[" << time(0) << "] " << "Writing locations of contigs that do not align to the reference (per sample)." << std::endl;
+    }
 
     // Write splitAlignLists to output files.
     for (unsigned i = 0; i < splitAlignLists.pns.size(); ++i)

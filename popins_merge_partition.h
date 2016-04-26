@@ -193,7 +193,7 @@ partitionContigs(UnionFind<int> & uf,
 
     // print status bar
     if (options.verbose) std::cerr << "[" << time(0) << "] " << "- Streaming over all contig files" << std::endl;
-    if (options.verbose) std::cerr << "0%   10   20   30   40   50   60   70   80   90  100%" << std::endl;
+    if (options.verbose) std::cerr << "0%   10   20   30   40   50   60   70   80   90   100%" << std::endl;
     if (options.verbose) std::cerr << "|----|----|----|----|----|----|----|----|----|----|" << std::endl;
     //unsigned fiftieth = std::max((indexOffset(batch)+length(contigs)/2)/50, 1u);
     unsigned fiftieth = std::max((indexOffset(batch)+batchSize(batch))/50, 1);
