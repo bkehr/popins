@@ -290,7 +290,7 @@ int popins_contigmap(int argc, char const ** argv)
     // Find anchoring locations of contigs for this individual.
     std::cerr << "[" << time(0) << "] " << "Computing contig locations from anchoring reads in " << nonRefNew << std::endl;
     String<Location> locations;
-    findLocations(locations, nonRefNew);
+    findLocations(locations, nonRefNew, options.maxInsertSize);
     scoreLocations(locations);
     if (writeLocations(locationsFile, locations) != 0) return 1;
 

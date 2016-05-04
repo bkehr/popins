@@ -90,7 +90,7 @@ mergeLocations(String<Location> & locations, PlacingOptions & options)
     if (options.verbose)
         std::cerr << "[" << time(0) << "] " << "Merging locations files." << std::endl;
 
-    if (mergeLocations(stream, locations, options.locationsFiles, options.locationsFile, options.verbose) != 0)
+    if (mergeLocations(stream, locations, options.locationsFiles, options.locationsFile, options.maxInsertSize, options.verbose) != 0)
         return 1;
 
     return 0;

@@ -224,10 +224,11 @@ struct ContigMapOptions {
     CharString memory;
     CharString tmpDir;
     bool allAlignment;
+    int maxInsertSize;
     bool keepNonRefNew;
 
     ContigMapOptions() :
-        threads(1), memory("500000000"), allAlignment(false), keepNonRefNew(false)
+        threads(1), memory("500000000"), allAlignment(false), maxInsertSize(800), keepNonRefNew(false)
     {}
 };
 
@@ -485,6 +486,9 @@ setupParser(ArgumentParser & parser, ContigMapOptions & options)
 
     addOption(parser, ArgParseOption("a", "all", "Use bwa-mem's -a option to output all alignments of a read."));
     setDefaultValue(parser, "all", "false");
+
+    addOption(parser, ArgParseOption("e", "maxInsertSize", "The maximal expected insert size of the read pairs.", ArgParseArgument::INTEGER, "INT"));
+    setDefaultValue(parser, "maxInsertSize", options.maxInsertSize);
 
     addOption(parser, ArgParseOption("n", "nonRefNew", "Do not delete the non_ref_new.bam file after writing locations."));
     setDefaultValue(parser, "nonRefNew", "false");
@@ -750,6 +754,8 @@ getOptionValues(ContigMapOptions & options, ArgumentParser & parser)
         options.allAlignment = true;
     if (isSet(parser, "nonRefNew"))
         options.keepNonRefNew = true;
+    if (isSet(parser, "maxInsertSize"))
+        getOptionValue(options.maxInsertSize, parser, "maxInsertSize");
     if (isSet(parser, "threads"))
         getOptionValue(options.threads, parser, "threads");
     if (isSet(parser, "memory"))
