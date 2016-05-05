@@ -383,7 +383,7 @@ writeVcf(TStream & outStream, PlacedLocation & loc, FaiIndex & fai)
     if (loc.loc.numReads != 0)
         outStream << "\t" << "AR=" << loc.loc.numReads << ";AS=" << loc.loc.score;
     else
-        outStream << "\t" << "PAIRED";      // TODO Write more info fields.
+        outStream << "\t" << "NOANCHOR";      // TODO Write more info fields.
 }
 
 // =======================================================================================

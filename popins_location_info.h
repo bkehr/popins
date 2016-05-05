@@ -155,7 +155,7 @@ writeVcf(TStream & outStream, LocationInfo & loc, FaiIndex & fai)
     if (loc.loc.numReads != 0)
         outStream << "\t" << "AR=" << loc.loc.numReads << ";AS=" << loc.loc.score; // TODO Write more info fields.
     else
-        outStream << "\t" << "PAIRED";
+        outStream << "\t" << "NOANCHOR";
     if (loc.insPos == -1)
         outStream << ";RPL";
     outStream << std::endl;
