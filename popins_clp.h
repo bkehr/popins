@@ -539,7 +539,7 @@ setupParser(ArgumentParser & parser, PlacingOptions & options)
     addOption(parser, ArgParseOption("n", "minReads", "Minimal number of anchoring read pairs for a location.", ArgParseArgument::INTEGER, "INT"));
     addOption(parser, ArgParseOption("d", "groupDist", "Minimal distance between groups of locations.", ArgParseArgument::INTEGER, "INT"));
     addOption(parser, ArgParseOption("b", "bamFile", "Full BAM file of an individual. Specify to determine exact insertion positions from split reads.", ArgParseArgument::INPUTFILE, "FILE"));
-    addOption(parser, ArgParseOption("d", "bamCov", "Average coverage of the genome in the BAM file. Required if -b option specified.", ArgParseArgument::DOUBLE, "FLOAT"));
+    addOption(parser, ArgParseOption("a", "bamCov", "Average coverage of the genome in the BAM file. Required if -b option specified.", ArgParseArgument::DOUBLE, "FLOAT"));
 
     addOption(parser, ArgParseOption("len", "readLength", "The length of the reads.", ArgParseArgument::INTEGER, "INT"));
     addOption(parser, ArgParseOption("e", "maxInsertSize", "The maximal expected insert size of the read pairs.", ArgParseArgument::INTEGER, "INT"));
