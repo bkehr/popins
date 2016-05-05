@@ -689,7 +689,7 @@ processOtherEnd(TStream & vcfStream,
             if (rc.insPos == -1)
                 return;
 
-            writeVcf(vcfStream, rc, fai);
+            writeVcf(vcfStream, rc, 0, fai);
         }
         else
             addToLists(splitAlignLists, rc);
@@ -765,7 +765,7 @@ processRefAlignedGroups(TStream1 & vcfStream,
     {
         if ((*it)[0].insPos != -1)
         {
-            writeVcf(vcfStream, (*it)[0], fai);
+            writeVcf(vcfStream, (*it)[0], length(*it), fai);
             writeGroup(groupStream, *it, true);
         }
         else

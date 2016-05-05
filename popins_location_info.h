@@ -126,7 +126,7 @@ loadInterval(FaiIndex & fai, CharString & chrom, unsigned beginPos, unsigned end
 
 template<typename TStream>
 void
-writeVcf(TStream & outStream, LocationInfo & loc, FaiIndex & fai)
+writeVcf(TStream & outStream, LocationInfo & loc, unsigned groupSize, FaiIndex & fai)
 {
     Dna5String ref = loadInterval(fai, loc.loc.chr, loc.refPos, loc.refPos + 1);
 
@@ -153,9 +153,13 @@ writeVcf(TStream & outStream, LocationInfo & loc, FaiIndex & fai)
     outStream << "\t" << ".";
     outStream << "\t" << ".";
     if (loc.loc.numReads != 0)
-        outStream << "\t" << "AR=" << loc.loc.numReads << ";AS=" << loc.loc.score; // TODO Write more info fields.
+    {
+        outStream << "\t" << "AR=" << loc.loc.numReads << ";AS=" << loc.loc.score;
+        outStream << ";" << "GS=" << groupSize; // TODO Write more info fields.
+    }
     else
         outStream << "\t" << "NOANCHOR";
+
     if (loc.insPos == -1)
         outStream << ";RPL";
     outStream << std::endl;
