@@ -204,9 +204,15 @@ writeGroup(TStream & outStream, String<LocationInfo> & group, bool isInsertion)
     outStream << "\t" << (isInsertion?"SV":"REF");
     outStream << "\t" << (group[0].loc.chrOri?"LEFT":"RIGHT");
     outStream << "\t" << group[0].loc.contig << ":" << (group[0].loc.contigOri == group[0].loc.chrOri?"RC":"FW");
+    if (group[0].insPos > 0)
+        outStream << ":" << group[0].insPos;
 
     for (unsigned i = 1; i < length(group); ++i)
+    {
         outStream << "," << group[i].loc.contig << ":" << (group[i].loc.contigOri == group[i].loc.chrOri?"RC":"FW");
+        if (group[i].insPos > 0)
+            outStream << ":" << group[i].insPos;
+    }
 
     outStream << std::endl;
 }
