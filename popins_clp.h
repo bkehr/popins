@@ -258,11 +258,13 @@ struct PlacingOptions {
     unsigned readLength;
     unsigned maxInsertSize;
 
+    unsigned groupDist;
+
     bool verbose;
 
     PlacingOptions() :
         locationsFile("locations.txt"), groupsFile("groups.txt"), bamFile(""),
-        minLocScore(0.3), minAnchorReads(2), readLength(100), maxInsertSize(800),
+        minLocScore(0.3), minAnchorReads(2), readLength(100), maxInsertSize(800), groupDist(100),
         verbose(false)
     {}
 };
@@ -535,6 +537,7 @@ setupParser(ArgumentParser & parser, PlacingOptions & options)
     addOption(parser, ArgParseOption("r", "genomeFile", "Name of reference genome file.", ArgParseArgument::INPUTFILE, "FILE"));
     addOption(parser, ArgParseOption("m", "minScore", "Minimal anchoring score for a location.", ArgParseArgument::DOUBLE, "FLOAT"));
     addOption(parser, ArgParseOption("n", "minReads", "Minimal number of anchoring read pairs for a location.", ArgParseArgument::INTEGER, "INT"));
+    addOption(parser, ArgParseOption("d", "groupDist", "Minimal distance between groups of locations.", ArgParseArgument::INTEGER, "INT"));
     addOption(parser, ArgParseOption("b", "bamFile", "Full BAM file of an individual. Specify to determine exact insertion positions from split reads.", ArgParseArgument::INPUTFILE, "FILE"));
     addOption(parser, ArgParseOption("d", "bamCov", "Average coverage of the genome in the BAM file. Required if -b option specified.", ArgParseArgument::DOUBLE, "FLOAT"));
 
@@ -556,6 +559,7 @@ setupParser(ArgumentParser & parser, PlacingOptions & options)
     // Set default values.
     setDefaultValue(parser, "m", options.minLocScore);
     setDefaultValue(parser, "n", options.minAnchorReads);
+    setDefaultValue(parser, "d", options.groupDist);
     setDefaultValue(parser, "len", options.readLength);
     setDefaultValue(parser, "e", options.maxInsertSize);
     setDefaultValue(parser, "g", options.groupsFile);
@@ -814,6 +818,8 @@ getOptionValues(PlacingOptions & options, ArgumentParser & parser)
             getOptionValue(options.minAnchorReads, parser, "minReads");
         if (isSet(parser, "groups"))
             getOptionValue(options.groupsFile, parser, "groups");
+        if (isSet(parser, "groupDist"))
+            getOptionValue(options.groupDist, parser, "groupDist");
     }
     else if (isSet(parser, "contigFile") || isSet(parser, "genomeFile"))
     {

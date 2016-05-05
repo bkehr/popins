@@ -956,7 +956,7 @@ popins_place_ref_align(TStream & vcfStream,
     {
         if ((*it).loc.chrOri)
         {
-            if (length(fwd) != 0 && (prevChromFwd != (*it).loc.chr || prevPosFwd + 100 < (*it).loc.chrStart))  // TODO Make 100 a program parameter.
+            if (length(fwd) != 0 && (prevChromFwd != (*it).loc.chr || prevPosFwd + options.groupDist < (*it).loc.chrStart))
             {
                 processOverlappingLocs(vcfStream, outGroups, splitAlignLists, fwd, contigs, fai, options);
                 clear(fwd);
@@ -967,7 +967,7 @@ popins_place_ref_align(TStream & vcfStream,
         }
         else
         {
-            if (length(rev) != 0 && (prevChromRev != (*it).loc.chr || prevPosRev + 100 < (*it).loc.chrStart))  // TODO Make 100 a program parameter.
+            if (length(rev) != 0 && (prevChromRev != (*it).loc.chr || prevPosRev + options.groupDist < (*it).loc.chrStart))
             {
                 processOverlappingLocs(vcfStream, outGroups, splitAlignLists, rev, contigs, fai, options);
                 clear(rev);
