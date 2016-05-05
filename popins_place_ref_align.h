@@ -334,7 +334,7 @@ align(Gaps<TSeqA> & gapsA, Gaps<TSeqB> & gapsB, TSeqA & a, TSeqB & b)
 
 //    std::cout << gapsA << std::endl << gapsB << std::endl;
 
-    if (score > 20)        // TODO: Make this 20 a program parameter.
+    if (score > 25)        // TODO: Make this 25 a program parameter.
         return true;
 
     return false;
