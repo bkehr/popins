@@ -116,14 +116,14 @@ loadLocations(String<LocationInfo> & locations, PlacingOptions & options)
             if (readLocations(locations, options.locationsFile, filter) != 0)
                 return 1;
         }
-           else
+        else
         {
             if (options.verbose)
                 std::cerr << "[" << time(0) << "] " << "Reading locations in " << options.interval.i1 << ":" << options.interval.i2 << "-" << options.interval.i3
                                                     << " from " << options.locationsFile << std::endl;
-               if (readLocations(locations, options.locationsFile, options.interval, filter) != 0)
-                   return 1;
-           }
+                if (readLocations(locations, options.locationsFile, options.interval, filter) != 0)
+                    return 1;
+        }
     }
     else
     {
