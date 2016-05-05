@@ -201,7 +201,7 @@ writeGroup(TStream & outStream, String<LocationInfo> & group, bool isInsertion)
     outStream << chrom;
     outStream << "\t" << beginPos;
     outStream << "\t" << endPos;
-    outStream << "\t" << (isInsertion?"YES":"NO");
+    outStream << "\t" << (isInsertion?"SV":"REF");
     outStream << "\t" << (group[0].loc.chrOri?"LEFT":"RIGHT");
     outStream << "\t" << group[0].loc.contig << ":" << (group[0].loc.contigOri == group[0].loc.chrOri?"RC":"FW");
 
@@ -676,8 +676,14 @@ processOtherEnd(TStream & vcfStream,
         // Process the reverse complemented location.
         if (alignsToRef(rc, contigs, fai, options))
         {
-            if (rc.insPos != -1)
-                writeVcf(vcfStream, rc, fai);
+            if (loc.insPos != -1 && loc.loc.chrOri && loc.insPos >= rc.insPos)
+                return;
+            if (loc.insPos != -1 && !loc.loc.chrOri && loc.insPos < rc.insPos)
+                return;
+            if (rc.insPos == -1)
+                return;
+
+            writeVcf(vcfStream, rc, fai);
         }
         else
             addToLists(splitAlignLists, rc);
