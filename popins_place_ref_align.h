@@ -160,13 +160,13 @@ otherEnd(Location & loc, unsigned readLength, unsigned maxInsertSize)
 
     if (loc.chrOri)
     {
-        rc.chrStart = loc.chrEnd;
-        rc.chrEnd = rc.chrEnd + maxInsertSize + readLength;
+        rc.chrStart = loc.chrEnd - readLength;
+        rc.chrEnd = loc.chrEnd + maxInsertSize;
     }
     else
     {
-        rc.chrStart = loc.chrStart - maxInsertSize - readLength;
-        rc.chrEnd = loc.chrStart;
+        rc.chrStart = loc.chrStart - maxInsertSize;
+        rc.chrEnd = loc.chrStart + readLength;
     }
 
     return rc;
@@ -499,7 +499,7 @@ alignsToRef(LocationInfo & loc,
 
     if (loc.loc.chrOri)
     {
-        ref = loadInterval(fai, loc.loc.chr, loc.loc.chrStart + options.readLength, loc.loc.chrEnd + options.maxInsertSize);
+        ref = loadInterval(fai, loc.loc.chr, loc.loc.chrStart - options.readLength, loc.loc.chrEnd + options.maxInsertSize);
 
         if (loc.loc.contigOri)
         {
@@ -512,7 +512,7 @@ alignsToRef(LocationInfo & loc,
             while (align(contigGaps, refGaps, contigSuffix, ref))
             {
                 loc.insPos = length(contigIt->second) - suffixEndPos + endPosition(contigGaps);
-                loc.refPos = loc.loc.chrStart + options.readLength + endPosition(refGaps) - 1;
+                loc.refPos = loc.loc.chrStart - options.readLength + endPosition(refGaps) - 1;
 
                 if (suffixEndPos - suffixBeginPos - dist > endPosition(contigGaps))
                     return true;
@@ -542,7 +542,7 @@ alignsToRef(LocationInfo & loc,
             while (align(contigGaps, refGaps, contigPrefix, ref))
             {
                 loc.insPos = prefixBeginPos + endPosition(contigGaps);
-                loc.refPos = loc.loc.chrStart + options.readLength + endPosition(refGaps) - 1;
+                loc.refPos = loc.loc.chrStart - options.readLength + endPosition(refGaps) - 1;
 
                 if (prefixEndPos - prefixBeginPos - dist > endPosition(contigGaps))
                     return true;
@@ -564,7 +564,7 @@ alignsToRef(LocationInfo & loc,
     }
     else
     {
-        ref = loadInterval(fai, loc.loc.chr, loc.loc.chrStart - options.maxInsertSize, loc.loc.chrEnd);
+        ref = loadInterval(fai, loc.loc.chr, loc.loc.chrStart - options.maxInsertSize, loc.loc.chrEnd + options.readLength);
 
         if (loc.loc.contigOri)
         {

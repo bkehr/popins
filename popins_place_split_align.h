@@ -433,7 +433,6 @@ popins_place_split_read_align(String<LocationInfo> & locs,
 
         if ((*it).loc.chrOri)
         {
-            (*it).loc.chrStart += options.readLength;
             (*it).loc.chrEnd += options.maxInsertSize;
 
             // Load the genomic region and reverse complement it.
@@ -443,7 +442,6 @@ popins_place_split_read_align(String<LocationInfo> & locs,
             // Load the contig prefix/suffix and split align.
             highCov = loadContigAndSplitAlign(insPos, bamStream, bai, ref, contigIt->second, (*it).loc, options);
 
-            (*it).loc.chrStart -= options.readLength;
             (*it).loc.chrEnd -= options.maxInsertSize;
         }
         else
