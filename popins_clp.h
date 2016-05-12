@@ -20,7 +20,7 @@ inline bool exists(CharString const & filename)
 // ==========================================================================
 
 bool
-readFileNames(String<CharString> & files, CharString const & filenameFile)
+readFileNames2(String<CharString> & files, CharString const & filenameFile)
 {
     if (filenameFile == "") return 0;
 
@@ -54,16 +54,16 @@ template <typename TValue>
 bool readFileNames(String<CharString> & files, String<TValue> & values)
 {
     if (length(files) > 1) return 0;
-
+    std::cerr << "ReadFileNames " << length(files) << " " << files << std::endl;
     // Open input file
     CharString filenameFile = files[0];
+    std::cerr << filenameFile << " " << files << std::endl;
     std::fstream stream(toCString(filenameFile), std::fstream::in);
     if (!stream.is_open())
     {
         std::cerr << "ERROR: Could not open file listing files " << filenameFile << std::endl;
         return 1;
     }
-    
     RecordReader<std::fstream, SinglePass<> > reader(stream);
     clear(files);
     
@@ -241,6 +241,28 @@ struct PlacingOptions {
     {}
 };
 
+enum genotypingModelType { randomSequenceGenotyping, duplicationGenotyping };
+
+genotypingModelType
+genotypingModelEnum( CharString& gmString ){
+  if( gmString == "DUP" ){
+    return duplicationGenotyping;
+  }else{
+    return randomSequenceGenotyping;
+  }
+}
+
+void
+genotypingModelName( genotypingModelType gm, CharString& gmString ){
+  if( gm == duplicationGenotyping ){
+    gmString = CharString( "DUP" );
+
+  }else{
+    gmString = CharString( "RANDOM" );
+  }
+}
+
+
 struct GenotypingOptions {
     CharString referenceFile;
     CharString bamFile;
@@ -254,6 +276,7 @@ struct GenotypingOptions {
     int gapOpen;
     int gapExtend;
     int minAlignScore;
+  genotypingModelType genotypingModel;
 
     int maxInsertSize;
     int bpQclip;
@@ -271,9 +294,9 @@ struct GenotypingOptions {
     bool fullOverlap;
 
     GenotypingOptions() : 
-        sampleName("sample"), match(1), mismatch(-4), gapOpen(-10), gapExtend(-1), minAlignScore(55),
-        maxInsertSize( 500 ), bpQclip(0), minSeqLen(10), minReadProb(0.0001), maxBARcount(200),
-        regionWindowSize(50), addReadGroup(false), verbose(false),
+        sampleName("sample"), match(1), mismatch(-2), gapOpen(-4), gapExtend(-1), minAlignScore(55),
+	genotypingModel( randomSequenceGenotyping ), maxInsertSize( 500 ), bpQclip(0), minSeqLen(10), 
+        minReadProb(0.00001), maxBARcount(200), regionWindowSize(50), addReadGroup(false), verbose(false),
         callBoth(false), useReadCounts(false), fullOverlap(false)
     {}
 };
@@ -487,8 +510,8 @@ setupParser(ArgumentParser & parser, PlacingOptions & options)
     addOption(parser, ArgParseOption("ml", "locations", "Name of file with approximate insertion locations merged from all individuals. Computed if not exists.", ArgParseArgument::INPUTFILE, "LOCATIONFILE"));
     addOption(parser, ArgParseOption("m", "minScore", "Minimal score of a location to be passed to split mapping.", ArgParseArgument::DOUBLE, "FLOAT"));
     addOption(parser, ArgParseOption("b", "bamFiles", "File listing original, full bam files of individuals, one per line. Specify to determine exact insertion positions from split reads.", ArgParseArgument::INPUTFILE, "FILE"));
-    //addOption(parser, ArgParseOption("s", "batchSize", "Number of locations per batch. Specify to split computation into smaller batches. Requires locations file to exist, and specification of bam files, and batch number.", ArgParseArgument::INTEGER, "INT"));
-    //addOption(parser, ArgParseOption("i", "batchIndex", "Number of batch. Specify to split computation into smaller batches. Requires locations file to exist, and specification of bam files and batch size.", ArgParseArgument::INTEGER, "INT"));
+    addOption(parser, ArgParseOption("s", "batchSize", "Number of locations per batch. Specify to split computation into smaller batches. Requires locations file to exist, and specification of bam files, and batch number.", ArgParseArgument::INTEGER, "INT"));
+    addOption(parser, ArgParseOption("bi", "batchIndex", "Number of batch. Specify to split computation into smaller batches. Requires locations file to exist, and specification of bam files and batch size.", ArgParseArgument::INTEGER, "INT"));
     addOption(parser, ArgParseOption("i", "interval", "Genomic interval. Specify to split split alignment into smaller batches. Requires locations file to exist, and specification of bam files.", ArgParseArgument::STRING, "CHR:BEG-END"));
 
     addOption(parser, ArgParseOption("r", "readLength", "The length of the reads.", ArgParseArgument::INTEGER, "INT"));
@@ -555,6 +578,7 @@ setupParser(ArgumentParser & parser, GenotypingOptions & options)
     addOption(parser, ArgParseOption("w", "window", "Region window size.", ArgParseArgument::INTEGER, "INT"));
     addOption(parser, ArgParseOption("rg", "addreadgroup", "Add read group."));
     addOption(parser, ArgParseOption("sa", "samplename", "Name of sample for vcf output", ArgParseArgument::STRING, "SAMPLENAME"));
+    addOption(parser, ArgParseOption("gm", "genotypingmodel", "Model used for genotyping", ArgParseArgument::STRING, "GENOTYPINGMODEL"));
 
     // Hidden options.
     addOption(parser, ArgParseOption("b", "callboth", "callboth"));
@@ -576,6 +600,9 @@ setupParser(ArgumentParser & parser, GenotypingOptions & options)
     setDefaultValue(parser, "maxBARcount", options.maxBARcount);
     setDefaultValue(parser, "window", options.regionWindowSize);
     setDefaultValue(parser, "samplename", options.sampleName);
+    CharString gmName;
+    genotypingModelName( options.genotypingModel, gmName ); 
+    setDefaultValue(parser, "genotypingmodel", gmName );
 }
 
 // ==========================================================================
@@ -708,14 +735,17 @@ getOptionValues(ContigMapOptions & options, ArgumentParser & parser)
 int
 getOptionValues(PlacingOptions & options, ArgumentParser & parser)
 {
+  std::cerr << "getOptionValuesPlace " << std::endl;
     getArgumentValue(options.supercontigFile, parser, 0);
     getArgumentValue(options.referenceFile, parser, 1);
     
     if (isSet(parser, "locationsFiles"))
     {
-        CharString locationsFilesFile;
-        getOptionValue(locationsFilesFile, parser, "locationsFiles");
-        if (readFileNames(options.locationsFiles, locationsFilesFile) != 0)
+        CharString locationsFilesFile = "locationsFiles.txt";
+
+    getOptionValue(locationsFilesFile, parser, "locationsFiles");
+
+        if (readFileNames2(options.locationsFiles, locationsFilesFile) != 0)
             return 1;
     }
     
@@ -727,8 +757,10 @@ getOptionValues(PlacingOptions & options, ArgumentParser & parser)
                   <<       " Please compute locations before splitting exact positioning into batches." << std::endl;
         return 1;
     }
+
     if (isSet(parser, "minScore"))
         getOptionValue(options.minLocScore, parser, "minScore");
+
 
     if (isSet(parser, "bamFiles"))
     {
@@ -798,7 +830,12 @@ getOptionValues(GenotypingOptions & options, ArgumentParser & parser)
         getOptionValue(options.minSeqLen, parser, "minSeqLen");
     if (isSet(parser, "samplename"))
         getOptionValue(options.sampleName, parser, "samplename");
-        
+    if (isSet(parser, "genotypingmodel")){
+      CharString gmString;
+      getOptionValue( gmString, parser, "genotypingmodel");
+      options.genotypingModel = genotypingModelEnum( gmString );
+    }        
+       
     if(isSet(parser, "window"))
         getOptionValue( options.regionWindowSize, parser, "window");
     options.addReadGroup = isSet(parser, "addreadgroup");
@@ -829,6 +866,7 @@ int parseCommandLine(TOptions & options, int argc, char const ** argv)
     // Setup the parser.
     ArgumentParser parser(toCString(prog_name));
     setupParser(parser, options);
+    std::cerr << "b" << std::endl;
     
     // Parse the command line.
     ArgumentParser::ParseResult res = parse(parser, argc, argv);
