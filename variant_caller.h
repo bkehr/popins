@@ -69,7 +69,7 @@ trimReadEnds( T& seq, CharString& qual, int bpQclip, bool verbose)
   return 1;
 }
 
-void parseComponent( CharString& altR, bool verbose, component_dir& cdir, CharString& componentName, bool compIsPlaced, int& beginPos, int& endPos )
+void parseComponent( CharString& altR, bool verbose, component_dir& cdir, CharString& componentName, bool& compIsPlaced, int& beginPos, int& endPos )
 {
   /* BUG:  assumes that the length of the variant is 1, this is not the case for general variants 
    */

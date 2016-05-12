@@ -1,9 +1,10 @@
 // ##########################################################################
 // ### This is a modified version of the file                             ###
 // ### seqan-trunk/extras/include/seqan/align_split_interface.h           ###
-// ### from the seqan-extras library, version 1.4.1                       ###
-// ### Only the AlignConfig setup in line 310 has been changed with       ###
+// ### from the seqan library, version 1.4.2                              ###
+// ### Only the AlignConfig setup in line 311 has been changed with       ###
 // ### respect to the original file.                                      ###
+// ### See file dp_scout_split.h for more changes.                        ###
 // ##########################################################################
 
 
@@ -294,7 +295,7 @@ void _reverseTrace(String<TraceSegment_<TPosition, TSize>, TSpec> & trace)
 // We call the long sequence contig and the shorter one read but could be changed roles.
 template <typename TContigSeqL, typename TReadSeqL, typename TContigSeqR, typename TReadSeqR,
           typename TScoreValue, typename TScoreSpec>
-int _splitAlignmentImpl(Gaps<TContigSeqL> & gapsContigL,
+Pair<int, int> _splitAlignmentImpl(Gaps<TContigSeqL> & gapsContigL,
                         Gaps<TReadSeqL> & gapsReadL,
                         Gaps<TContigSeqR> & gapsContigR,
                         Gaps<TReadSeqR> & gapsReadR,
@@ -359,6 +360,7 @@ int _splitAlignmentImpl(Gaps<TContigSeqL> & gapsContigL,
     // TODO(holtgrew): Make selecting the left/right split position from interface possible? Maybe not necessary.
 
     int bestScore = minValue<TScoreValue>() / 2;
+    Pair<int, int> ret;
     unsigned bestPrefixLength = 0;
     for (unsigned i = 0; i < length(scoutStateL.splitScore); ++i)
     {
@@ -367,6 +369,8 @@ int _splitAlignmentImpl(Gaps<TContigSeqL> & gapsContigL,
         {
             bestScore = s;
             bestPrefixLength = i;
+            ret.i1 = scoutStateL.splitScore[i];
+            ret.i2 = scoutStateR.splitScore[i];
         }
     }
 
@@ -393,7 +397,7 @@ int _splitAlignmentImpl(Gaps<TContigSeqL> & gapsContigL,
     setClippedEndPosition(gapsContigL, cePosL);
     setClippedEndPosition(gapsReadL, cePosL);
 
-    return bestScore;
+    return ret;
 }
 
 // ----------------------------------------------------------------------------
@@ -425,7 +429,7 @@ int _splitAlignmentImpl(Gaps<TContigSeqL> & gapsContigL,
  * 
  * There are two variants of the split alignment problem.  In the first variant, we wan to align two sequences where the
  * first (say the reference) one is shorter than the second (say a read) and the read contains an insertion with respect
- * to the reference.  We now want to align the read agains the reference such that the left part of the read aligns well
+ * to the reference.  We now want to align the read against the reference such that the left part of the read aligns well
  * against the left part of the reference and the right part of the read aligns well against the right part of the
  * reference.  The center gap in the reference is free.
  *
@@ -563,7 +567,7 @@ $TScoreValue$ is the value type of $scoringScheme$.
 
 template <typename TSequenceL, typename TAlignSpecL, typename TSequenceR, typename TAlignSpecR,
           typename TScoreVal, typename TScoreSpec>
-int splitAlignment(Align<TSequenceL, TAlignSpecL> & alignL,
+Pair<int, int> splitAlignment(Align<TSequenceL, TAlignSpecL> & alignL,
                    Align<TSequenceR, TAlignSpecR> & alignR,
                    Score<TScoreVal, TScoreSpec> const & scoringScheme)
 {
@@ -580,7 +584,7 @@ int splitAlignment(Align<TSequenceL, TAlignSpecL> & alignL,
 template <typename TSeqHL, typename TGapSpecHL, typename TSeqVL, typename TGapSpecVL,
           typename TSeqHR, typename TGapSpecHR, typename TSeqVR, typename TGapSpecVR,
           typename TScoreVal, typename TScoreSpec>
-int splitAlignment(Gaps<TSeqHL, TGapSpecHL> & gapsHL,
+Pair<int, int> splitAlignment(Gaps<TSeqHL, TGapSpecHL> & gapsHL,
                    Gaps<TSeqVL, TGapSpecVL> & gapsVL,
                    Gaps<TSeqHR, TGapSpecHR> & gapsHR,
                    Gaps<TSeqVR, TGapSpecVR> & gapsVR,
@@ -597,7 +601,7 @@ int splitAlignment(Gaps<TSeqHL, TGapSpecHL> & gapsHL,
 
 template <typename TSequenceL, typename TAlignSpecL, typename TSequenceR, typename TAlignSpecR,
           typename TScoreVal, typename TScoreSpec>
-int splitAlignment(Align<TSequenceL, TAlignSpecL> & alignL,
+Pair<int, int> splitAlignment(Align<TSequenceL, TAlignSpecL> & alignL,
                    Align<TSequenceR, TAlignSpecR> & alignR,
                    Score<TScoreVal, TScoreSpec> const & scoringScheme,
                    int lowerDiagonal,
@@ -615,7 +619,7 @@ int splitAlignment(Align<TSequenceL, TAlignSpecL> & alignL,
 template <typename TSeqHL, typename TGapSpecHL, typename TSeqVL, typename TGapSpecVL,
           typename TSeqHR, typename TGapSpecHR, typename TSeqVR, typename TGapSpecVR,
           typename TScoreVal, typename TScoreSpec>
-int splitAlignment(Gaps<TSeqHL, TGapSpecHL> & gapsHL,
+Pair<int, int> splitAlignment(Gaps<TSeqHL, TGapSpecHL> & gapsHL,
                    Gaps<TSeqVL, TGapSpecVL> & gapsVL,
                    Gaps<TSeqHR, TGapSpecHR> & gapsHR,
                    Gaps<TSeqVR, TGapSpecVR> & gapsVR,

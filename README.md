@@ -14,7 +14,7 @@ Prerequisites
 * sickle (https://github.com/najoshi/sickle)
 
 PopIns uses the 'bwa mem' alignment algorithm, thus, requires bwa version 0.7.X.
-PopIns was tested with bwa 0.7.10-r789, velvet 1.2.10, samtools 1.0 and 0.1.13 (r926:134), and sickle 1.210.
+PopIns was tested with bwa 0.7.10-r789, velvet 1.2.10, samtools 1.3, and sickle 1.210.
 
 
 Installation
@@ -22,7 +22,7 @@ Installation
 
 1. Download the SeqAn library. You do *not* need to follow the SeqAn install instructions.
    You only need the directory .../include/seqan of the SeqAn core library with all its content.
-   If it is not present, copy the header file vcf_io.h and folder vcf_io/ from extras/include/seqan into this directory.
+   Look for the header file vcf_io.h and folder vcf_io/. If it is not present, copy it from extras/include/seqan into your seqan directory.
 2. Install all other prerequisites (bwa, velvet, samtools, and sickle).
    Compile velvet with a larger maximum k-mer length than the default if desired, e.g. MAXKMERLENGTH=63.
    A maximum k-mer length of 47 or higher is necessary for default parameters of PopIns (velvet's default is 31).
@@ -72,21 +72,32 @@ Finally, it determines approximate insertion locations for contigs with anchorin
 
 ### The place command
 
-    ./popins place [OPTIONS] <CONTIG FA FILE> <REF FA FILE>
+    ./popins place [OPTIONS] <LOCATION FILE> <OUTPUT FILE>
 
-The place command identifies the positions of (super-)contigs in the reference genome.
-If a file with merged locations (-ml option) does not already exist, it requires the -l option to be set and merges locations files.
-If bam files with all reads of the individuals are specified, it determines exact positions of insertions from split read alignments for each contig end.
-Both steps can be run separately or in a single program call.
-The split alignment can be done in batches by genomic region (e.g. only locations in chr3:40000000-41000000) if the locations files have been merged before.
-It outputs a vcf record for each identified position, which references contigs and contig positions in the (super-)contigs file.
+The place command identifies the positions of (super-)contigs in the reference genome and writes them to a VCF file.
+VCF records reference contigs and contig positions in the (super-)contigs file.
+
+The place command consists of four steps that can be run in one program call or in separate calls.
+
+To run all four steps together, the options -l, -b, -c, and -r need to be specified and the <OUTPUT FILE>'s ending needs to be 'vcf'. The <LOCATION FILE> has to list the location files for all samples.
+
+When running the steps separately, the specified parameters determine which step is being run:
+
+1. First the contig locations determined for all samples (files listed in <LOCATION FILE>) need to be merged into one set of locations (written to <OUTPUT FILE>).
+2. Then, prefixes/suffixes of all contigs (specify with -c option) are aligned to these locations (specify as <LOCATION FILE>) in the reference genome (specify with -r option) and VCF records are written to <OUTPUF FILE> if the alignment is successful.
+   The <OUTPUT FILE>'s ending has to be 'vcf'.
+3. Next, contigs (specify -c option) that do not align to the reference genome (specify -r option) are passed on to split-read alignment.
+   This step is run by sample.
+   The sample's original BAM file needs to be specified.
+   The program arguments, the <LOCATION FILE> and <OUTPUT FILE>, need to be the sample's locs\_unplaced.txt file and a locs\_placed.txt file.
+4. Finally, the results from split-read alignment (the locs_placed.txt files) of all samples (input files listed in <LOCATION FILE>) are being combined and appended the <OUTPUF FILE> (file ending has to be 'vcf').
 
 
 ### The genotype command
 
     ./popins genotype [OPTIONS] <FA FILE> <BAM FILE> <FA FILE ALT> <BAM FILE ALT> <VCF FILE>
 
-The genotype command takes as input a fasta file of the reference genome, a bam file of a single individual, the fasta file with the supercontigs, the bam file of contig mapped and unmapped reads (&lt;WD&gt;/non_ref.bam), and the VCF file with all predicted insertion positions.
+The genotype command takes as input a fasta file of the reference genome, a bam file of a single individual, the fasta file with the supercontigs, the bam file of contig mapped and unmapped reads (<WD>/non_ref.bam), and the VCF file with all predicted insertion positions.
 It computes genotype likelihoods by aligning all reads from each insertion location and contig to the reference and to the alternative insertion sequence.
 It outputs VCF records with the genotype likelihoods in GT:PL format for the individual to std::out.
 

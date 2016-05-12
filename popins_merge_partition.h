@@ -135,8 +135,6 @@ pairwiseAlignment(TSeq & contig1,
                   int upperDiag,
                   TValueScore minScore)
 {
-    typedef typename Position<TSeq>::Type TPos;
-
     // setup alignment object
     Align<TSeq, ArrayGaps> align;
     resize(rows(align), 2);
@@ -195,7 +193,7 @@ partitionContigs(UnionFind<int> & uf,
 
     // print status bar
     if (options.verbose) std::cerr << "[" << time(0) << "] " << "- Streaming over all contig files" << std::endl;
-    if (options.verbose) std::cerr << "0%   10   20   30   40   50   60   70   80   90  100%" << std::endl;
+    if (options.verbose) std::cerr << "0%   10   20   30   40   50   60   70   80   90   100%" << std::endl;
     if (options.verbose) std::cerr << "|----|----|----|----|----|----|----|----|----|----|" << std::endl;
     //unsigned fiftieth = std::max((indexOffset(batch)+length(contigs)/2)/50, 1u);
     unsigned fiftieth = std::max((indexOffset(batch)+batchSize(batch))/50, 1);
@@ -460,7 +458,6 @@ readAndMergeComponents(std::map<TSize, ContigComponent<TSequence> > & components
                        bool verbose)
 {
     typedef std::map<TSize, ContigComponent<TSequence> > TComponents;
-    typedef typename std::set<Pair<TSize> >::iterator TPairsIterator;
     typedef typename TComponents::iterator TCompIterator;
 
     std::cerr << "[" << time(0) << "] " << "Reading and merging components files" << std::endl;

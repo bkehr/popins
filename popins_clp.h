@@ -1,7 +1,10 @@
+#include <seqan/file.h>
 #include <seqan/arg_parse.h>
 
 #ifndef POPINS_CLP_H_
 #define POPINS_CLP_H_
+
+#include <string>
 
 using namespace seqan;
 
@@ -14,13 +17,28 @@ inline bool exists(CharString const & filename)
   return (stat(toCString(filename), &buffer) == 0);
 }
 
+// ==========================================================================
+// Function checkFileEnding()
+// ==========================================================================
+
+bool
+checkFileEnding(CharString & filename, std::string ending)
+{
+    std::string name = toCString(filename);
+    size_t dotPos = name.find_last_of('.');
+
+    if (dotPos == std::string::npos)
+        return false;
+
+    return name.substr(dotPos + 1, 3) == ending;
+}
 
 // ==========================================================================
 // Function readFileNames()
 // ==========================================================================
 
 bool
-readFileNames2(String<CharString> & files, CharString const & filenameFile)
+readFileNames(String<CharString> & files, CharString & filenameFile)
 {
     if (filenameFile == "") return 0;
 
@@ -30,9 +48,9 @@ readFileNames2(String<CharString> & files, CharString const & filenameFile)
         std::cerr << "ERROR: Could not open file listing files " << filenameFile << std::endl;
         return 1;
     }
-    
+
     RecordReader<std::fstream, SinglePass<> > reader(stream);
-    
+
     while (!atEnd(reader))
     {
         CharString file;
@@ -44,7 +62,7 @@ readFileNames2(String<CharString> & files, CharString const & filenameFile)
         }
         appendValue(files, file);
     }
-    
+
     return 0;
 }
 
@@ -64,9 +82,10 @@ bool readFileNames(String<CharString> & files, String<TValue> & values)
         std::cerr << "ERROR: Could not open file listing files " << filenameFile << std::endl;
         return 1;
     }
+
     RecordReader<std::fstream, SinglePass<> > reader(stream);
     clear(files);
-    
+
     while (!atEnd(reader))
     {
         // Read the file name
@@ -78,9 +97,9 @@ bool readFileNames(String<CharString> & files, String<TValue> & values)
             return 1;
         }
         appendValue(files, file);
-        
+
         skipBlanks(reader);
-        
+
         // Read the value for this filename
         CharString buffer;
         res = readLine(buffer, reader);
@@ -93,7 +112,7 @@ bool readFileNames(String<CharString> & files, String<TValue> & values)
         lexicalCast2<TValue>(val, buffer);
         appendValue(values, val);
     }
-    
+
     return 0;
 }
 
@@ -123,7 +142,7 @@ parseInterval(Triple<CharString, unsigned, unsigned> & out, CharString & in)
         return 0;
     }
 
-    unsigned dashPos = 0;  
+    unsigned dashPos = 0;
     while (it != end(in))
     {
         if (*it == '-')
@@ -153,18 +172,20 @@ parseInterval(Triple<CharString, unsigned, unsigned> & out, CharString & in)
 
 struct AssemblyOptions {
     CharString mappingFile;
+    CharString matepairFile;
     CharString referenceFile;
     CharString workingDirectory;
     CharString tmpDir;
-    
+
     unsigned kmerLength;
     CharString adapters;
     int humanSeqs;
     unsigned threads;
     CharString memory;
-    
+    bool matepair;
+
     AssemblyOptions () :
-        kmerLength(47), humanSeqs(maxValue<int>()), threads(1), memory("500000000")
+        kmerLength(47), humanSeqs(maxValue<int>()), threads(1), memory("500000000"), matepair(false)
     {}
 };
 
@@ -180,7 +201,7 @@ struct MergingOptions {
 
     unsigned batchIndex;
     unsigned batches;
-    
+
     double errorRate;
     int minimalLength;
     unsigned qgramLength;
@@ -193,7 +214,7 @@ struct MergingOptions {
     MergingOptions() :
         outputFile("supercontigs.fa"), verbose(false), veryVerbose(false), batchIndex(0), batches(1),
         errorRate(0.01), minimalLength(60), qgramLength(47), matchScore(1), errorPenalty(-5), minScore(90), minTipScore(30), minEntropy(0.75)
-    {} 
+    {}
 };
 
 struct ContigMapOptions {
@@ -204,39 +225,47 @@ struct ContigMapOptions {
     CharString memory;
     CharString tmpDir;
     bool allAlignment;
-    
+    int maxInsertSize;
+    bool keepNonRefNew;
+
     ContigMapOptions() :
-        threads(1), memory("500000000"), allAlignment(false)
+        threads(1), memory("500000000"), allAlignment(false), maxInsertSize(800), keepNonRefNew(false)
     {}
 };
 
 struct PlacingOptions {
+    CharString locationsFile;           // merged from all individuals
+    String<CharString> locationsFiles;  // one file per individual
+
+    CharString outFile;
+    bool isVcf;
+
+    CharString groupsFile;
+
     CharString supercontigFile;
     CharString referenceFile;
-    
-    String<CharString> bamFiles;
-    String<double> bamAvgCov;
 
-    CharString locationsFile;          // merged from all individuals
-    String<CharString> locationsFiles; // one file per individual
-    CharString vcfInsertionsFile;
-    
-    //unsigned batchIndex;
-    //unsigned batchSize;
+    CharString bamFile;                     // for one individual
+    String<CharString> bamFiles;
+    double bamAvgCov;                     // for one individual
+    String<double> bamAvgCovs;
+    CharString splitAlignFile;             // for one individual
+
     Triple<CharString, unsigned, unsigned> interval; // chrom, beginPos, endPos
-    
+
     double minLocScore;
-    
+    unsigned minAnchorReads;
+
     unsigned readLength;
     unsigned maxInsertSize;
-    
-    unsigned maxSplitReads;
-    
+
+    unsigned groupDist;
+
     bool verbose;
-    
+
     PlacingOptions() :
-        locationsFile("locations.txt"), vcfInsertionsFile("insertions.vcf"),
-        minLocScore(0.3), readLength(100), maxInsertSize(800), maxSplitReads(1000),
+        locationsFile("locations.txt"), groupsFile("groups.txt"), bamFile(""),
+        minLocScore(0.3), minAnchorReads(2), readLength(100), maxInsertSize(800), groupDist(100),
         verbose(false)
     {}
 };
@@ -330,10 +359,10 @@ setupParser(ArgumentParser & parser, AssemblyOptions & options)
 {
     setShortDescription(parser, "Assembly of unmapped reads.");
     setVersion(parser, VERSION);
-    setDate(parser, VERSION_DATE); 
+    setDate(parser, VERSION_DATE);
 
     // Define usage line and long description.
-    addUsageLine(parser, "[\\fIOPTIONS\\fP] \\fIBAM FILE\\fP");
+    addUsageLine(parser, "[\\fIOPTIONS\\fP] \\fIBAM FILE\\fP [\\fIMP BAM FILE\\fP]");
     addDescription(parser, "Finds the unmapped reads in a bam files. If a fasta file is specified, the unmapped reads "
                            "will first be remapped to this reference using bwa and only reads that remain unmapped are "
                            "further processed. All unmapped reads are quality filtered using sickle and passed to "
@@ -341,32 +370,33 @@ setupParser(ArgumentParser & parser, AssemblyOptions & options)
 
     // Require a bam file as argument.
     addArgument(parser, ArgParseArgument(ArgParseArgument::INPUTFILE, "BAMFILE"));
-    
-    
+    addArgument(parser, ArgParseArgument(ArgParseArgument::INPUTFILE, "MPFILE"));
+
     // Setup the options.
     addOption(parser, ArgParseOption("d", "directory", "Path to working directory.", ArgParseArgument::STRING, "PATH"));
     setDefaultValue(parser, "directory", "current directory");
-    
+
     addOption(parser, ArgParseOption("tmp", "tmpdir", "Path to a temporary directory ending with XXXXXX.", ArgParseArgument::STRING, "PATH"));
     setDefaultValue(parser, "tmpdir", "same as working directory");
-    
+
     addOption(parser, ArgParseOption("k", "kmerLength", "The k-mer size for velvet assembly.", ArgParseArgument::INTEGER, "INT"));
     setDefaultValue(parser, "kmerLength", options.kmerLength);
-    
+
     addOption(parser, ArgParseOption("a", "adapters", "Enable adapter removal for Illumina reads. Default: \\fIno adapter removal\\fP.", ArgParseArgument::STRING, "STR"));
     setValidValues(parser, "adapters", "HiSeq HiSeqX");
 
     addOption(parser, ArgParseOption("r", "reference", "Fasta file with reference sequences for remapping. Default: \\fIno remapping\\fP.", ArgParseArgument::INPUTFILE, "FILE"));
     setValidValues(parser, "reference", "fa fna fasta");
-    
+
     addOption(parser, ArgParseOption("f", "filter", "Consider reads with low quality alignments as unmapped only for first INT sequences in the reference file. Requires reference file for remapping to be set.", ArgParseArgument::INTEGER, "INT"));
 
     addOption(parser, ArgParseOption("t", "threads", "Number of threads to use for bwa.", ArgParseArgument::INTEGER, "INT"));
     setDefaultValue(parser, "threads", options.threads);
     setMinValue(parser, "threads", "1");
-    
+
     addOption(parser, ArgParseOption("m", "memory", "Maximum memory for samtools sort.", ArgParseArgument::STRING, "STR"));
     setDefaultValue(parser, "memory", options.memory);
+    addOption(parser, ArgParseOption("", "matepair", "Use matepair data for assembly."));
 }
 
 void
@@ -374,8 +404,8 @@ setupParser(ArgumentParser & parser, MergingOptions & options)
 {
     setShortDescription(parser, "Merging of insertion contigs into supercontigs.");
     setVersion(parser, VERSION);
-    setDate(parser, VERSION_DATE); 
-    
+    setDate(parser, VERSION_DATE);
+
     // Define usage line and long description.
     addUsageLine(parser, "[\\fIOPTIONS\\fP] \\fIFA FILE 1\\fP ... \\fIFA FILE N\\fP");
     addUsageLine(parser, "[\\fIOPTIONS\\fP] \\fIFILE LIST FILE\\fP");
@@ -386,10 +416,10 @@ setupParser(ArgumentParser & parser, MergingOptions & options)
                            "partitions the sequences into sets of similar sequences using the SWIFT filtering "
                            "approach, and then aligns each set of sequences into a graph of supercontigs. These two "
                            "steps of the algorithm can be split into several program calls (see Note below).");
-                           
+
     // Require a list of fasta files as argument.
     addArgument(parser, ArgParseArgument(ArgParseArgument::INPUTFILE, "FAFILE", true));
-    
+
     // Program parameters
     addSection(parser, "Parameters");
     addOption(parser, ArgParseOption("e", "errRate", "Maximal error rate for SWIFT filtering.", ArgParseArgument::DOUBLE, "FLOAT"));
@@ -400,14 +430,14 @@ setupParser(ArgumentParser & parser, MergingOptions & options)
     addOption(parser, ArgParseOption("s", "minScore", "Minimal score for Smith-Waterman alignment.", ArgParseArgument::INTEGER, "INT"));
     addOption(parser, ArgParseOption("t", "minTipScore", "Minimal score for tips in supercontig graph.", ArgParseArgument::INTEGER, "INT"));
     addOption(parser, ArgParseOption("y", "minEntropy", "Minimal entropy for discarding low-complexity sequences. Choose as 0.0 to disable filter.", ArgParseArgument::DOUBLE, "FLOAT"));
-    
-    
+
+
     // Program mode options
     addSection(parser, "Program mode options");
     addOption(parser, ArgParseOption("b", "batches", "Total number of batches (see Note below).", ArgParseArgument::INTEGER, "INT"));
     addOption(parser, ArgParseOption("i", "batchIndex", "Batch number (see Note below).", ArgParseArgument::INTEGER, "INT"));
     addOption(parser, ArgParseOption("c", "componentFiles", "List of files written by the partioning step. Either the name of a single file that lists one component filename per line, or multiple names of component files, i.e. -c <FILE1> -c <FILE2> ...", ArgParseArgument::INPUTFILE, "FILE", true));
-    
+
     // Output file options.
     addSection(parser, "Output options");
     addOption(parser, ArgParseOption("o", "outFile", "Name of output file. Either in text format for components or fasta format for the supercontigs.", ArgParseArgument::OUTPUTFILE, "OUTPUTFILE"));
@@ -454,8 +484,8 @@ setupParser(ArgumentParser & parser, ContigMapOptions & options)
 {
     setShortDescription(parser, "Alignment of unmapped reads to assembled contigs.");
     setVersion(parser, VERSION);
-    setDate(parser, VERSION_DATE); 
-    
+    setDate(parser, VERSION_DATE);
+
     // Define usage line and long description.
     addUsageLine(parser, "[\\fIOPTIONS\\fP] \\fIFA FILE\\fP");
     addDescription(parser, "Aligns unmapped reads from fastq files in working directory to a set of contigs specified "
@@ -468,7 +498,7 @@ setupParser(ArgumentParser & parser, ContigMapOptions & options)
 
     // Setup the option.
     addOption(parser, ArgParseOption("d", "directory", "Path to working directory.", ArgParseArgument::STRING, "PATH"));
-    setDefaultValue(parser, "directory", "current directory"); 
+    setDefaultValue(parser, "directory", "current directory");
 
     addOption(parser, ArgParseOption("tmp", "tmpdir", "Path to a temporary directory ending with XXXXXX.", ArgParseArgument::STRING, "PATH"));
     setDefaultValue(parser, "tmpdir", "same as working directory");
@@ -476,12 +506,18 @@ setupParser(ArgumentParser & parser, ContigMapOptions & options)
     addOption(parser, ArgParseOption("t", "threads", "Number of threads to use for bwa.", ArgParseArgument::INTEGER, "INT"));
     setDefaultValue(parser, "threads", options.threads);
     setMinValue(parser, "threads", "1");
-    
+
     addOption(parser, ArgParseOption("m", "memory", "Maximum memory for samtools sort.", ArgParseArgument::STRING, "STR"));
     setDefaultValue(parser, "memory", options.memory);
 
     addOption(parser, ArgParseOption("a", "all", "Use bwa-mem's -a option to output all alignments of a read."));
     setDefaultValue(parser, "all", "false");
+
+    addOption(parser, ArgParseOption("e", "maxInsertSize", "The maximal expected insert size of the read pairs.", ArgParseArgument::INTEGER, "INT"));
+    setDefaultValue(parser, "maxInsertSize", options.maxInsertSize);
+
+    addOption(parser, ArgParseOption("n", "nonRefNew", "Do not delete the non_ref_new.bam file after writing locations."));
+    setDefaultValue(parser, "nonRefNew", "false");
 }
 
 void
@@ -489,51 +525,71 @@ setupParser(ArgumentParser & parser, PlacingOptions & options)
 {
     setShortDescription(parser, "Finding positions of contigs in reference genome.");
     setVersion(parser, VERSION);
-    setDate(parser, VERSION_DATE); 
+    setDate(parser, VERSION_DATE);
 
-    addUsageLine(parser, "[\\fIOPTIONS\\fP] \\fICONTIGFILE\\fP \\fIREFFILE\\fP");
-    addDescription(parser, "Finds the positions of (super-)contigs in the reference genome. Merges files with "
-                           "approximate locations computed from anchoring read pairs if a file with locations does not "
-                           "already exist. Determines exact positions of insertions by split aligning reads at each "
-                           "contig end if bam files with all reads of the individuals are specified. Outputs a vcf "
-                           "record for each identified position. The contig position in the vcf record refers to the "
-                           "sequence in the (super-)contigs file. The split alignment can be done in batches (e.g. 100 "
-                           "locations per batch) if the approximate locations have been computed before.");
+    addUsageLine(parser, "[\\fIOPTIONS\\fP] \\fILOCFILE\\fP \\fIOUTPUTFILE\\fP");
+    addUsageLine(parser, "[\\fIOPTIONS\\fP] -c \\fICONTIGFILE\\fP -r \\fIGENOME\\fP \\fILOCFILE\\fP \\fIOUTPUTFILE\\fP");
+    addDescription(parser, "Places (super-)contigs into the reference genome and writes a VCF file with records for "
+                           "placed contig ends. The command consists of four steps that can be run in one program "
+                           "call or in separate calls. To run all four steps together, the options -l, -b, -c, and -r "
+                           "need to be specified and the \\fIOUTPUTFILE\\fP's ending needs to be 'vcf'. The \\fILOCFILE\\fP has "
+                           "to list the location files for all samples. When running the steps separately, the "
+                           "specified parameters determine which step is being run:");
+    addDescription(parser, "1. First, the contig locations determined for all samples (files listed in \\fILOCFILE\\fP) need "
+                           "to be merged into one set of locations (written to \\fIOUTPUTFILE\\fP).");
+    addDescription(parser, "2. Then, prefixes/suffixes of all contigs (specify with -c option) are aligned to these "
+                           "locations (specify as \\fILOCFILE\\fP) in the reference genome (specify with -r option) and VCF "
+                           "records are written to \\fIOUTPUTFILE\\fP if the alignment is successful. The \\fIOUTPUTFILE\\fP's "
+                           "ending has to be 'vcf'. Additional output files \\fIlocations_unplaced.txt\\fP are being written "
+                           "for each sample.");
+    addDescription(parser, "3. Next, contigs (specify -c option) that do not align to the reference genome (specify "
+                           "-r option) are passed on to split-read alignment. This step is run by sample. The "
+                           "sample's original BAM file needs to be specified. The program arguments, the \\fILOCFILE\\fP "
+                           "and \\fIOUTPUTFILE\\fP, need to be the sample's \\fIlocations_unplaced.txt\\fP file and a "
+                           "\\fIlocations_placed.txt\\fP file for the sample.");
+    addDescription(parser, "4. Finally, the results from split-read alignment (the \\fIlocations_placed.txt\\fP files) of all "
+                           "samples (input files listed in \\fILOCFILE\\fP) are being combined and appended to the "
+                           "\\fIOUTPUTFILE\\fP (file ending has to be 'vcf').");
 
-    // Require fasta file with merged contigs as arguments.
-    addArgument(parser, ArgParseArgument(ArgParseArgument::INPUTFILE, "CONTIGFILE"));
-    addArgument(parser, ArgParseArgument(ArgParseArgument::INPUTFILE, "REFFILE"));
+    // Require a locations file and an output file as argument.
+    addArgument(parser, ArgParseArgument(ArgParseArgument::INPUTFILE, "LOCFILE")); // Name of locations file OR name of file listing locations files, one per line.
+    addArgument(parser, ArgParseArgument(ArgParseArgument::INPUTFILE, "OUTFILE")); // Name of output file. Either VCF or text file listing locations.
 
     // Setup (input) options.
     addSection(parser, "Main options");
-    addOption(parser, ArgParseOption("l", "locationsFiles", "Name of file listing locations files for individuals, one per line.", ArgParseArgument::INPUTFILE, "FILE"));
-    addOption(parser, ArgParseOption("ml", "locations", "Name of file with approximate insertion locations merged from all individuals. Computed if not exists.", ArgParseArgument::INPUTFILE, "LOCATIONFILE"));
-    addOption(parser, ArgParseOption("m", "minScore", "Minimal score of a location to be passed to split mapping.", ArgParseArgument::DOUBLE, "FLOAT"));
-    addOption(parser, ArgParseOption("b", "bamFiles", "File listing original, full bam files of individuals, one per line. Specify to determine exact insertion positions from split reads.", ArgParseArgument::INPUTFILE, "FILE"));
-    addOption(parser, ArgParseOption("s", "batchSize", "Number of locations per batch. Specify to split computation into smaller batches. Requires locations file to exist, and specification of bam files, and batch number.", ArgParseArgument::INTEGER, "INT"));
-    addOption(parser, ArgParseOption("bi", "batchIndex", "Number of batch. Specify to split computation into smaller batches. Requires locations file to exist, and specification of bam files and batch size.", ArgParseArgument::INTEGER, "INT"));
-    addOption(parser, ArgParseOption("i", "interval", "Genomic interval. Specify to split split alignment into smaller batches. Requires locations file to exist, and specification of bam files.", ArgParseArgument::STRING, "CHR:BEG-END"));
 
-    addOption(parser, ArgParseOption("r", "readLength", "The length of the reads.", ArgParseArgument::INTEGER, "INT"));
+    addOption(parser, ArgParseOption("c", "contigFile", "Name of (super-)contigs file.", ArgParseArgument::INPUTFILE, "FILE"));
+    addOption(parser, ArgParseOption("r", "genomeFile", "Name of reference genome file.", ArgParseArgument::INPUTFILE, "FILE"));
+    addOption(parser, ArgParseOption("m", "minScore", "Minimal anchoring score for a location.", ArgParseArgument::DOUBLE, "FLOAT"));
+    addOption(parser, ArgParseOption("n", "minReads", "Minimal number of anchoring read pairs for a location.", ArgParseArgument::INTEGER, "INT"));
+    addOption(parser, ArgParseOption("d", "groupDist", "Minimal distance between groups of locations.", ArgParseArgument::INTEGER, "INT"));
+    addOption(parser, ArgParseOption("b", "bamFile", "Full BAM file of an individual. Specify to determine exact insertion positions from split reads.", ArgParseArgument::INPUTFILE, "FILE"));
+    addOption(parser, ArgParseOption("a", "bamCov", "Average coverage of the genome in the BAM file. Required if -b option specified.", ArgParseArgument::DOUBLE, "FLOAT"));
+
+    addOption(parser, ArgParseOption("len", "readLength", "The length of the reads.", ArgParseArgument::INTEGER, "INT"));
+
     addOption(parser, ArgParseOption("e", "maxInsertSize", "The maximal expected insert size of the read pairs.", ArgParseArgument::INTEGER, "INT"));
-    addOption(parser, ArgParseOption("p", "maxSplitReads", "The maximum number of reads to split-align per location.", ArgParseArgument::INTEGER, "INT"));
 
     // Output file options.
     addSection(parser, "Output options");
-    addOption(parser, ArgParseOption("o", "out", "Name of vcf output file.", ArgParseArgument::OUTPUTFILE, "VCFFILE"));
+    addOption(parser, ArgParseOption("l", "locations", "Name of merged locations file if placing is run in one program call.", ArgParseArgument::OUTPUTFILE, "FILE"));
+    addOption(parser, ArgParseOption("g", "groups", "Name of groups output file.", ArgParseArgument::OUTPUTFILE, "FILE"));
     addOption(parser, ArgParseOption("v", "verbose", "Enable verbose output."));
 
-    setValidValues(parser, "o", "vcf");
     setMinValue(parser, "m", "0");
     setMaxValue(parser, "m", "1");
 
+    setValidValues(parser, "c", "fa fna fasta");
+    setValidValues(parser, "r", "fa fna fasta");
+
     // Set default values.
-    setDefaultValue(parser, "ml", options.locationsFile);
     setDefaultValue(parser, "m", options.minLocScore);
-    setDefaultValue(parser, "r", options.readLength);
+    setDefaultValue(parser, "n", options.minAnchorReads);
+    setDefaultValue(parser, "d", options.groupDist);
+    setDefaultValue(parser, "len", options.readLength);
     setDefaultValue(parser, "e", options.maxInsertSize);
-    setDefaultValue(parser, "p", options.maxSplitReads);
-    setDefaultValue(parser, "o", options.vcfInsertionsFile);
+    setDefaultValue(parser, "g", options.groupsFile);
+    setDefaultValue(parser, "l", options.locationsFile);
 }
 
 void
@@ -541,8 +597,8 @@ setupParser(ArgumentParser & parser, GenotypingOptions & options)
 {
     setShortDescription(parser, "Genotyping an individual for the insertions.");
     setVersion(parser, VERSION);
-    setDate(parser, VERSION_DATE); 
-    
+    setDate(parser, VERSION_DATE);
+
     addUsageLine(parser, "[\\fIOPTIONS\\fP] \\fIFASTAFILE\\fP \\fIBAMFILE\\fP \\fIFASTAFILEALT\\fP \\fIBAMFILEALT\\fP \\fIVCFFILE\\fP");
     addDescription(parser, "The genotype command takes as input a fasta file of the reference genome, a bam file of a "
                            "single individual, the fasta file with the supercontigs, the bam file of contig mapped and "
@@ -550,14 +606,14 @@ setupParser(ArgumentParser & parser, GenotypingOptions & options)
                            "positions. It computes genotype likelihoods by aligning all reads from each insertion "
                            "location and contig to the reference and to the alternative insertion sequence. It outputs "
                            "VCF records with the genotype likelihoods in GT:PL format for the individual to std::out.");
-    
+
     // Require five files as arguments.
     addArgument(parser, ArgParseArgument(ArgParseArgument::INPUTFILE, "fastafile"));
     addArgument(parser, ArgParseArgument(ArgParseArgument::INPUTFILE, "bamfile"));
     addArgument(parser, ArgParseArgument(ArgParseArgument::INPUTFILE, "fastafilealt"));
     addArgument(parser, ArgParseArgument(ArgParseArgument::INPUTFILE, "bamfilealt"));
     addArgument(parser, ArgParseArgument(ArgParseArgument::INPUTFILE, "vcffile"));
-    
+
     // Options.
     addSection(parser, "Alignment options");
     addOption(parser, ArgParseOption("m", "match", "Cost of match.", ArgParseArgument::INTEGER, "INT"));
@@ -584,7 +640,7 @@ setupParser(ArgumentParser & parser, GenotypingOptions & options)
     addOption(parser, ArgParseOption("b", "callboth", "callboth"));
     hideOption(parser, "b");
     addOption(parser, ArgParseOption("r", "readcounts", "use read counts"));
-    hideOption(parser, "r");    
+    hideOption(parser, "r");
     addOption(parser, ArgParseOption("f", "fulloverlap", "full overlap of read"));
     hideOption(parser, "f");
 
@@ -613,7 +669,7 @@ int
 getOptionValues(AssemblyOptions & options, ArgumentParser const & parser)
 {
     getArgumentValue(options.mappingFile, parser, 0);
-    
+
     if (isSet(parser, "reference"))
         getOptionValue(options.referenceFile, parser, "reference");
     if (isSet(parser, "kmerLength"))
@@ -630,6 +686,12 @@ getOptionValues(AssemblyOptions & options, ArgumentParser const & parser)
         getOptionValue(options.threads, parser, "threads");
     if (isSet(parser, "memory"))
         getOptionValue(options.memory, parser, "memory");
+    if (isSet(parser, "matepair")) {
+        options.matepair = true;
+        if (!getArgumentValue(options.matepairFile, parser, 1)) {
+          return 1;
+        }
+    }
 
     return 0;
 }
@@ -638,7 +700,7 @@ int
 getOptionValues(MergingOptions & options, ArgumentParser & parser)
 {
     options.contigFiles = getArgumentValues(parser, 0);
-    
+
     // Get parameter values.
     if (isSet(parser, "errRate"))
         getOptionValue(options.errorRate, parser, "errRate");
@@ -656,7 +718,7 @@ getOptionValues(MergingOptions & options, ArgumentParser & parser)
         getOptionValue(options.minTipScore, parser, "minTipScore");
     if (isSet(parser, "minEntropy"))
         getOptionValue(options.minEntropy, parser, "minEntropy");
-    
+
     // Get program mode options.
     if (isSet(parser, "batchIndex") && isSet(parser, "batches"))
     {
@@ -685,7 +747,7 @@ getOptionValues(MergingOptions & options, ArgumentParser & parser)
         std::cerr << "ERROR: Please specify both options --batchIndex and --batches." << std::endl;
         return 1;
     }
-    
+
     if (isSet(parser, "componentFiles"))
     {
         options.componentFiles = getOptionValues(parser, "componentFiles");
@@ -709,7 +771,7 @@ getOptionValues(MergingOptions & options, ArgumentParser & parser)
         options.verbose = true;
         options.veryVerbose = true;
     }
-    
+
     return 0;
 }
 
@@ -717,13 +779,17 @@ int
 getOptionValues(ContigMapOptions & options, ArgumentParser & parser)
 {
     getArgumentValue(options.contigFile, parser, 0);
-    
+
     if (isSet(parser, "directory"))
         getOptionValue(options.workingDirectory, parser, "directory");
     if (isSet(parser, "tmpdir"))
         getOptionValue(options.tmpDir, parser, "tmpdir");
     if (isSet(parser, "all"))
         options.allAlignment = true;
+    if (isSet(parser, "nonRefNew"))
+        options.keepNonRefNew = true;
+    if (isSet(parser, "maxInsertSize"))
+        getOptionValue(options.maxInsertSize, parser, "maxInsertSize");
     if (isSet(parser, "threads"))
         getOptionValue(options.threads, parser, "threads");
     if (isSet(parser, "memory"))
@@ -735,64 +801,69 @@ getOptionValues(ContigMapOptions & options, ArgumentParser & parser)
 int
 getOptionValues(PlacingOptions & options, ArgumentParser & parser)
 {
-  std::cerr << "getOptionValuesPlace " << std::endl;
-    getArgumentValue(options.supercontigFile, parser, 0);
-    getArgumentValue(options.referenceFile, parser, 1);
-    
-    if (isSet(parser, "locationsFiles"))
+    CharString locFile = options.locationsFile;
+
+    getArgumentValue(options.locationsFile, parser, 0);
+    getArgumentValue(options.outFile, parser, 1);
+
+    options.isVcf = checkFileEnding(options.outFile, "vcf");
+
+    if (isSet(parser, "contigFile") && isSet(parser, "genomeFile"))
     {
-        CharString locationsFilesFile = "locationsFiles.txt";
+        // Step 2 or 3 or all
+        getOptionValue(options.supercontigFile, parser, "contigFile");
+        getOptionValue(options.referenceFile, parser, "genomeFile");
 
-    getOptionValue(locationsFilesFile, parser, "locationsFiles");
+        if (isSet(parser, "maxInsertSize"))
+            getOptionValue(options.maxInsertSize, parser, "maxInsertSize");
 
-        if (readFileNames2(options.locationsFiles, locationsFilesFile) != 0)
-            return 1;
+        if (isSet(parser, "bamFile"))
+        {
+            // Step 3 or all
+            getOptionValue(options.bamFile, parser, "bamFile");
+
+            if (isSet(parser, "bamCov"))
+                getOptionValue(options.bamAvgCov, parser, "bamCov");
+            if (isSet(parser, "readLength"))
+                getOptionValue(options.readLength, parser, "readLength");
+
+            if (options.isVcf)
+            {
+                // All steps
+                if (readFileNames(options.locationsFiles, options.locationsFile) != 0)
+                    return 1;
+
+                if (isSet(parser, "locations"))
+                    getOptionValue(locFile, parser, "locations");
+                options.locationsFile = locFile;
+
+                appendValue(options.bamFiles, options.bamFile);
+                if (readFileNames(options.bamFiles, options.bamAvgCovs) != 0)
+                    return 1;
+            }
+        }
+        if (isSet(parser, "minScore"))
+            getOptionValue(options.minLocScore, parser, "minScore");
+        if (isSet(parser, "minReads"))
+            getOptionValue(options.minAnchorReads, parser, "minReads");
+        if (isSet(parser, "groups"))
+            getOptionValue(options.groupsFile, parser, "groups");
+        if (isSet(parser, "groupDist"))
+            getOptionValue(options.groupDist, parser, "groupDist");
     }
-    
-    if (isSet(parser, "locations"))
-        getOptionValue(options.locationsFile, parser, "locations");
-    if (!exists(options.locationsFile) && (isSet(parser, "batchIndex") || isSet(parser, "batchSize")))
+    else if (isSet(parser, "contigFile") || isSet(parser, "genomeFile"))
     {
-        std::cerr << "ERROR: Locations file " << options.locationsFile << " does not exist."
-                  <<       " Please compute locations before splitting exact positioning into batches." << std::endl;
+        std::cerr << "ERROR: Please specify both the -c (--contigFile) and -r (--genomeFile) options or none of the two." << std::endl;
         return 1;
     }
-
-    if (isSet(parser, "minScore"))
-        getOptionValue(options.minLocScore, parser, "minScore");
-
-
-    if (isSet(parser, "bamFiles"))
+    else
     {
-        resize(options.bamFiles, 1);
-        getOptionValue(options.bamFiles[0], parser, "bamFiles");
-        if (readFileNames(options.bamFiles, options.bamAvgCov) != 0)
-            return 1;
-    }
-    if (!isSet(parser, "bamFiles") && isSet(parser, "interval"))
-    {
-        std::cerr << "ERROR: Bam files with all reads of individuals not specified." << std::endl;
-        return 1;
-    }
-
-    if (isSet(parser, "interval"))
-    {
-        CharString interval;
-        getOptionValue(interval, parser, "interval");
-        if (parseInterval(options.interval, interval) != 0)
+        // Step 1 or 4
+        CharString locationsFilesFile;
+        if (readFileNames(options.locationsFiles, options.locationsFile) != 0)
             return 1;
     }
 
-    if (isSet(parser, "readLength"))
-        getOptionValue(options.readLength, parser, "readLength");
-    if (isSet(parser, "maxInsertSize"))
-        getOptionValue(options.maxInsertSize, parser, "maxInsertSize");
-    if (isSet(parser, "maxSplitReads"))
-        getOptionValue(options.maxSplitReads, parser, "maxSplitReads");
-
-    if (isSet(parser, "out"))
-        getOptionValue(options.vcfInsertionsFile, parser, "out");
-        
     options.verbose = isSet(parser, "verbose");
 
     return 0;
@@ -806,7 +877,7 @@ getOptionValues(GenotypingOptions & options, ArgumentParser & parser)
     getArgumentValue(options.altFastaFile, parser, 2);
     getArgumentValue(options.altBamFile, parser, 3);
     getArgumentValue(options.vcfFile, parser, 4);
-    
+
     if (isSet(parser, "match"))
         getOptionValue(options.match, parser, "match");
     if (isSet(parser, "mismatch"))
@@ -835,7 +906,6 @@ getOptionValues(GenotypingOptions & options, ArgumentParser & parser)
       getOptionValue( gmString, parser, "genotypingmodel");
       options.genotypingModel = genotypingModelEnum( gmString );
     }        
-       
     if(isSet(parser, "window"))
         getOptionValue( options.regionWindowSize, parser, "window");
     options.addReadGroup = isSet(parser, "addreadgroup");
@@ -866,13 +936,12 @@ int parseCommandLine(TOptions & options, int argc, char const ** argv)
     // Setup the parser.
     ArgumentParser parser(toCString(prog_name));
     setupParser(parser, options);
-    std::cerr << "b" << std::endl;
-    
+
     // Parse the command line.
     ArgumentParser::ParseResult res = parse(parser, argc, argv);
     if (res != ArgumentParser::PARSE_OK)
         return 1;
-    
+
     // Collect the option values.
     if (getOptionValues(options, parser) != 0)
         return 1;

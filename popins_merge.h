@@ -399,7 +399,7 @@ int popins_merge(int argc, char const ** argv)
         }
     }
     
-    // Write contigs that were skippe because they form too large components.
+    // Write contigs that were skipped because they form too large components.
     if (options.skippedFile != "")
         writeSkipped(options.skippedStream, contigs, skipped);
 

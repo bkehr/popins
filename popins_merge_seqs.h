@@ -431,7 +431,6 @@ mergeSequences(String<TSeq1> & mergedSeqs,
                unsigned qgramLength,
                bool verbose)
 {
-    typedef int TScoreValue;    
     typedef ComponentGraph<TSeq1> TGraph;
     typedef Path<TSeq1, typename TGraph::TVertexDescriptor> TPath;
     typedef typename Size<String<TPath> >::Type TSize;

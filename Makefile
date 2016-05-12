@@ -18,7 +18,7 @@ DEBUG_FLAGS=-g -fno-inline -DDEBUG -DBOUNDS_CHECK -DSEQAN_ENABLE_TESTING=0 -DSEQ
 CPPFLAGS = $(WARN) $(RELEASE_FLAGS) $(INCLUDE)
 CC = g++ -fno-merge-constants -std=c++0x
 
-LIBS = -lz -fopenmp
+LIBS = -lz -lrt
 
 .cpp.o:popins.cpp
 	$(CC) -c $(CPPFLAGS) $(FLAGS) $(TOOLS) $< -o $@
