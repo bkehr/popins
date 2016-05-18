@@ -72,9 +72,10 @@ template <typename TValue>
 bool readFileNames(String<CharString> & files, String<TValue> & values)
 {
     if (length(files) > 1) return 0;
-
+    std::cerr << "ReadFileNames " << length(files) << " " << files << std::endl;
     // Open input file
     CharString filenameFile = files[0];
+    std::cerr << filenameFile << " " << files << std::endl;
     std::fstream stream(toCString(filenameFile), std::fstream::in);
     if (!stream.is_open())
     {
@@ -269,6 +270,28 @@ struct PlacingOptions {
     {}
 };
 
+enum genotypingModelType { randomSequenceGenotyping, duplicationGenotyping };
+
+genotypingModelType
+genotypingModelEnum( CharString& gmString ){
+  if( gmString == "DUP" ){
+    return duplicationGenotyping;
+  }else{
+    return randomSequenceGenotyping;
+  }
+}
+
+void
+genotypingModelName( genotypingModelType gm, CharString& gmString ){
+  if( gm == duplicationGenotyping ){
+    gmString = CharString( "DUP" );
+
+  }else{
+    gmString = CharString( "RANDOM" );
+  }
+}
+
+
 struct GenotypingOptions {
     CharString referenceFile;
     CharString bamFile;
@@ -282,6 +305,7 @@ struct GenotypingOptions {
     int gapOpen;
     int gapExtend;
     int minAlignScore;
+  genotypingModelType genotypingModel;
 
     int maxInsertSize;
     int bpQclip;
@@ -298,10 +322,10 @@ struct GenotypingOptions {
     bool useReadCounts;
     bool fullOverlap;
 
-    GenotypingOptions() :
-        sampleName("sample"), match(1), mismatch(-4), gapOpen(-10), gapExtend(-1), minAlignScore(55),
-        maxInsertSize( 500 ), bpQclip(0), minSeqLen(10), minReadProb(0.0001), maxBARcount(200),
-        regionWindowSize(50), addReadGroup(false), verbose(false),
+    GenotypingOptions() : 
+        sampleName("sample"), match(1), mismatch(-2), gapOpen(-4), gapExtend(-1), minAlignScore(55),
+	genotypingModel( randomSequenceGenotyping ), maxInsertSize( 500 ), bpQclip(0), minSeqLen(10), 
+        minReadProb(0.00001), maxBARcount(200), regionWindowSize(50), addReadGroup(false), verbose(false),
         callBoth(false), useReadCounts(false), fullOverlap(false)
     {}
 };
@@ -533,6 +557,7 @@ setupParser(ArgumentParser & parser, PlacingOptions & options)
 
     // Setup (input) options.
     addSection(parser, "Main options");
+
     addOption(parser, ArgParseOption("c", "contigFile", "Name of (super-)contigs file.", ArgParseArgument::INPUTFILE, "FILE"));
     addOption(parser, ArgParseOption("r", "genomeFile", "Name of reference genome file.", ArgParseArgument::INPUTFILE, "FILE"));
     addOption(parser, ArgParseOption("m", "minScore", "Minimal anchoring score for a location.", ArgParseArgument::DOUBLE, "FLOAT"));
@@ -542,6 +567,7 @@ setupParser(ArgumentParser & parser, PlacingOptions & options)
     addOption(parser, ArgParseOption("a", "bamCov", "Average coverage of the genome in the BAM file. Required if -b option specified.", ArgParseArgument::DOUBLE, "FLOAT"));
 
     addOption(parser, ArgParseOption("len", "readLength", "The length of the reads.", ArgParseArgument::INTEGER, "INT"));
+
     addOption(parser, ArgParseOption("e", "maxInsertSize", "The maximal expected insert size of the read pairs.", ArgParseArgument::INTEGER, "INT"));
 
     // Output file options.
@@ -608,6 +634,7 @@ setupParser(ArgumentParser & parser, GenotypingOptions & options)
     addOption(parser, ArgParseOption("w", "window", "Region window size.", ArgParseArgument::INTEGER, "INT"));
     addOption(parser, ArgParseOption("rg", "addreadgroup", "Add read group."));
     addOption(parser, ArgParseOption("sa", "samplename", "Name of sample for vcf output", ArgParseArgument::STRING, "SAMPLENAME"));
+    addOption(parser, ArgParseOption("gm", "genotypingmodel", "Model used for genotyping", ArgParseArgument::STRING, "GENOTYPINGMODEL"));
 
     // Hidden options.
     addOption(parser, ArgParseOption("b", "callboth", "callboth"));
@@ -629,6 +656,9 @@ setupParser(ArgumentParser & parser, GenotypingOptions & options)
     setDefaultValue(parser, "maxBARcount", options.maxBARcount);
     setDefaultValue(parser, "window", options.regionWindowSize);
     setDefaultValue(parser, "samplename", options.sampleName);
+    CharString gmName;
+    genotypingModelName( options.genotypingModel, gmName ); 
+    setDefaultValue(parser, "genotypingmodel", gmName );
 }
 
 // ==========================================================================
@@ -871,7 +901,11 @@ getOptionValues(GenotypingOptions & options, ArgumentParser & parser)
         getOptionValue(options.minSeqLen, parser, "minSeqLen");
     if (isSet(parser, "samplename"))
         getOptionValue(options.sampleName, parser, "samplename");
-
+    if (isSet(parser, "genotypingmodel")){
+      CharString gmString;
+      getOptionValue( gmString, parser, "genotypingmodel");
+      options.genotypingModel = genotypingModelEnum( gmString );
+    }        
     if(isSet(parser, "window"))
         getOptionValue( options.regionWindowSize, parser, "window");
     options.addReadGroup = isSet(parser, "addreadgroup");
