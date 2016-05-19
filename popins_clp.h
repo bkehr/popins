@@ -851,17 +851,22 @@ getOptionValues(PlacingOptions & options, ArgumentParser & parser)
         if (isSet(parser, "groupDist"))
             getOptionValue(options.groupDist, parser, "groupDist");
     }
-    else if (isSet(parser, "contigFile") || isSet(parser, "genomeFile"))
-    {
-        std::cerr << "ERROR: Please specify both the -c (--contigFile) and -r (--genomeFile) options or none of the two." << std::endl;
-        return 1;
-    }
     else
     {
         // Step 1 or 4
         CharString locationsFilesFile;
         if (readFileNames(options.locationsFiles, options.locationsFile) != 0)
             return 1;
+
+        // Step 4
+        if (isSet(parser, "genomeFile"))
+            getOptionValue(options.referenceFile, parser, "genomeFile");
+        else if (options.isVcf)
+        {
+            std::cerr << "ERROR: Please specify the reference genome file with the -r (--genomeFile) option for combining split-read alignment results." << std::endl;
+            return 1;
+        }
+
     }
 
     options.verbose = isSet(parser, "verbose");
