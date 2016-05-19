@@ -468,6 +468,7 @@ popins_place_split_read_align(String<LocationInfo> & locs,
         ++i;
         ++it;
     }
+    if (options.verbose) std::cerr << std::endl;
 
     return 0;
 }
