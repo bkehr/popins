@@ -217,7 +217,7 @@ loadContigs(std::vector<std::pair<CharString, TSeq> > & contigs,
 
 int popins_place(int argc, char const ** argv)
 {
-    std::fstream vcfStream;
+    std::ofstream vcfStream;
     String<LocationInfo> locs;
     std::vector<std::pair<CharString, Dna5String> > contigs;
     FaiIndex fai;

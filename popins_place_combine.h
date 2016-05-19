@@ -112,13 +112,31 @@ readPlacedLocation(PlacedLocation & loc, RecordReader<std::fstream, SinglePass<>
     skipWhitespaces(reader);
 
     clear(buffer);
-    if (readUntilWhitespace(buffer, reader) != 0)
+    if (readUntilTabOrLineBreak(buffer, reader) != 0)
     {
         std::cerr << "ERROR: Reading SCORE from " << filename << " failed." << std::endl;
         return 1;
     }
     lexicalCast2<double>(loc.loc.score, buffer);
+
+    if (value(reader) == '\r' || value(reader) == '\n')
+    {
+        skipLine(reader);
+        return 0;
+    }
+
     skipWhitespaces(reader);
+
+    if (value(reader) == 'h')
+    {
+        clear(buffer);
+        readLine(buffer, reader);
+        if (buffer == "high_coverage")
+            return 0;
+
+        std::cerr << "ERROR: Unexpected word \'" << buffer << "\' in " << filename << "." << std::endl;
+        return 1;
+    }
 
     unsigned refPos, contigPos, posSupport;
 
@@ -183,6 +201,7 @@ readPlacedLocation(PlacedLocation & loc, RecordReader<std::fstream, SinglePass<>
         loc.insPos[std::pair<unsigned, unsigned>(refPos, contigPos)] = posSupport;
     }
 
+    skipLine(reader);
     return 0;
 }
 
@@ -315,7 +334,7 @@ chooseBestPlacing(unsigned & refPos, unsigned & contigPos, unsigned & support, P
         ++it;
     }
 
-    if (support < 0.5 * totalCount)
+    if (totalCount == 0 || support < 0.5 * totalCount)
         return 1;
 
     return 0;
@@ -409,14 +428,30 @@ popins_place_combine(TStream & vcfStream, PlacingOptions & options)
     }
 
     if (options.verbose)
+    {
         std::cerr << "[" << time(0) << "] " << "Loading the placed locations from " << length(options.locationsFiles) << " locations files." << std::endl;
+        std::cerr << "0%   10   20   30   40   50   60   70   80   90   100%" << std::endl;
+        std::cerr << "|----|----|----|----|----|----|----|----|----|----|" << std::endl;
+        std::cerr << "*" << std::flush;
+    }
+    double fiftieth = length(options.locationsFiles) / 50.0;
+    unsigned progress = 0;
 
     // Read placed location files.
     for (unsigned i = 0; i < length(options.locationsFiles); ++i)
     {
         if (loadPlacedLocations(locs, options.locationsFiles[i]) != 0)
             return 1;
+
+        while (options.verbose && progress * fiftieth < i)
+        {
+            std::cerr << "*" << std::flush;
+            ++progress;
+        }
     }
+
+    if (options.verbose)
+        std::cerr << std::endl;
 
     if (options.verbose)
         std::cerr << "[" << time(0) << "] " << "Sorting " << locs.size() << " placed locations." << std::endl;
@@ -434,10 +469,10 @@ popins_place_combine(TStream & vcfStream, PlacingOptions & options)
         std::cerr << "[" << time(0) << "] " << "Writing " << locs.size() << " combined locations to output file '" << options.outFile << "'." << std::endl;
 
     // Choose the best position.
-    for (unsigned i = 0; i < length(locs); ++i)
+    for (unsigned i = 0; i < locs.size(); ++i)
     {
         unsigned refPos = 0, contigPos = 0, support = 0;
-        if (chooseBestPlacing(refPos, contigPos, support, locs[i]))
+        if (chooseBestPlacing(refPos, contigPos, support, locs[i]) == 0)
             writeVcf(vcfStream, locs[i], refPos, contigPos, support, fai);
         else
             writeVcf(vcfStream, locs[i], fai);
