@@ -69,7 +69,7 @@ trimReadEnds( T& seq, CharString& qual, int bpQclip, bool verbose)
   return 1;
 }
 
-void parseComponent( CharString& altR, bool verbose, component_dir& cdir, CharString& componentName, bool& compIsPlaced, int& beginPos, int& endPos )
+void parseComponent( CharString& altR, bool verbose, component_dir& cdir, CharString& componentName, bool compIsPlaced, int& beginPos, int& endPos )
 {
   /* BUG:  assumes that the length of the variant is 1, this is not the case for general variants 
    */
@@ -296,8 +296,9 @@ int readBamRegion(TBamIOContext& hN, BamIndex< Bai>& baiI, Stream< Bgzf>& bamS,
 template<typename TOptions>
 int addBARsToVC(std::map< CharString, BamAlignmentRecord>&  bars,  TSequence& refSeq, TSequence& altSeq, TOptions & options, std::vector< double>& vC)
 {
+  int maxBARcount = 200;
   int barCount = 0;
-  for( auto i = bars.begin(); i != bars.end() && barCount < options.maxBARcount; i++ ){
+  for( auto i = bars.begin(); i != bars.end() && barCount < maxBARcount; i++ ){
     double asRef = alignReadToSeq( refSeq, (*i).second, options );
     double asAlt = alignReadToSeq( altSeq, (*i).second, options );
     if( asRef <= options.minAlignScore ) asRef = options.minAlignScore;
@@ -315,18 +316,9 @@ int addBARsToVC(std::map< CharString, BamAlignmentRecord>&  bars,  TSequence& re
 	pa = log( exp( asAlt )/div );
 	pr = log( exp( asRef )/div );
       }
-      if( options.genotypingModel == randomSequenceGenotyping ){
-	vC[0] += pr;
-	vC[1] += -log( 2.0);
-	vC[2] += pa;
-      }else if( options.genotypingModel == duplicationGenotyping ){
-	vC[0] += pr;
-	if( pr > pa )
-	  vC[1] += log( 2.0/3.0 );
-	else
-	  vC[1] += log( 1.0/3.0 );
-	vC[2] += -log( 2.0);	  
-      }
+      vC[0] += pr;
+      vC[1] += -log( 2.0);
+      vC[2] += pa;
     }
     barCount++;
   }
@@ -504,23 +496,17 @@ int variantCallRegion(VcfRecord & variant, VcfHeader & vcfH,
     if (!getIdByName(faiI, chrom, idx)){
         if( options.verbose ) std::cout << "rID " << chrom << " " << beginPos << " ERROR: reference FAI index has no entry for rID in Ref mapped.\n";
     }
+    TSequence refSeq;
+    if (readRegion( refSeq, faiI, idx, beginPos-options.regionWindowSize, beginPos+length(ref)+options.regionWindowSize) != 0){
+        if( options.verbose ) std::cout << "ERROR: Could not load reference sequence.\n";
+    }    
+    if( options.verbose ) std::cout << "refSeq " << refSeq << " " << chrom << " " << beginPos << std::endl;
+
     CharString componentName;
     component_dir componentDir;
     bool compIsPlaced = true;
     int beginPosC, endPosC;
     parseComponent( variant.alt, options.verbose, componentDir, componentName, compIsPlaced, beginPosC, endPosC );
-
-    TSequence refSeq;
-    if( componentDir == left_dir_forward || componentDir == left_dir_reverse ){
-      if (readRegion( refSeq, faiI, idx, beginPos-options.regionWindowSize+1, beginPos+length(ref)+options.regionWindowSize+1) != 0){
-        if( options.verbose ) std::cout << "ERROR: Could not load reference sequence.\n";
-      }    
-    }else{
-      if (readRegion( refSeq, faiI, idx, beginPos-options.regionWindowSize, beginPos+length(ref)+options.regionWindowSize) != 0){
-        if( options.verbose ) std::cout << "ERROR: Could not load reference sequence.\n";
-      }    
-    }
-    if( options.verbose ) std::cout << "refSeq " << refSeq << " " << chrom << " " << beginPos << std::endl;
 
     int devL, devR;
     parseInfoField( variant.info, options.verbose, devL, devR );
@@ -577,7 +563,7 @@ int variantCallRegion(VcfRecord & variant, VcfHeader & vcfH,
     TSequence altSeq;
     if( componentDir == left_dir_forward )
     { 
-        if (readRegion(altSeq, faiI, idx, beginPos-options.regionWindowSize +1, beginPos +1 ) != 0 && options.verbose)
+        if (readRegion(altSeq, faiI, idx, beginPos-options.regionWindowSize, beginPos ) != 0 && options.verbose)
         std::cout << "ERROR: Could not load sequence.\n";
         TSequence post;
         if (readRegion(post, faiIAlt, idxAlt, altRegBeg, altRegEnd) != 0 && options.verbose)
@@ -588,7 +574,7 @@ int variantCallRegion(VcfRecord & variant, VcfHeader & vcfH,
     }
     else if( componentDir == left_dir_reverse )
     { 
-        if (readRegion(altSeq, faiI, idx, beginPos-options.regionWindowSize+1, beginPos+1 ) != 0)
+        if (readRegion(altSeq, faiI, idx, beginPos-options.regionWindowSize, beginPos ) != 0)
             std::cerr << "ERROR: Could not load sequence.\n";
         TSequence post;
         // We need to read from the end 
