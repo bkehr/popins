@@ -366,7 +366,7 @@ writeVcf(TStream & outStream, PlacedLocation & loc, unsigned refPos, unsigned co
     if (loc.loc.numReads != 0)
         outStream << "\t" << "AR=" << loc.loc.numReads << ";AS=" << loc.loc.score;
     else
-        outStream << "\t" << "PAIRED";
+        outStream << "\t" << "NOANCHOR";
     outStream << ";" << "SR=" << support;    // TODO Write more info fields.
 
     outStream << "\t" << ".";
