@@ -70,7 +70,7 @@ initVcf(TStream & vcfStream, PlacingOptions & options, FaiIndex & fai)
     vcfStream << "##FORMAT=<ID=PL,Number=G,Type=Integer,Description=\"PHRED-scaled genotype likelihoods\">" << std::endl;
     
     vcfStream << "#CHROM" << "\t" << "POS" << "\t" << "ID" << "\t" << "REF" << "\t" << "ALT";
-    vcfStream << "\t" << "QUAL" << "\t" << "FILTER" << "\t" << "INFO" << std::endl;
+    vcfStream << "\t" << "QUAL" << "\t" << "FILTER" << "\t" << "INFO" << "\t" << "FORMAT" << std::endl;
 
     return 0;
 }

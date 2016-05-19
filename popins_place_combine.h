@@ -350,6 +350,7 @@ writeVcf(TStream & outStream, PlacedLocation & loc, unsigned refPos, unsigned co
         outStream << "\t" << "PAIRED";
     outStream << ";" << "SR=" << support;    // TODO Write more info fields.
 
+    outStream << "\t" << ".";
     outStream << std::endl;
 }
 
@@ -384,6 +385,9 @@ writeVcf(TStream & outStream, PlacedLocation & loc, FaiIndex & fai)
         outStream << "\t" << "AR=" << loc.loc.numReads << ";AS=" << loc.loc.score;
     else
         outStream << "\t" << "NOANCHOR";      // TODO Write more info fields.
+
+    outStream << "\t" << ".";
+    outStream << std::endl;
 }
 
 // =======================================================================================
