@@ -504,7 +504,7 @@ readAnchoringRecord(AnchoringRecord & record,
         Triple<CharString, CharString, unsigned> nameChrPos = Triple<CharString, CharString, unsigned>(r.qName, names[r.rNextId], r.pNext);
         if (goodReads.count(nameChrPos) == 0)
         {
-            goodReads[ Triple<CharString, CharString, unsigned>(r.qName, names[r.rID], r.beginPos)] = r.beginPos + interval.i2 - interval.i1;
+            goodReads[Triple<CharString, CharString, unsigned>(r.qName, names[r.rID], r.beginPos)] = r.beginPos + interval.i2 - interval.i1;
         }
         else if (isContig)
         {

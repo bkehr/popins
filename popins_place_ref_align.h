@@ -72,7 +72,7 @@ initSplitAlignLists(SampleLists & splitAlignLists, String<LocationInfo> & locati
 // Function setOtherEndBit()
 // ---------------------------------------------------------------------------------------
 
-void setOtherEndBit(String<LocationInfo> & locations)
+void setOtherEndBit(String<LocationInfo> & locations, bool checkPos = false)
 {
     typedef Iterator<String<LocationInfo> >::Type TIter;
 
@@ -96,10 +96,13 @@ void setOtherEndBit(String<LocationInfo> & locations)
             rev = false;
         }
 
-        if ((*it).loc.contigOri)
-            fwd = true;
-        else
-            rev = true;
+        if (!checkPos || (*it).insPos != -1)
+        {
+        	if ((*it).loc.contigOri)
+        		fwd = true;
+        	else
+        		rev = true;
+        }
 
         ++it;
     }
@@ -172,6 +175,77 @@ otherEnd(Location & loc, unsigned readLength, unsigned maxInsertSize)
     return rc;
 }
 
+// ---------------------------------------------------------------------------------------
+// Function appendGroups()
+// ---------------------------------------------------------------------------------------
+
+void
+appendGroups(String<String<unsigned> > & groups, String<String<LocationInfo> > & locGroups)
+{
+	for (unsigned i = 0; i < length(locGroups); ++i)
+	{
+		String<unsigned> group;
+		resize(group, length(locGroups[i]));
+
+		for (unsigned j = 0; j < length(locGroups[i]); ++j)
+			group[j] = locGroups[i][j].idx - 1;
+
+		appendValue(groups, group);
+	}
+}
+
+// ---------------------------------------------------------------------------------------
+// Function findExcludeLocs()
+// ---------------------------------------------------------------------------------------
+
+void
+findExcludeLocs(std::vector<Pair<CharString, bool> > & exclude, String<LocationInfo> & locations, String<String<unsigned> > & groups)
+{
+    typedef Iterator<String<String<unsigned> > >::Type TIter;
+    typedef Iterator<String<unsigned> >::Type TGroupIter;
+
+    // Sort locations by contig/contigOri.
+    std::stable_sort(begin(locations), end(locations), LocationInfoTypeLess());
+
+    // Set otherEndBit to whether other end was reference aligned or not.
+    setOtherEndBit(locations, true);
+
+    // Sort locations by genomic position.
+    std::stable_sort(begin(locations), end(locations), LocationInfoPosLess());
+
+    // Iterate groups to find all contig ends that can be excluded from split alignment.
+    TIter groupsIt = begin(groups);
+    TIter groupsEnd = end(groups);
+
+    while (groupsIt != groupsEnd)
+    {
+    	TGroupIter it = begin(*groupsIt);
+    	TGroupIter itEnd = end(*groupsIt);
+
+    	bool placed = false;
+    	while (it != itEnd)
+    	{
+    		placed |= locations[*it].otherEnd;
+    		++it;
+    	}
+
+    	if (placed)
+    	{
+    		it = begin(*groupsIt);
+    		while (it != itEnd)
+    		{
+    			Location loc = locations[*it].loc;
+    			exclude.push_back(Pair<CharString, bool>(loc.contig, !loc.contigOri));
+    			++it;
+    		}
+    	}
+
+    	++groupsIt;
+    }
+
+    std::stable_sort(exclude.begin(), exclude.end());
+}
+
 // =======================================================================================
 
 // ---------------------------------------------------------------------------------------
@@ -222,7 +296,7 @@ writeGroup(TStream & outStream, String<LocationInfo> & group, bool isInsertion)
 // ---------------------------------------------------------------------------------------
 
 bool
-writeSplitAlignList(CharString path, std::vector<int> & list, String<LocationInfo> & locations, PlacingOptions & options)
+writeSplitAlignList(CharString path, std::vector<int> & list, std::vector<Pair<CharString, bool> > & exclude, String<LocationInfo> & locations, PlacingOptions & options)
 {
     typedef std::vector<int>::iterator TIter;
 
@@ -239,13 +313,18 @@ writeSplitAlignList(CharString path, std::vector<int> & list, String<LocationInf
 
     while (it != itEnd)
     {
+    	Location loc;
         if (*it > 0)
-             writeLoc(outStream, locations[(*it) - 1].loc);
+            loc = locations[(*it) - 1].loc;
         else
-        {
-            Location loc = otherEnd(locations[-(*it)-1].loc, options.readLength, options.maxInsertSize);
-            writeLoc(outStream, loc);
-        }
+            loc = otherEnd(locations[-(*it) - 1].loc, options.readLength, options.maxInsertSize);
+
+        Pair<CharString, bool> c(loc.contig, loc.contigOri);
+        std::vector<Pair<CharString, bool> >::iterator cIt = lower_bound(exclude.begin(), exclude.end(), c);
+
+        if (cIt != exclude.end() && ((*cIt).i1 != c.i1 || (*cIt).i2 != c.i2))
+        	writeLoc(outStream, loc);
+
         ++it;
     }
 
@@ -350,7 +429,7 @@ contigEndsAlign(LocationInfo & a, LocationInfo & b, std::vector<std::pair<CharSt
     unsigned preSufLen = 200;    // TODO: Make this a program parameter.
 
     typedef ModifiedString<Suffix<Dna5String>::Type, ModComplementDna5> TComplementSuffix;
-    typedef ModifiedString<TComplementSuffix, ModReverse> TSuffix;
+    typedef ModifiedString<TComplementSuffix, ModReverse> TRCSuffix;
     typedef Prefix<Dna5String>::Type TPrefix;
 
     typedef std::pair<CharString, Dna5String> TPair;
@@ -361,23 +440,24 @@ contigEndsAlign(LocationInfo & a, LocationInfo & b, std::vector<std::pair<CharSt
     if (b.insPos != -1)
     {
         if (b.loc.chrOri)
-            preSufLen = _max(preSufLen, b.insPos + 20);
+            preSufLen = _max(preSufLen, b.insPos + 50);
         else
-            preSufLen = _max(preSufLen, length(itB->second) - b.insPos + 20);
+            preSufLen = _max(preSufLen, length(itB->second) - b.insPos + 50);
     }
 
     SEQAN_ASSERT_EQ(a.loc.chrOri, b.loc.chrOri);
 
-    if ((a.loc.chrOri && !a.loc.contigOri) || (!a.loc.chrOri && a.loc.contigOri))
+    if (!a.loc.contigOri)
     {
         unsigned prefixLengthA = _min(preSufLen, length(itA->second));
         TPrefix prefixA = prefix(itA->second, prefixLengthA);
         Gaps<TPrefix> gapsA;
 
-        if ((b.loc.chrOri && !b.loc.contigOri) || (!b.loc.chrOri && b.loc.contigOri))
+        if (!b.loc.contigOri)
         {
             // case A: left insertion end and contigs of both a and b in fwd orientation OR
-            //        right insertion end and contigs of both a and b in rev orientation
+            //         right insertion end and contigs of both a and b in rev orientation
+            //         => align contig prefixes of a and b to each other
 
             unsigned prefixLengthB = _min(preSufLen, length(itB->second));
             TPrefix prefixB = prefix(itB->second, prefixLengthB);
@@ -392,13 +472,14 @@ contigEndsAlign(LocationInfo & a, LocationInfo & b, std::vector<std::pair<CharSt
         else
         {
             // case B: left insertion end and contig of a in fwd and contig of b in rev orientation OR
-            //        right insertion end and contig of a in rev and contig of b in fwd orientation
+            //         right insertion end and contig of a in rev and contig of b in fwd orientation
+            //         => align contig prefix of a to contig suffix of b
 
             unsigned suffixBeginPosB = length(itB->second) - _min(preSufLen, length(itB->second));
             Suffix<Dna5String>::Type sufB = suffix(itB->second, suffixBeginPosB);
-            TSuffix suffixB(sufB);
+            TRCSuffix suffixB(sufB);
 
-            Gaps<TSuffix> gapsB;
+            Gaps<TRCSuffix> gapsB;
             if (align(gapsA, gapsB, prefixA, suffixB))
             {
                 setInsPos(a, b, itA->second, itB->second, gapsA, gapsB);
@@ -410,13 +491,14 @@ contigEndsAlign(LocationInfo & a, LocationInfo & b, std::vector<std::pair<CharSt
     {
         unsigned suffixBeginPosA = length(itA->second) - _min(preSufLen, length(itA->second));
         Suffix<Dna5String>::Type sufA = suffix(itA->second, suffixBeginPosA);
-        TSuffix suffixA(sufA);
-        Gaps<TSuffix> gapsA;
+        TRCSuffix suffixA(sufA);
+        Gaps<TRCSuffix> gapsA;
 
-        if ((b.loc.chrOri && !b.loc.contigOri) || (!b.loc.chrOri && b.loc.contigOri))
+        if (!b.loc.contigOri)
         {
             // case C: left insertion end and contig of a in rev and contig of b in fwd orientation OR
-            //        right insertion end and contig of a in fwd and contig of b in rev orientation
+            //         right insertion end and contig of a in fwd and contig of b in rev orientation
+            //         => align contig suffix of a to contig prefix of b
 
             unsigned prefixLengthB = _min(preSufLen, length(itB->second));
             TPrefix prefixB = prefix(itB->second, prefixLengthB);
@@ -431,13 +513,14 @@ contigEndsAlign(LocationInfo & a, LocationInfo & b, std::vector<std::pair<CharSt
         else
         {
             // case D: left insertion end and contigs of both a and b in rev orientation OR
-            //        right insertion end and contigs of both a and b in fwd orientation
+            //         right insertion end and contigs of both a and b in fwd orientation
+            //         => align contig suffixes of a and b to each other
 
             unsigned suffixBeginPosB = length(itB->second) - _min(preSufLen, length(itB->second));
             Suffix<Dna5String>::Type sufB = suffix(itB->second, suffixBeginPosB);
-            TSuffix suffixB(sufB);
+            TRCSuffix suffixB(sufB);
 
-            Gaps<TSuffix> gapsB;
+            Gaps<TRCSuffix> gapsB;
             if (align(gapsA, gapsB, suffixA, suffixB))
             {
                 setInsPos(a, b, itA->second, itB->second, gapsA, gapsB);
@@ -796,11 +879,11 @@ findUnalignedGroups(String<String<LocationInfo> > & groups,
     while (it != itEnd)
     {
         bool added = false;
-        for (unsigned s = 0; !added && s < largestGroupSize; ++s)
+        for (unsigned s = 0; s < largestGroupSize; ++s)
         {
-            for (unsigned g = 0; !added && g < length(groups); ++g)
+            for (unsigned g = 0; g < length(groups); ++g)
             {
-                if (length(groups[g]) < s)
+                if (length(groups[g]) < s + 1)
                     continue;
 
                 if (contigEndsAlign(*it, groups[g][s], contigs))
@@ -814,9 +897,14 @@ findUnalignedGroups(String<String<LocationInfo> > & groups,
                     {
                         appendValue(groups[g], *it);
                     }
+                    largestGroupSize = _max(largestGroupSize, length(groups[g]));
                     added = true;
                 }
+                if (added)
+                	break;
             }
+            if (added)
+            	break;
         }
 
         if (!added)
@@ -824,6 +912,8 @@ findUnalignedGroups(String<String<LocationInfo> > & groups,
             String<LocationInfo> newGroup;
             appendValue(newGroup, *it);
             appendValue(groups, newGroup);
+            if (largestGroupSize == 0)
+            	largestGroupSize = 1;
         }
 
         ++it;
@@ -863,6 +953,7 @@ template<typename TStream1, typename TStream2>
 void
 processOverlappingLocs(TStream1 & vcfStream,
         TStream2 & groupStream,
+		String<String<unsigned> > & groups,
         SampleLists & splitAlignLists,
         String<LocationInfo> & locations,
         std::vector<std::pair<CharString, Dna5String> > & contigs,
@@ -873,9 +964,9 @@ processOverlappingLocs(TStream1 & vcfStream,
     String<String<LocationInfo> > unalignedGroups;
     String<LocationInfo> unaligned;
 
-//    std::cerr << "\nProcessing group of " << length(locations) << " overlapping locations." << std::endl;
+//    std::cout << "\nProcessing group of " << length(locations) << " overlapping locations." << std::endl;
 //    for (unsigned i = 0; i < length(locations); ++i)
-//        std::cerr << locations[i].loc.chr << "\t" << locations[i].loc.chrStart << "\t" << (locations[i].otherEnd?"true":"false") << std::endl;
+//        std::cout << locations[i].loc.chr << "\t" << locations[i].loc.chrStart << "\t" << (locations[i].otherEnd?"true":"false") << std::endl;
 
     // Sort the set of overlapping locations by bit and then by contig length.
     std::stable_sort(begin(locations), end(locations), LocationInfoGreater());
@@ -884,9 +975,14 @@ processOverlappingLocs(TStream1 & vcfStream,
     findRefAlignedGroups(refAlignedGroups, unaligned, locations, contigs, fai, options);
     clear(locations);
 
+//    std::cout << "refAlignedGroups: " << length(refAlignedGroups);
+
     // Handle the ref-aligned groups.
     processRefAlignedGroups(vcfStream, groupStream, refAlignedGroups, splitAlignLists, contigs, fai, options);
+    appendGroups(groups, refAlignedGroups);
     clear(refAlignedGroups);
+
+//    std::cout << "   unaligned: " << length(unaligned);
 
     // Split the unaligned locations into groups.
     findUnalignedGroups(unalignedGroups, unaligned, contigs);
@@ -894,7 +990,9 @@ processOverlappingLocs(TStream1 & vcfStream,
 
     // Handle the unaligned groups.
     processUnalignedGroups(vcfStream, groupStream, unalignedGroups, splitAlignLists, contigs, fai, options);
+    appendGroups(groups, unalignedGroups);
 
+//    std::cout << "   unlignedGroups: " << length(unalignedGroups) << std::endl;
 }
 
 // =======================================================================================
@@ -917,6 +1015,7 @@ popins_place_ref_align(TStream & vcfStream,
     initSplitAlignLists(splitAlignLists, locations);
 
     // Open the groups output file.
+    String<String<unsigned> > groups;
     std::fstream outGroups(toCString(options.groupsFile), std::ios_base::out);
     if (!outGroups.is_open())
     {
@@ -964,7 +1063,7 @@ popins_place_ref_align(TStream & vcfStream,
         {
             if (length(fwd) != 0 && (prevChromFwd != (*it).loc.chr || prevPosFwd + options.groupDist < (*it).loc.chrStart))
             {
-                processOverlappingLocs(vcfStream, outGroups, splitAlignLists, fwd, contigs, fai, options);
+                processOverlappingLocs(vcfStream, outGroups, groups, splitAlignLists, fwd, contigs, fai, options);
                 clear(fwd);
             }
             appendValue(fwd, *it);
@@ -975,7 +1074,7 @@ popins_place_ref_align(TStream & vcfStream,
         {
             if (length(rev) != 0 && (prevChromRev != (*it).loc.chr || prevPosRev + options.groupDist < (*it).loc.chrStart))
             {
-                processOverlappingLocs(vcfStream, outGroups, splitAlignLists, rev, contigs, fai, options);
+                processOverlappingLocs(vcfStream, outGroups, groups, splitAlignLists, rev, contigs, fai, options);
                 clear(rev);
             }
             appendValue(rev, *it);
@@ -993,10 +1092,10 @@ popins_place_ref_align(TStream & vcfStream,
     }
 
     if (length(fwd) != 0)
-        processOverlappingLocs(vcfStream, outGroups, splitAlignLists, fwd, contigs, fai, options);
+        processOverlappingLocs(vcfStream, outGroups, groups, splitAlignLists, fwd, contigs, fai, options);
 
     if (length(rev) != 0)
-        processOverlappingLocs(vcfStream, outGroups, splitAlignLists, rev, contigs, fai, options);
+        processOverlappingLocs(vcfStream, outGroups, groups, splitAlignLists, rev, contigs, fai, options);
 
     if (options.verbose)
     {
@@ -1004,10 +1103,14 @@ popins_place_ref_align(TStream & vcfStream,
         std::cerr << "[" << time(0) << "] " << "Writing locations of contigs that do not align to the reference (per sample)." << std::endl;
     }
 
+    // Find locations to exclude from splitAlignLists
+    std::vector<Pair<CharString, bool> > exclude;
+    findExcludeLocs(exclude, locations, groups);
+
     // Write splitAlignLists to output files.
     for (unsigned i = 0; i < splitAlignLists.pns.size(); ++i)
     {
-        if (writeSplitAlignList(splitAlignLists.pns[i], splitAlignLists.lists[i], locations, options) != 0)
+        if (writeSplitAlignList(splitAlignLists.pns[i], splitAlignLists.lists[i], exclude, locations, options) != 0)
             return 1;
     }
 

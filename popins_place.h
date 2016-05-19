@@ -60,13 +60,17 @@ initVcf(TStream & vcfStream, PlacingOptions & options, FaiIndex & fai)
     vcfStream << "##reference=" << options.referenceFile << std::endl;
 
     for (unsigned rID = 0; rID < numSeqs(fai); ++rID)
-        vcfStream << "##contig=<ID=" << sequenceName(fai, rID) << ",length=" << sequenceLength(fai, rID) << ">" << std::endl;
+    {
+        CharString seqName = sequenceName(fai, rID);
+        if (isChromosome(seqName))
+            vcfStream << "##contig=<ID=" << seqName << ",length=" << sequenceLength(fai, rID) << ">" << std::endl;
+    }
 
     vcfStream << "##FORMAT=<ID=GT,Number=1,Type=String,Description=\"Genotype\">" << std::endl;
     vcfStream << "##FORMAT=<ID=PL,Number=G,Type=Integer,Description=\"PHRED-scaled genotype likelihoods\">" << std::endl;
     
     vcfStream << "#CHROM" << "\t" << "POS" << "\t" << "ID" << "\t" << "REF" << "\t" << "ALT";
-    vcfStream << "\t" << "QUAL" << "\t" << "FILTER" << "\t" << "INFO" << std::endl;
+    vcfStream << "\t" << "QUAL" << "\t" << "FILTER" << "\t" << "INFO" << "\t" << "FORMAT" << std::endl;
 
     return 0;
 }
@@ -108,7 +112,7 @@ loadLocations(String<LocationInfo> & locations, PlacingOptions & options)
         if (options.bamFile != "")
             options.minAnchorReads = 0;
 
-        LocationsFilter filter(options.minAnchorReads, options.minLocScore, 2*options.maxInsertSize);
+        LocationsFilter filter(options.minAnchorReads, options.minLocScore, 3*options.maxInsertSize);
         if (options.interval.i1 == "")
         {
             if (options.verbose)
