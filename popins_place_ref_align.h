@@ -317,7 +317,7 @@ writeSplitAlignList(CharString path, std::vector<int> & list, std::vector<Pair<C
         if (*it > 0)
             loc = locations[(*it) - 1].loc;
         else
-            loc = otherEnd(locations[-(*it)+1].loc, options.readLength, options.maxInsertSize);
+            loc = otherEnd(locations[-(*it) - 1].loc, options.readLength, options.maxInsertSize);
 
         Pair<CharString, bool> c(loc.contig, loc.contigOri);
         std::vector<Pair<CharString, bool> >::iterator cIt = lower_bound(exclude.begin(), exclude.end(), c);
