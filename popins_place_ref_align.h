@@ -340,16 +340,13 @@ writeSplitAlignList(CharString path, std::vector<int> & list, std::vector<Pair<C
 inline bool
 isBetterRefAligned(LocationInfo & loc, String<LocationInfo> & group)
 {
-    if (loc.insPos == 0)
+    if (loc.insPos <= 0)
         return false;
 
     if (group[0].otherEnd && !loc.otherEnd)
         return false;
 
-    if (loc.loc.chrOri && loc.contigLength - loc.insPos <= group[0].contigLength - group[0].insPos)
-        return false;
-
-    if (!loc.loc.chrOri && loc.insPos <= group[0].insPos)
+    if (loc.contigLength <= group[0].contigLength)
         return false;
 
     return true;
@@ -393,10 +390,20 @@ setInsPos(LocationInfo & a, LocationInfo & b,
         return;
     }
 
+    unsigned bPos = b.insPos;
+    if (!a.loc.chrOri)
+        bPos = length(contigB) - b.insPos;
+
+    if (bPos < (int)beginPosition(gapsB) || bPos >= (int)endPosition(gapsB))
+    {
+        a.insPos = -1;
+        return;
+    }
+
     if (a.loc.chrOri)
         a.insPos = toSourcePosition(gapsA, toViewPosition(gapsB, b.insPos));
     else
-        a.insPos = length(contigA) - toSourcePosition(gapsA, toViewPosition(gapsB, length(contigB) - b.insPos));
+        a.insPos = length(contigA) - toSourcePosition(gapsA, toViewPosition(gapsB, bPos));
 }
 
 // ---------------------------------------------------------------------------------------
@@ -449,6 +456,9 @@ contigEndsAlign(LocationInfo & a, LocationInfo & b, std::vector<std::pair<CharSt
     }
 
     SEQAN_ASSERT_EQ(a.loc.chrOri, b.loc.chrOri);
+
+//    std::cout << itA->first << "  " << length(itA->second) << std::endl;
+//    std::cout << itB->first << "  " << length(itB->second) << std::endl;
 
     if (!a.loc.contigOri)
     {
@@ -978,14 +988,14 @@ processOverlappingLocs(TStream1 & vcfStream,
     findRefAlignedGroups(refAlignedGroups, unaligned, locations, contigs, fai, options);
     clear(locations);
 
-//    std::cout << "refAlignedGroups: " << length(refAlignedGroups);
+//    std::cout << "refAlignedGroups: " << length(refAlignedGroups) << std::endl;
 
     // Handle the ref-aligned groups.
     processRefAlignedGroups(vcfStream, groupStream, refAlignedGroups, splitAlignLists, contigs, fai, options);
     appendGroups(groups, refAlignedGroups);
     clear(refAlignedGroups);
 
-//    std::cout << "   unaligned: " << length(unaligned);
+//    std::cout << "   unaligned: " << length(unaligned) << std::endl;
 
     // Split the unaligned locations into groups.
     findUnalignedGroups(unalignedGroups, unaligned, contigs);
