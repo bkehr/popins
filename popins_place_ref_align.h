@@ -346,7 +346,10 @@ isBetterRefAligned(LocationInfo & loc, String<LocationInfo> & group)
     if (group[0].otherEnd && !loc.otherEnd)
         return false;
 
-    if (loc.contigLength - loc.insPos <= group[0].contigLength - group[0].insPos)
+    if (loc.loc.chrOri && loc.contigLength - loc.insPos <= group[0].contigLength - group[0].insPos)
+        return false;
+
+    if (!loc.loc.chrOri && loc.insPos <= group[0].insPos)
         return false;
 
     return true;
