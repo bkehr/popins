@@ -489,27 +489,12 @@ int popins_assemble(int argc, char const ** argv)
         std::cerr << "[" << time(0) << "] " << logMsg << std::endl;
     }
 
-    CharString tmpDir = options.workingDirectory;
-    if (options.tmpDir != "")
-    {
-        errno = 0;
-        char* tempDir = mkdtemp(toCString(options.tmpDir));
-        if (errno != 0)
-        {
-            if (errno == EINVAL) std::cerr << "ERROR: Temporary directory does not end in XXXXXX: " << options.tmpDir << std::endl;
-            else std::cerr << "ERROR: Could not create temporary directory at " << options.tmpDir << std::endl;
-            return 1;
-        }
-        tmpDir = tempDir;
-        std::cerr << "[" << time(0) << "] Using temporary directory " << tempDir << std::endl;
-    }
+    CharString matesBam = getFileName(options.workingDirectory, "mates.bam");
 
-    CharString matesBam = getFileName(tmpDir, "mates.bam");
-
-    CharString fastqFirstTemp = getFileName(tmpDir, "paired.1.fastq");
-    CharString fastqSecondTemp = getFileName(tmpDir, "paired.2.fastq");
-    CharString fastqSingleTemp = getFileName(tmpDir, "single.fastq");
-    CharString nonRefBamTemp = getFileName(tmpDir, "non_ref_tmp.bam");
+    CharString fastqFirstTemp = getFileName(options.workingDirectory, "paired.1.fastq");
+    CharString fastqSecondTemp = getFileName(options.workingDirectory, "paired.2.fastq");
+    CharString fastqSingleTemp = getFileName(options.workingDirectory, "single.fastq");
+    CharString nonRefBamTemp = getFileName(options.workingDirectory, "non_ref_tmp.bam");
 
     CharString fastqFirst = getFileName(options.workingDirectory, "paired.1.fastq");
     CharString fastqSecond = getFileName(options.workingDirectory, "paired.2.fastq");
@@ -548,7 +533,7 @@ int popins_assemble(int argc, char const ** argv)
         std::cerr << "[" << time(0) << "] " << "Sorting " << matesBam << " using " << SAMTOOLS << std::endl;
         std::stringstream cmd;
         if (options.referenceFile != "")
-            cmd << SAMTOOLS << " sort -n -@ " << options.threads << " -m " << options.memory << " " << matesBam << " " << tmpDir << "/non_ref_tmp";
+            cmd << SAMTOOLS << " sort -n -@ " << options.threads << " -m " << options.memory << " " << matesBam << " " << options.workingDirectory << "/non_ref_tmp";
         else
             cmd << SAMTOOLS << " sort -n -@ " << options.threads << " -m " << options.memory << " " << matesBam << " " << options.workingDirectory << "/non_ref";
         if (system(cmd.str().c_str()) != 0)
@@ -566,9 +551,9 @@ int popins_assemble(int argc, char const ** argv)
             fastqFiles = Triple<CharString>(fastqFirst, fastqSecond, fastqSingle);
 
             // Align with bwa, update fastq files of unaligned reads, and sort remaining bam records by read name.
-            CharString remappedBam = getFileName(tmpDir, "remapped.bam");
+            CharString remappedBam = getFileName(options.workingDirectory, "remapped.bam");
             CharString prefix = "";
-            if (remapping(fastqFilesTemp, fastqFiles, options.referenceFile, tmpDir,
+            if (remapping(fastqFilesTemp, fastqFiles, options.referenceFile, options.workingDirectory,
                           options.humanSeqs, options.threads, options.memory, prefix) != 0)
                 return 1;
 
@@ -582,22 +567,22 @@ int popins_assemble(int argc, char const ** argv)
     }
 
 
-    CharString firstFiltered = getFileName(tmpDir, "filtered.paired.1.fastq");
-    CharString secondFiltered = getFileName(tmpDir, "filtered.paired.2.fastq");
-    CharString singleFiltered = getFileName(tmpDir, "filtered.single.fastq");
+    CharString firstFiltered = getFileName(options.workingDirectory, "filtered.paired.1.fastq");
+    CharString secondFiltered = getFileName(options.workingDirectory, "filtered.paired.2.fastq");
+    CharString singleFiltered = getFileName(options.workingDirectory, "filtered.single.fastq");
     Triple<CharString> filteredFiles(firstFiltered, secondFiltered, singleFiltered);
 
     // Quality filtering/trimming with sickle.
-    if (sickle_filtering(filteredFiles, fastqFiles, tmpDir) != 0)
+    if (sickle_filtering(filteredFiles, fastqFiles, options.workingDirectory) != 0)
         return 1;
 
 
     // MP handling
-    CharString matesMPBam = getFileName(tmpDir, "MP.mates.bam");
-    CharString fastqMPFirstTemp = getFileName(tmpDir, "MP.paired.1.fastq");
-    CharString fastqMPSecondTemp = getFileName(tmpDir, "MP.paired.2.fastq");
-    CharString fastqMPSingleTemp = getFileName(tmpDir, "MP.single.fastq");
-    CharString nonRefBamMPTemp = getFileName(tmpDir, "MP.non_ref_tmp.bam");
+    CharString matesMPBam = getFileName(options.workingDirectory, "MP.mates.bam");
+    CharString fastqMPFirstTemp = getFileName(options.workingDirectory, "MP.paired.1.fastq");
+    CharString fastqMPSecondTemp = getFileName(options.workingDirectory, "MP.paired.2.fastq");
+    CharString fastqMPSingleTemp = getFileName(options.workingDirectory, "MP.single.fastq");
+    CharString nonRefBamMPTemp = getFileName(options.workingDirectory, "MP.non_ref_tmp.bam");
 
     CharString fastqMPFirst = getFileName(options.workingDirectory, "MP.paired.1.fastq");
     CharString fastqMPSecond = getFileName(options.workingDirectory, "MP.paired.2.fastq");
@@ -637,7 +622,7 @@ int popins_assemble(int argc, char const ** argv)
             std::cerr << "[" << time(0) << "] " << "Sorting " << matesMPBam << " using " << SAMTOOLS << std::endl;
             std::stringstream cmd;
             if (options.referenceFile != "")
-                cmd << SAMTOOLS << " sort -n -@ " << options.threads << " -m " << options.memory << " " << matesMPBam << " " << tmpDir << "/MP.non_ref_tmp";
+                cmd << SAMTOOLS << " sort -n -@ " << options.threads << " -m " << options.memory << " " << matesMPBam << " " << options.workingDirectory << "/MP.non_ref_tmp";
             else
                 cmd << SAMTOOLS << " sort -n -@ " << options.threads << " -m " << options.memory << " " << matesMPBam << " " << options.workingDirectory << "/MP.non_ref";
             if (system(cmd.str().c_str()) != 0)
@@ -655,9 +640,9 @@ int popins_assemble(int argc, char const ** argv)
                 fastqMPFiles = Triple<CharString>(fastqMPFirst, fastqMPSecond, fastqMPSingle);
 
                 // Align with bwa, update fastq files of unaligned reads, and sort remaining bam records by read name.
-                CharString remappedMPBam = getFileName(tmpDir, "MP.remapped.bam");
+                CharString remappedMPBam = getFileName(options.workingDirectory, "MP.remapped.bam");
                 CharString prefix = "MP.";
-                if (remapping(fastqMPFilesTemp, fastqMPFiles, options.referenceFile, tmpDir,
+                if (remapping(fastqMPFilesTemp, fastqMPFiles, options.referenceFile, options.workingDirectory,
                               options.humanSeqs, options.threads, options.memory, prefix) != 0)
                     return 1;
 
@@ -672,19 +657,19 @@ int popins_assemble(int argc, char const ** argv)
     }
 
 
-    CharString firstMPFiltered = getFileName(tmpDir, "MP.filtered.paired.1.fastq");
-    CharString secondMPFiltered = getFileName(tmpDir, "MP.filtered.paired.2.fastq");
-    CharString singleMPFiltered = getFileName(tmpDir, "MP.filtered.single.fastq");
+    CharString firstMPFiltered = getFileName(options.workingDirectory, "MP.filtered.paired.1.fastq");
+    CharString secondMPFiltered = getFileName(options.workingDirectory, "MP.filtered.paired.2.fastq");
+    CharString singleMPFiltered = getFileName(options.workingDirectory, "MP.filtered.single.fastq");
 
     Triple<CharString> filteredMPFiles(firstMPFiltered, secondMPFiltered, singleMPFiltered);
 
     if (options.matepair) {
-        if (sickle_filtering(filteredMPFiles,fastqMPFiles, tmpDir) != 0)
+        if (sickle_filtering(filteredMPFiles,fastqMPFiles, options.workingDirectory) != 0)
             return 1;
     }
 
     // Assembly with velvet.
-    CharString assemblyDirectory = getFileName(tmpDir, "assembly");
+    CharString assemblyDirectory = getFileName(options.workingDirectory, "assembly");
     if (velvet_assembly(filteredFiles, filteredMPFiles, assemblyDirectory, options.kmerLength, options.matepair) != 0) return 1;
 
     remove(toCString(firstFiltered));
@@ -707,16 +692,6 @@ int popins_assemble(int argc, char const ** argv)
     dst.close();
 
     removeAssemblyDirectory(assemblyDirectory);
-
-    if (options.tmpDir != "")
-    {
-        if (remove(toCString(tmpDir)) != 0)
-        {
-            std::cerr << "ERROR: Could not remove temporary directory " << tmpDir << std::endl;
-            return 1;
-        }
-        std::cerr << "[" << time(0) << "] " << "Temporary directory " << tmpDir << " removed." << std::endl;
-    }
 
     return ret;
 }

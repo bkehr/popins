@@ -175,7 +175,6 @@ struct AssemblyOptions {
     CharString matepairFile;
     CharString referenceFile;
     CharString workingDirectory;
-    CharString tmpDir;
 
     unsigned kmerLength;
     CharString adapters;
@@ -375,9 +374,6 @@ setupParser(ArgumentParser & parser, AssemblyOptions & options)
     // Setup the options.
     addOption(parser, ArgParseOption("d", "directory", "Path to working directory.", ArgParseArgument::STRING, "PATH"));
     setDefaultValue(parser, "directory", "current directory");
-
-    addOption(parser, ArgParseOption("tmp", "tmpdir", "Path to a temporary directory ending with XXXXXX.", ArgParseArgument::STRING, "PATH"));
-    setDefaultValue(parser, "tmpdir", "same as working directory");
 
     addOption(parser, ArgParseOption("k", "kmerLength", "The k-mer size for velvet assembly.", ArgParseArgument::INTEGER, "INT"));
     setDefaultValue(parser, "kmerLength", options.kmerLength);
@@ -676,8 +672,6 @@ getOptionValues(AssemblyOptions & options, ArgumentParser const & parser)
         getOptionValue(options.kmerLength, parser, "kmerLengh");
     if (isSet(parser, "directory"))
         getOptionValue(options.workingDirectory, parser, "directory");
-    if (isSet(parser, "tmpdir"))
-        getOptionValue(options.tmpDir, parser, "tmpdir");
     if (isSet(parser, "adapters"))
         getOptionValue(options.adapters, parser, "adapters");
     if (isSet(parser, "filter"))
