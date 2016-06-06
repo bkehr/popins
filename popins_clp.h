@@ -280,12 +280,9 @@ struct PlacingOptions {
 
     unsigned groupDist;
 
-    bool verbose;
-
     PlacingOptions() :
         locationsFile("locations.txt"), groupsFile("groups.txt"), bamFile(""),
-        minLocScore(0.3), minAnchorReads(2), readLength(100), maxInsertSize(800), groupDist(100),
-        verbose(false)
+        minLocScore(0.3), minAnchorReads(2), readLength(100), maxInsertSize(800), groupDist(100)
     {}
 };
 
@@ -587,7 +584,6 @@ setupParser(ArgumentParser & parser, PlacingOptions & options)
     addSection(parser, "Output options");
     addOption(parser, ArgParseOption("l", "locations", "Name of merged locations file if placing is run in one program call.", ArgParseArgument::OUTPUTFILE, "FILE"));
     addOption(parser, ArgParseOption("g", "groups", "Name of groups output file.", ArgParseArgument::OUTPUTFILE, "FILE"));
-    addOption(parser, ArgParseOption("v", "verbose", "Enable verbose output."));
 
     setMinValue(parser, "m", "0");
     setMaxValue(parser, "m", "1");
@@ -877,8 +873,6 @@ getOptionValues(PlacingOptions & options, ArgumentParser & parser)
         }
 
     }
-
-    options.verbose = isSet(parser, "verbose");
 
     return 0;
 }

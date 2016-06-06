@@ -292,12 +292,12 @@ readInputFiles(std::map<TSize, Contig<TSeq> > & contigs,
         if (batch.batchesInTotal == 1) // -i and -b options are not set -> read all contigs
         {
             if (readContigs(contigs, batch) != 0) return 1;
-            if (readAndMergeComponents(components, skipped, options.componentFiles, batch, options.verbose) != 0) return 1;  // --> popins_merge_partition.h
+            if (readAndMergeComponents(components, skipped, options.componentFiles, batch) != 0) return 1;  // --> popins_merge_partition.h
         }
         else                      // -i and -b options are set -> read contigs for this batch of components
         {
             if (countContigs(batch)) return 1;
-            if (readAndMergeComponents(components, skipped, options.componentFiles, batch, options.verbose) != 0) return 1;  // --> popins_merge_partition.h
+            if (readAndMergeComponents(components, skipped, options.componentFiles, batch) != 0) return 1;  // --> popins_merge_partition.h
             if (readContigs(contigs, components, batch) != 0) return 1; // TODO: Exclude singletons of lowEntropy.
         }
     }
@@ -406,7 +406,7 @@ int popins_merge(int argc, char const ** argv)
             writeAlignedPairs(options.outputStream, alignedPairs);
         else
         {
-            skipped = unionFindToComponents(components, uf, alignedPairs, batch, options.verbose);
+            skipped = unionFindToComponents(components, uf, alignedPairs, batch);
             addSingletons(components, contigs, skipped, uf, batch.contigsInTotal);
         }
     }

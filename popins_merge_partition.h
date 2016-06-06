@@ -366,8 +366,7 @@ std::set<int>
 unionFindToComponents(std::map<TSize, ContigComponent<TSeq> > & components,
         UnionFind<int> & uf,
         std::set<Pair<TSize> > & alignedPairs,
-        ContigBatch & batch,
-        bool /*verbose*/)
+        ContigBatch & batch)
 {
     std::set<int> skipped;
     std::ostringstream msg;
@@ -385,7 +384,7 @@ unionFindToComponents(std::map<TSize, ContigComponent<TSeq> > & components,
         // skip components that are 10 times larger than number of samples
         if (uf._values[set] < -10 * (int)length(batch.contigFiles)) 
         {
-            if (verbose && skipped.count(set) == 0)
+            if (skipped.count(set) == 0)
             {
                 msg.str("");
                 msg << "WARNING: Skipping component of size " << (-1*uf._values[set]);
@@ -473,8 +472,7 @@ bool
 readAndMergeComponents(std::map<TSize, ContigComponent<TSequence> > & components,
         std::set<int> & skipped,
         String<CharString> & componentFiles,
-        ContigBatch & batch,
-        bool verbose)
+        ContigBatch & batch)
 {
     typedef std::map<TSize, ContigComponent<TSequence> > TComponents;
     typedef typename TComponents::iterator TCompIterator;
@@ -491,7 +489,7 @@ readAndMergeComponents(std::map<TSize, ContigComponent<TSequence> > & components
         if (readAlignedPairs(uf, alignedPairs, componentFiles[i], batch.contigsInTotal) != 0) return 1;
 
     // Convert union-find data structure to components.
-    skipped = unionFindToComponents(components, uf, alignedPairs, batch, verbose);
+    skipped = unionFindToComponents(components, uf, alignedPairs, batch);
 
     // Add singleton contigs to components (= those contigs that don't align to any other contig).
     addSingletons(components, skipped, uf, batch.contigsInTotal);
