@@ -36,7 +36,7 @@ inline int
 remapping(Triple<CharString> & fastqFilesTemp,
         Triple<CharString> & fastqFiles,
         CharString const & referenceFile,
-        CharString const & tempDir,
+        CharString const & workingDir,
         unsigned humanSeqs,
         unsigned threads,
         CharString & memory,
@@ -46,16 +46,19 @@ remapping(Triple<CharString> & fastqFilesTemp,
 
     CharString f1 = prefix;
     f1 += "remapped.sam";
-    CharString remappedSam = getFileName(tempDir, f1);
+    CharString remappedSam = getFileName(workingDir, f1);
+
     CharString f2 = prefix;
     f2 += "remapped.bam";
-    CharString remappedBam = getFileName(tempDir, f2);
+    CharString remappedBam = getFileName(workingDir, f2);
+
     CharString f3 = prefix;
     f3 += "remapped.bam.bai";
-    CharString remappedBai = getFileName(tempDir, f3);
+    CharString remappedBai = getFileName(workingDir, f3);
+
     CharString f4 = prefix;
     f4 += "remapped_unsorted.bam";
-    CharString remappedUnsortedBam = getFileName(tempDir, f4);
+    CharString remappedUnsortedBam = getFileName(workingDir, f4);
 
     std::ostringstream msg;
     msg << "Remapping unmapped reads using " << BWA;
@@ -104,8 +107,7 @@ remapping(Triple<CharString> & fastqFilesTemp,
 
     // Sort bam file.
     cmd.str("");
-    cmd << SAMTOOLS << " sort -@ " << threads << " -m " << memory << " " << remappedUnsortedBam << " " << tempDir << "/remapped";
-    cmd << SAMTOOLS << " sort -@ " << threads << " -m " << memory << " " << remappedUnsortedBam << " " << tempDir << "/" << prefix << "remapped";
+    cmd << SAMTOOLS << " sort -@ " << threads << " -m " << memory << " -o " << remappedBam << " " << remappedUnsortedBam;
     if (system(cmd.str().c_str()) != 0)
     {
         std::cerr << "ERROR while sorting BWA output " << remappedUnsortedBam << std::endl;
@@ -140,7 +142,7 @@ remapping(Triple<CharString> & fastqFilesTemp,
 
     // Sort <WD>/remapped.bam by read name.
     cmd.str("");
-    cmd << SAMTOOLS << " sort -n -@ " << threads << " -m " << memory << " " << remappedUnsortedBam << " " << tempDir << "/remapped";
+    cmd << SAMTOOLS << " sort -n -@ " << threads << " -m " << memory << " -o " << remappedBam << " " << remappedUnsortedBam << " ";
     if (system(cmd.str().c_str()) != 0)
     {
         std::cerr << "ERROR while sorting " << remappedUnsortedBam << std::endl;
@@ -517,23 +519,13 @@ int popins_assemble(int argc, char const ** argv)
     }
 
     CharString matesBam = getFileName(options.workingDirectory, "mates.bam");
-
-    CharString fastqFirstTemp = getFileName(options.workingDirectory, "paired.1.fastq");
-    CharString fastqSecondTemp = getFileName(options.workingDirectory, "paired.2.fastq");
-    CharString fastqSingleTemp = getFileName(options.workingDirectory, "single.fastq");
     CharString nonRefBamTemp = getFileName(options.workingDirectory, "non_ref_tmp.bam");
+    CharString nonRefBam = getFileName(options.workingDirectory, "non_ref.bam");
 
     CharString fastqFirst = getFileName(options.workingDirectory, "paired.1.fastq");
     CharString fastqSecond = getFileName(options.workingDirectory, "paired.2.fastq");
     CharString fastqSingle = getFileName(options.workingDirectory, "single.fastq");
-    CharString nonRefBam = getFileName(options.workingDirectory, "non_ref.bam");
-
-    Triple<CharString> fastqFiles;
-    if (options.referenceFile != "")
-        fastqFiles = Triple<CharString>(fastqFirstTemp, fastqSecondTemp, fastqSingleTemp);
-    else
-        fastqFiles = Triple<CharString>(fastqFirst, fastqSecond, fastqSingle);
-
+    Triple<CharString> fastqFiles = Triple<CharString>(fastqFirst, fastqSecond, fastqSingle);
 
     // check if files already exits
     std::fstream stream(toCString(fastqFirst));
@@ -567,9 +559,9 @@ int popins_assemble(int argc, char const ** argv)
         // Sort <WD>/mates.bam by read name.
         std::stringstream cmd;
         if (options.referenceFile != "")
-            cmd << SAMTOOLS << " sort -n -@ " << options.threads << " -m " << options.memory << " " << matesBam << " " << options.workingDirectory << "/non_ref_tmp";
+            cmd << SAMTOOLS << " sort -n -@ " << options.threads << " -m " << options.memory << " -o " << nonRefBamTemp << " " << matesBam;
         else
-            cmd << SAMTOOLS << " sort -n -@ " << options.threads << " -m " << options.memory << " " << matesBam << " " << options.workingDirectory << "/non_ref";
+            cmd << SAMTOOLS << " sort -n -@ " << options.threads << " -m " << options.memory << " -o " << nonRefBam << " " << matesBam;
         if (system(cmd.str().c_str()) != 0)
         {
             std::cerr << "ERROR while sorting " << matesBam << std::endl;
@@ -613,29 +605,21 @@ int popins_assemble(int argc, char const ** argv)
 
     // MP handling
     CharString matesMPBam = getFileName(options.workingDirectory, "MP.mates.bam");
-    CharString fastqMPFirstTemp = getFileName(options.workingDirectory, "MP.paired.1.fastq");
-    CharString fastqMPSecondTemp = getFileName(options.workingDirectory, "MP.paired.2.fastq");
-    CharString fastqMPSingleTemp = getFileName(options.workingDirectory, "MP.single.fastq");
     CharString nonRefBamMPTemp = getFileName(options.workingDirectory, "MP.non_ref_tmp.bam");
+    CharString nonRefMPBam = getFileName(options.workingDirectory, "MP.non_ref.bam");
 
     CharString fastqMPFirst = getFileName(options.workingDirectory, "MP.paired.1.fastq");
     CharString fastqMPSecond = getFileName(options.workingDirectory, "MP.paired.2.fastq");
     CharString fastqMPSingle = getFileName(options.workingDirectory, "MP.single.fastq");
-    CharString nonRefMPBam = getFileName(options.workingDirectory, "MP.non_ref.bam");
+    Triple<CharString> fastqMPFiles = Triple<CharString>(fastqMPFirst, fastqMPSecond, fastqMPSingle);
 
-    Triple<CharString> fastqMPFiles;
-    if (options.referenceFile != "")
-        fastqMPFiles = Triple<CharString>(fastqMPFirstTemp, fastqMPSecondTemp, fastqMPSingleTemp);
-    else
-        fastqMPFiles = Triple<CharString>(fastqMPFirst, fastqMPSecond, fastqMPSingle);
-
-
-    if (options.matepair) {
+    if (options.matepair)
+    {
         // check if MP files already exits
         std::fstream MPstream(toCString(fastqMPFirst));
         if (!MPstream.is_open())
         {
-               msg.str("");
+            msg.str("");
             msg << "Cropping unmapped matepair reads from " << options.matepairFile;
             printStatus(msg);
 
@@ -663,9 +647,9 @@ int popins_assemble(int argc, char const ** argv)
             // Sort <WD>/mates.bam by read name.
             std::stringstream cmd;
             if (options.referenceFile != "")
-                cmd << SAMTOOLS << " sort -n -@ " << options.threads << " -m " << options.memory << " " << matesMPBam << " " << options.workingDirectory << "/MP.non_ref_tmp";
+                cmd << SAMTOOLS << " sort -n -@ " << options.threads << " -m " << options.memory << " -o " << nonRefBamMPTemp << " " << matesMPBam;
             else
-                cmd << SAMTOOLS << " sort -n -@ " << options.threads << " -m " << options.memory << " " << matesMPBam << " " << options.workingDirectory << "/MP.non_ref";
+                cmd << SAMTOOLS << " sort -n -@ " << options.threads << " -m " << options.memory << " -o " << nonRefMPBam << " " << matesMPBam;
             if (system(cmd.str().c_str()) != 0)
             {
                 std::cerr << "ERROR while sorting " << matesMPBam << std::endl;
