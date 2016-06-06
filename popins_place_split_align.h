@@ -414,9 +414,10 @@ popins_place_split_read_align(String<LocationInfo> & locs,
         return 1;
     }
 
-    if (options.verbose) std::cerr << "0%   10   20   30   40   50   60   70   80   90   100%" << std::endl;
-    if (options.verbose) std::cerr << "|----|----|----|----|----|----|----|----|----|----|" << std::endl;
-    if (options.verbose) std::cerr << "*" << std::flush;
+    std::cerr << "0%   10   20   30   40   50   60   70   80   90   100%" << std::endl;
+    std::cerr << "|----|----|----|----|----|----|----|----|----|----|" << std::endl;
+    std::cerr << "*" << std::flush;
+
     double fiftieth = length(locs) / 50.0;
     unsigned progress = 0;
 
@@ -459,7 +460,7 @@ popins_place_split_read_align(String<LocationInfo> & locs,
 
         writeLocPos(outStream, (*it).loc, insPos, highCov);
 
-        while (options.verbose && progress * fiftieth < i)
+        while (progress * fiftieth < i)
         {
             std::cerr << "*" << std::flush;
             ++progress;
@@ -468,7 +469,7 @@ popins_place_split_read_align(String<LocationInfo> & locs,
         ++i;
         ++it;
     }
-    if (options.verbose) std::cerr << std::endl;
+    std::cerr << std::endl;
 
     return 0;
 }

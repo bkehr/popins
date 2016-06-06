@@ -522,7 +522,7 @@ constructSupercontigs(std::map<TSize, ContigComponent<TSequence> > & components,
 {
     typedef std::map<TSize, ContigComponent<TSequence> > TComponents;
 
-    if (options.verbose) std::cerr << "[" << time(0) << "] " << "Constructing supercontigs" << std::endl;
+    printStatus("Constructing supercontigs");
 
     unsigned numSingleton = 0;
     unsigned numBranching = 0;
@@ -584,9 +584,17 @@ constructSupercontigs(std::map<TSize, ContigComponent<TSequence> > & components,
 
     if (options.verbose)
     {
-        std::cerr << "[" << time(0) << "] " << length(components)-numSingleton << " components are merged from several contigs." << std::endl;
-        std::cerr << "[" << time(0) << "] " << numSingleton << " contigs did not align with any other contig." << std::endl;
-        std::cerr << "[" << time(0) << "] " << numBranching << " components are branching, given up on " << numVeryBranching << " of them." << std::endl;
+        std::ostringstream msg;
+        msg << length(components)-numSingleton << " components are merged from several contigs.";
+        printStatus(msg);
+
+        msg.str("");
+        msg << numSingleton << " contigs did not align with any other contig.";
+        printStatus(msg);
+
+        msg.str("");
+        msg << numBranching << " components are branching, given up on " << numVeryBranching << " of them.";
+        printStatus(msg);
     }
 }
 

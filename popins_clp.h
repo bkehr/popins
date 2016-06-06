@@ -10,6 +10,27 @@ using namespace seqan;
 
 // ==========================================================================
 
+void printStatus(const char * message)
+{
+        // Get the current date and time.
+        char timestamp[80];
+        time_t now = time(0);
+        struct tm tstruct;
+        tstruct = *localtime(&now);
+        strftime(timestamp, sizeof(timestamp), "[PopIns %Y-%m-%d %X] ", &tstruct);
+
+        // Print time and message.
+        std::cerr << timestamp << message << std::endl;
+}
+
+void printStatus(std::ostringstream & message)
+{
+        std::string msg = message.str();
+        printStatus(toCString(msg));
+}
+
+// ==========================================================================
+
 // Returns true if file exists, otherwise false.
 inline bool exists(CharString const & filename)
 {

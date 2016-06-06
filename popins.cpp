@@ -70,7 +70,11 @@ int main(int argc, char const ** argv)
     }
 
     if (ret == 0)
-        std::cerr << "[" << time(0) << "] " << "popins " << command << " finished in " << (std::time(0) - start_time) << " seconds." << std::endl;
+    {
+        std::ostringstream msg;
+        msg << "popins " << command << " finished in " << (std::time(0) - start_time) << " seconds.";
+        printStatus(msg);
+    }
     return ret;
 }
 

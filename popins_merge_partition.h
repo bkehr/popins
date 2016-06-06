@@ -82,8 +82,9 @@ filterByEntropy(std::map<TSize, Contig<TSeq> > & contigs,
         return 1;
     }
 
-    if (options.verbose)
-        std::cerr << "[" << time(0) << "] " << "Passed entropy filter: " << length(contigs) << std::endl;
+    std::ostringstream msg;
+    msg << "Passed entropy filter: " << length(contigs);
+    printStatus(msg);
 
     return 0;
 }
@@ -168,8 +169,8 @@ partitionContigs(UnionFind<int> & uf,
     typedef Index<TStringSet, IndexQGram<SimpleShape, OpenAddressing> > TIndex;
     typedef Finder<TSeq, Swift<SwiftLocal> > TFinder;
 
-    if (options.verbose) std::cerr << "[" << time(0) << "] " << "Partitioning contigs" << std::endl;
-    if (options.verbose) std::cerr << "[" << time(0) << "] " << "- Indexing batch of contigs" << std::endl;
+    printStatus("Partitioning contigs");
+    printStatus("- Indexing batch of contigs");
 
     TSize numComparisons = 0;
 
@@ -192,10 +193,10 @@ partitionContigs(UnionFind<int> & uf,
     int diagExtension = options.minScore/10;
 
     // print status bar
-    if (options.verbose) std::cerr << "[" << time(0) << "] " << "- Streaming over all contig files" << std::endl;
-    if (options.verbose) std::cerr << "0%   10   20   30   40   50   60   70   80   90   100%" << std::endl;
-    if (options.verbose) std::cerr << "|----|----|----|----|----|----|----|----|----|----|" << std::endl;
-    //unsigned fiftieth = std::max((indexOffset(batch)+length(contigs)/2)/50, 1u);
+    printStatus("- Streaming over all contig files");
+    std::cerr << "0%   10   20   30   40   50   60   70   80   90   100%" << std::endl;
+    std::cerr << "|----|----|----|----|----|----|----|----|----|----|" << std::endl;
+
     unsigned fiftieth = std::max((indexOffset(batch)+batchSize(batch))/50, 1);
 
     // stream over the contigs
@@ -204,7 +205,7 @@ partitionContigs(UnionFind<int> & uf,
     //for (unsigned a = 0; a < indexOffset(batch)+length(contigs)/2; ++a)
     for (int a = 0; a < indexOffset(batch)+batchSize(batch); ++a)
     {
-        if (options.verbose && a%fiftieth == 0) std::cerr << "*" << std::flush;
+        if (a%fiftieth == 0) std::cerr << "*" << std::flush;
 
         // read the next contig
         Contig<TSeq> contig;
@@ -257,10 +258,15 @@ partitionContigs(UnionFind<int> & uf,
             if (uf._values[findSet(uf, a)] < -100) break;
         }
     }
-    if (options.verbose) std::cerr << std::endl;
+    std::cerr << std::endl;
 
-    std::cerr << "[" << time(0) << "] " << "Number of pairwise comparisons: " << numComparisons << std::endl;
-    std::cerr << "[" << time(0) << "] " << "Number of valid alignments:     " << length(alignedPairs) << std::endl;
+    std::ostringstream msg;
+    msg << "Number of pairwise comparisons: " << numComparisons;
+    printStatus(msg);
+
+    msg.str("");
+    msg << "Number of valid alignments:     " << length(alignedPairs);
+    printStatus(msg);
 
     return 0;
 }
@@ -286,7 +292,7 @@ writeAlignedPairs(TStream & outputStream, std::set<Pair<TSize> > & alignedPairs)
 
 template<typename TSize>
 bool
-readAlignedPairs(UnionFind<int> & uf, std::set<Pair<TSize> > & alignedPairs, CharString & fileName, unsigned len, bool verbose)
+readAlignedPairs(UnionFind<int> & uf, std::set<Pair<TSize> > & alignedPairs, CharString & fileName, unsigned len)
 {
     // Open the input file and initialize record reader.
     std::fstream stream(toCString(fileName), std::ios::in);
@@ -344,7 +350,9 @@ readAlignedPairs(UnionFind<int> & uf, std::set<Pair<TSize> > & alignedPairs, Cha
 
     }
 
-    if (verbose) std::cerr << "[" << time(0) << "] " << "Loaded " << fileName << ": " << numPairs << " pairs." << std::endl;
+    std::ostringstream msg;
+    msg << "Loaded " << fileName << ": " << numPairs << " pairs.";
+    printStatus(msg);
 
     return 0;
 }
@@ -360,8 +368,9 @@ unionFindToComponents(std::map<TSize, ContigComponent<TSeq> > & components,
         std::set<Pair<TSize> > & alignedPairs,
         ContigBatch & batch,
         bool /*verbose*/)
-        {
+{
     std::set<int> skipped;
+    std::ostringstream msg;
 
     // Determine components from Union-Find data structure by
     // mapping ids to their representative id.
@@ -378,7 +387,10 @@ unionFindToComponents(std::map<TSize, ContigComponent<TSeq> > & components,
         {
             if (verbose && skipped.count(set) == 0)
             {
-                std::cerr << "[" << time(0) << "] " << "WARNING: Skipping component of size " << (-1*uf._values[set]) << std::endl;
+                msg.str("");
+                msg << "WARNING: Skipping component of size " << (-1*uf._values[set]);
+                printStatus(msg);
+
                 skipped.insert(set);
             }
             skipped.insert((*it).i1);
@@ -396,9 +408,12 @@ unionFindToComponents(std::map<TSize, ContigComponent<TSeq> > & components,
         }
     }
 
-    std::cerr << "[" << time(0) << "] " << "There are " << components.size() << " components." << std::endl;
+    msg.str("");
+    msg << "There are " << components.size() << " components.";
+    printStatus(msg);
+
     return skipped;
-        }
+}
 
 // --------------------------------------------------------------------------
 // Function addSingletons()
@@ -421,7 +436,9 @@ addSingletons(std::map<TSize, ContigComponent<TSeq> > & components,
         }
     }
 
-    std::cerr << "[" << time(0) << "] " << "Added " << numSingletons << " singletons to components." << std::endl;
+    std::ostringstream msg;
+    msg << "Added " << numSingletons << " singletons to components.";
+    printStatus(msg);
 }
 
 template<typename TSize, typename TSeq>
@@ -442,7 +459,9 @@ addSingletons(std::map<TSize, ContigComponent<TSeq> > & components,
         }
     }
 
-    std::cerr << "[" << time(0) << "] " << "Added " << numSingletons << " singletons to components." << std::endl;
+    std::ostringstream msg;
+    msg << "Added " << numSingletons << " singletons to components.";
+    printStatus(msg);
 }
 
 // ==========================================================================
@@ -460,7 +479,7 @@ readAndMergeComponents(std::map<TSize, ContigComponent<TSequence> > & components
     typedef std::map<TSize, ContigComponent<TSequence> > TComponents;
     typedef typename TComponents::iterator TCompIterator;
 
-    std::cerr << "[" << time(0) << "] " << "Reading and merging components files" << std::endl;
+    printStatus("Reading and merging components files");
 
     // Initialize Union-Find data structure.
     UnionFind<int> uf;
@@ -469,7 +488,7 @@ readAndMergeComponents(std::map<TSize, ContigComponent<TSequence> > & components
 
     // Read the aligned pairs from input files and join sets.
     for (unsigned i = 0; i < length(componentFiles); ++i)
-        if (readAlignedPairs(uf, alignedPairs, componentFiles[i], batch.contigsInTotal, verbose) != 0) return 1;
+        if (readAlignedPairs(uf, alignedPairs, componentFiles[i], batch.contigsInTotal) != 0) return 1;
 
     // Convert union-find data structure to components.
     skipped = unionFindToComponents(components, uf, alignedPairs, batch, verbose);

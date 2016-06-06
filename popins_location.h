@@ -42,7 +42,6 @@ struct AnchoringRecord
 {
     typedef Position<CharString>::Type TPos;
 
-    // TODO replace by GenomicInterval
     CharString chr;
     TPos chrStart;
     TPos chrEnd;
@@ -97,7 +96,6 @@ struct Location
 {
     typedef Position<CharString>::Type TPos;
 
-    // TODO replace by GenomicInterval
     CharString chr;
     TPos chrStart;
     TPos chrEnd;
@@ -1097,7 +1095,7 @@ int mergeLocationsBatch(std::fstream & stream, String<Location> & locations, Str
 // ==========================================================================
 
 int
-mergeLocations(std::fstream & stream, String<Location> & locations, String<CharString> & locationsFiles, CharString & outFile, unsigned maxInsertSize, bool verbose)
+mergeLocations(std::fstream & stream, String<Location> & locations, String<CharString> & locationsFiles, CharString & outFile, unsigned maxInsertSize)
 {
     String<CharString> tmpFiles;
     unsigned batchSize = 500;
@@ -1116,7 +1114,9 @@ mergeLocations(std::fstream & stream, String<Location> & locations, String<CharS
     // Write a temporary file for each batch of files.
     for (unsigned offset = 0; offset < length(locationsFiles); offset += batchSize)
     {
-        if (verbose) std::cerr << "[" << time(0) << "] " << "Merging batch " << (offset/batchSize)+1 << " of location files." << std::endl;
+        std::ostringstream msg;
+        msg << "Merging batch " << (offset/batchSize)+1 << " of location files.";
+        printStatus(msg);
 
         // Create temporary file name.
         std::stringstream tmpName;
@@ -1136,8 +1136,9 @@ mergeLocations(std::fstream & stream, String<Location> & locations, String<CharS
         if (mergeLocationsBatch(tmpStream, locs, locationsFiles, offset, batchSize, maxInsertSize) != 0) return 1;
     }
 
+    printStatus("Merging temporary location files.");
+
     // Merge and remove the temporary files.
-    if (verbose) std::cerr << "[" << time(0) << "] " << "Merging temporary location files." << std::endl;
     if (mergeLocationsBatch(stream, locations, tmpFiles, 0, length(tmpFiles), maxInsertSize) != 0) return 1;
     for (unsigned i = 0; i < length(tmpFiles); ++i) remove(toCString(tmpFiles[i]));
 

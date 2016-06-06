@@ -427,13 +427,14 @@ popins_place_combine(TStream & vcfStream, PlacingOptions & options)
         return 1;
     }
 
-    if (options.verbose)
-    {
-        std::cerr << "[" << time(0) << "] " << "Loading the placed locations from " << length(options.locationsFiles) << " locations files." << std::endl;
-        std::cerr << "0%   10   20   30   40   50   60   70   80   90   100%" << std::endl;
-        std::cerr << "|----|----|----|----|----|----|----|----|----|----|" << std::endl;
-        std::cerr << "*" << std::flush;
-    }
+    std::ostringstream msg;
+    msg << "Loading the placed locations from " << length(options.locationsFiles) << " locations files.";
+    printStatus(msg);
+
+    std::cerr << "0%   10   20   30   40   50   60   70   80   90   100%" << std::endl;
+    std::cerr << "|----|----|----|----|----|----|----|----|----|----|" << std::endl;
+    std::cerr << "*" << std::flush;
+
     double fiftieth = length(options.locationsFiles) / 50.0;
     unsigned progress = 0;
 
@@ -443,30 +444,31 @@ popins_place_combine(TStream & vcfStream, PlacingOptions & options)
         if (loadPlacedLocations(locs, options.locationsFiles[i]) != 0)
             return 1;
 
-        while (options.verbose && progress * fiftieth < i)
+        while (progress * fiftieth < i)
         {
             std::cerr << "*" << std::flush;
             ++progress;
         }
     }
+    std::cerr << std::endl;
 
-    if (options.verbose)
-        std::cerr << std::endl;
-
-    if (options.verbose)
-        std::cerr << "[" << time(0) << "] " << "Sorting " << locs.size() << " placed locations." << std::endl;
+    msg.str("");
+    msg << "Sorting " << locs.size() << " placed locations.";
+    printStatus(msg);
 
     // Sort placed locations.
     std::stable_sort(locs.begin(), locs.end(), PlacedLocLess());
 
-    if (options.verbose)
-        std::cerr << "[" << time(0) << "] " << "Combining the placed locations." << std::endl;
+    msg.str("");
+    msg << "Combining the placed locations.";
+    printStatus(msg);
 
     // Combine placing of the same locations.
     combineLocations(locs);
 
-    if (options.verbose)
-        std::cerr << "[" << time(0) << "] " << "Writing " << locs.size() << " combined locations to output file '" << options.outFile << "'." << std::endl;
+    msg.str("");
+    msg << "Writing " << locs.size() << " combined locations to output file '" << options.outFile << "'.";
+    printStatus(msg);
 
     // Choose the best position.
     for (unsigned i = 0; i < locs.size(); ++i)

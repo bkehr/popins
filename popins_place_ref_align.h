@@ -1020,8 +1020,7 @@ popins_place_ref_align(TStream & vcfStream,
         FaiIndex & fai,
         PlacingOptions & options)
 {
-    if (options.verbose)
-        std::cerr << "[" << time(0) << "] " << "Aligning contigs to reference:" << std::endl;
+    printStatus("Aligning contigs to reference");
 
     // Initialize splitAlignLists with all sample IDs (using locations).
     SampleLists splitAlignLists;
@@ -1053,8 +1052,9 @@ popins_place_ref_align(TStream & vcfStream,
 
     // --- Iterate over locations in sets of overlapping genomic positions.
 
-    if (options.verbose) std::cerr << "0%   10   20   30   40   50   60   70   80   90   100%" << std::endl;
-    if (options.verbose) std::cerr << "|----|----|----|----|----|----|----|----|----|----|" << std::endl;
+    std::cerr << "0%   10   20   30   40   50   60   70   80   90   100%" << std::endl;
+    std::cerr << "|----|----|----|----|----|----|----|----|----|----|" << std::endl;
+
     double fiftieth = length(locations) / 50.0;
     unsigned progress = 0;
 
@@ -1095,7 +1095,7 @@ popins_place_ref_align(TStream & vcfStream,
             prevPosRev = (*it).loc.chrEnd;
         }
 
-        while (options.verbose && progress * fiftieth < i)
+        while (progress * fiftieth < i)
         {
             std::cerr << "*" << std::flush;
             ++progress;
@@ -1110,11 +1110,8 @@ popins_place_ref_align(TStream & vcfStream,
     if (length(rev) != 0)
         processOverlappingLocs(vcfStream, outGroups, groups, splitAlignLists, rev, contigs, fai, options);
 
-    if (options.verbose)
-    {
-        std::cerr << "*" << std::endl;
-        std::cerr << "[" << time(0) << "] " << "Writing locations of contigs that do not align to the reference (per sample)." << std::endl;
-    }
+    std::cerr << "*" << std::endl;
+    printStatus("Writing locations of contigs that do not align to the reference (per sample).");
 
     // Find locations to exclude from splitAlignLists
     std::vector<Pair<CharString, bool> > exclude;

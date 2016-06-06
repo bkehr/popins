@@ -48,13 +48,13 @@ initVcf(TStream & vcfStream, PlacingOptions & options, FaiIndex & fai)
     // Get today's date, e.g. '2016-Apr-15'.
     time_t now = time(0);
     struct tm tstruct;
-    char buf[80];
+    char date[80];
     tstruct = *localtime(&now);
-    strftime(buf, sizeof(buf), "%Y-%b-%d", &tstruct);
+    strftime(date, sizeof(date), "%Y-%b-%d", &tstruct);
 
     // Write the header.
     vcfStream << "##fileformat=VCFv4.2" << std::endl;
-    vcfStream << "##fileDate=" << buf << std::endl;
+    vcfStream << "##fileDate=" << date << std::endl;
     vcfStream << "##source=PopIns_" << VERSION << std::endl;
     vcfStream << "##assembly=" << options.supercontigFile << std::endl;
     vcfStream << "##reference=" << options.referenceFile << std::endl;
@@ -90,11 +90,10 @@ mergeLocations(String<Location> & locations, PlacingOptions & options)
         return 1;
     }
 
-    // Merge approximate locations and write them to a file.
-    if (options.verbose)
-        std::cerr << "[" << time(0) << "] " << "Merging locations files." << std::endl;
+    printStatus("Merging locations files.");
 
-    if (mergeLocations(stream, locations, options.locationsFiles, options.locationsFile, options.maxInsertSize, options.verbose) != 0)
+    // Merge approximate locations and write them to a file.
+    if (mergeLocations(stream, locations, options.locationsFiles, options.locationsFile, options.maxInsertSize) != 0)
         return 1;
 
     return 0;
@@ -107,6 +106,8 @@ mergeLocations(String<Location> & locations, PlacingOptions & options)
 int
 loadLocations(String<LocationInfo> & locations, PlacingOptions & options)
 {
+	std::ostringstream msg;
+
     if (length(locations) == 0)
     {
         if (options.bamFile != "")
@@ -115,31 +116,36 @@ loadLocations(String<LocationInfo> & locations, PlacingOptions & options)
         LocationsFilter filter(options.minAnchorReads, options.minLocScore, 3*options.maxInsertSize);
         if (options.interval.i1 == "")
         {
-            if (options.verbose)
-                std::cerr << "[" << time(0) << "] " << "Reading locations from " << options.locationsFile << std::endl;
+            msg.str("");
+            msg << "Reading locations from " << options.locationsFile;
+            printStatus(msg);
+
             if (readLocations(locations, options.locationsFile, filter) != 0)
                 return 1;
         }
         else
         {
-            if (options.verbose)
-                std::cerr << "[" << time(0) << "] " << "Reading locations in " << options.interval.i1 << ":" << options.interval.i2 << "-" << options.interval.i3
-                << " from " << options.locationsFile << std::endl;
+            msg.str("");
+            msg << "Reading locations in " << options.interval.i1 << ":" << options.interval.i2 << "-" << options.interval.i3 << " from " << options.locationsFile;
+            printStatus(msg);
+
             if (readLocations(locations, options.locationsFile, options.interval, filter) != 0)
                 return 1;
         }
     }
     else
     {
-        if (options.verbose)
-            std::cerr << "[" << time(0) << "] " << "Sorting locations." << std::endl;
+        msg.str("");
+        msg << "Sorting locations.";
+        printStatus(msg);
 
         LocationInfoPosLess less;
         std::stable_sort(begin(locations), end(locations), less);
     }
 
-    if (options.verbose)
-        std::cerr << "[" << time(0) << "] " << "Loaded " << length(locations) << " locations that pass filters." << std::endl;
+    msg.str("");
+    msg << "Loaded " << length(locations) << " locations that pass filters.";
+    printStatus(msg);
 
     return 0;
 }
@@ -152,13 +158,13 @@ template<typename TSeq>
 bool
 loadContigs(std::vector<std::pair<CharString, TSeq> > & contigs,
         String<LocationInfo> & locs,
-        CharString & filename,
-        bool verbose)
+        CharString & filename)
 {
     typedef std::pair<CharString, TSeq> TPair;
 
-    if (verbose)
-        std::cerr << "[" << time(0) << "] " << "Reading contig sequences from " << filename << std::endl;
+    std::ostringstream msg;
+    msg << "Reading contig sequences from " << filename;
+    printStatus(msg);
 
     // Prepare the contigs vector to contain only contigs that anchor to a listed location.
     std::set<CharString> contigSet;
@@ -203,8 +209,9 @@ loadContigs(std::vector<std::pair<CharString, TSeq> > & contigs,
         }
     }
 
-    if (verbose)
-        std::cerr << "[" << time(0) << "] " << "Loaded " << contigs.size() << " contig sequences." << std::endl;
+    msg.str("");
+    msg << "Loaded " << contigs.size() << " contig sequences.";
+    printStatus(msg);
 
     std::stable_sort(contigs.begin(), contigs.end());
 
@@ -241,7 +248,7 @@ int popins_place(int argc, char const ** argv)
             return 1;
 
         // Load the contig file.
-        if (loadContigs(contigs, locs, options.supercontigFile, options.verbose) != 0)
+        if (loadContigs(contigs, locs, options.supercontigFile) != 0)
             return 1;
 
         // Open the FAI file of the reference genome.

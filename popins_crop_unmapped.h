@@ -451,22 +451,26 @@ crop_unmapped(Triple<CharString> & fastqFiles,
         }
     }
 
-    std::cerr << "[" << time(0) << "] Map of low quality mates has " << otherReads.size() << " records." << std::endl;
+    std::ostringstream msg;
+    msg << "Map of low quality mates has " << otherReads.size() << " records.";
+    printStatus("");
 
     // Write the remaining fastq records.
     if (writeFastq(fastqFirstStream, fastqSecondStream, fastqSingleStream, firstReads, secondReads) != 0) return 1;
     firstReads.clear();
     secondReads.clear();
 
-    std::cerr << "[" << time(0) << "] Unmapped reads written to ";
-    std::cerr << fastqFiles.i1 << ", " << fastqFiles.i2 << ", " << fastqFiles.i3 << std::endl;
+    msg.str("");
+    msg << "Unmapped reads written to " << fastqFiles.i1 << ", " << fastqFiles.i2 << ", " << fastqFiles.i3;
+    printStatus("");
 
     // Find the other read end of the low quality mapping reads and write them to the output bam file. 
     int found = findOtherReads(matesStream, otherReads, mappingBam);
     if (found == -1) return 1;
 
-    std::cerr << "[" << time(0) << "] Mapped mates of unmapped reads written to " << matesBam << " , ";
-    std::cerr << found << " found in second pass" << std::endl;
+    msg.str("");
+    msg << "Mapped mates of unmapped reads written to " << matesBam << " , " << found << " found in second pass.";
+    printStatus("");
 
     return 0;
 }
