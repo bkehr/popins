@@ -222,7 +222,6 @@ struct ContigMapOptions {
     CharString workingDirectory;
     unsigned threads;
     CharString memory;
-    CharString tmpDir;
     bool allAlignment;
     int maxInsertSize;
     bool keepNonRefNew;
@@ -495,9 +494,6 @@ setupParser(ArgumentParser & parser, ContigMapOptions & options)
     // Setup the option.
     addOption(parser, ArgParseOption("d", "directory", "Path to working directory.", ArgParseArgument::STRING, "PATH"));
     setDefaultValue(parser, "directory", "current directory");
-
-    addOption(parser, ArgParseOption("tmp", "tmpdir", "Path to a temporary directory ending with XXXXXX.", ArgParseArgument::STRING, "PATH"));
-    setDefaultValue(parser, "tmpdir", "same as working directory");
 
     addOption(parser, ArgParseOption("t", "threads", "Number of threads to use for bwa.", ArgParseArgument::INTEGER, "INT"));
     setDefaultValue(parser, "threads", options.threads);
@@ -776,8 +772,6 @@ getOptionValues(ContigMapOptions & options, ArgumentParser & parser)
 
     if (isSet(parser, "directory"))
         getOptionValue(options.workingDirectory, parser, "directory");
-    if (isSet(parser, "tmpdir"))
-        getOptionValue(options.tmpDir, parser, "tmpdir");
     if (isSet(parser, "all"))
         options.allAlignment = true;
     if (isSet(parser, "nonRefNew"))

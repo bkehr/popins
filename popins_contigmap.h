@@ -134,21 +134,6 @@ fill_sequences(CharString & outFile, CharString & inFile)
     return 0;
 }
 
-inline int
-removeTmpDir(CharString & tmpDir, CharString & workingDir)
-{
-    if (tmpDir != workingDir)
-    {
-        if (remove(toCString(tmpDir)) != 0)
-        {
-            std::cerr << "ERROR: Could not remove temporary directory " << tmpDir << std::endl;
-            return 1;
-        }
-        std::cerr << "[" << time(0) << "] " << "Temporary directory " << tmpDir << " removed." << std::endl;
-    }
-    return 0;
-}
-
 
 // ==========================================================================
 // Function popins_contigmap()
@@ -176,30 +161,11 @@ int popins_contigmap(int argc, char const ** argv)
         return 1;
     }
 
-    // Create temporary directory.
-    if (options.tmpDir == "")
-    {
-        options.tmpDir = options.workingDirectory;
-    }
-    else
-    {
-        errno = 0;
-        char* tempDir = mkdtemp(toCString(options.tmpDir));
-        if (errno != 0)
-        {
-            if (errno == EINVAL) std::cerr << "ERROR: Temporary directory does not end in XXXXXX: " << options.tmpDir << std::endl;
-            else std::cerr << "ERROR: Could not create temporary directory at " << options.tmpDir << std::endl;
-            return 1;
-        }
-        options.tmpDir = tempDir;
-        std::cerr << "[" << time(0) << "] Using temporary directory " << tempDir << std::endl;
-    }
-
     // Create names of temporary files.
-    CharString mappedSam = getFileName(options.tmpDir, "contig_mapped_unsorted.sam");
-    CharString mappedBamUnsorted = getFileName(options.tmpDir, "contig_mapped_unsorted.bam");
-    CharString mappedBam = getFileName(options.tmpDir, "contig_mapped.bam");
-    CharString mergedBam = getFileName(options.tmpDir, "merged.bam");
+    CharString mappedSam = getFileName(options.workingDirectory, "contig_mapped_unsorted.sam");
+    CharString mappedBamUnsorted = getFileName(options.workingDirectory, "contig_mapped_unsorted.bam");
+    CharString mappedBam = getFileName(options.workingDirectory, "contig_mapped.bam");
+    CharString mergedBam = getFileName(options.workingDirectory, "merged.bam");
 
     std::stringstream cmd;
 
@@ -212,7 +178,6 @@ int popins_contigmap(int argc, char const ** argv)
     if (system(cmd.str().c_str()) != 0)
     {
         std::cerr << "ERROR while running bwa on " << fastqFirst << " and " << fastqSecond << std::endl;
-        removeTmpDir(options.tmpDir, options.workingDirectory);
         return 1;
     }
     //remove(toCString(fastqFirst));
@@ -225,7 +190,6 @@ int popins_contigmap(int argc, char const ** argv)
     if (system(cmd.str().c_str()) != 0)
     {
         std::cerr << "ERROR while running bwa on " << fastqSingle << std::endl;
-        removeTmpDir(options.tmpDir, options.workingDirectory);
         return 1;
     }
     //remove(toCString(fastqSingle));
@@ -234,7 +198,6 @@ int popins_contigmap(int argc, char const ** argv)
     std::cerr << "[" << time(0) << "] Filling in sequences of secondary records in bwa output" << std::endl;
     if (fill_sequences(mappedBamUnsorted, mappedSam) != 0)
     {
-        removeTmpDir(options.tmpDir, options.workingDirectory);
         return 1;
     }
     remove(toCString(mappedSam));
@@ -242,21 +205,18 @@ int popins_contigmap(int argc, char const ** argv)
     // Sort <WD>/contig_mapped.bam by read name
     std::cerr << "[" << time(0) << "] " << "Sorting " << mappedBamUnsorted << " by read name using " << SAMTOOLS << std::endl;
     cmd.str("");
-    cmd << SAMTOOLS << " sort -n -@ " << options.threads << " -m " << options.memory << " -o " << options.tmpDir << "/contig_mapped.bam" << " " << mappedBamUnsorted;
+    cmd << SAMTOOLS << " sort -n -@ " << options.threads << " -m " << options.memory << " -o " << options.workingDirectory << "/contig_mapped.bam" << " " << mappedBamUnsorted;
     if (system(cmd.str().c_str()) != 0)
     {
         std::cerr << "ERROR while sorting " << mappedBamUnsorted << " by read name using " << SAMTOOLS << std::endl;
-        removeTmpDir(options.tmpDir, options.workingDirectory);
         return 1;
     }
     remove(toCString(mappedBamUnsorted));
 
     // Merge non_ref.bam with contig_mapped and set the mates.
     if (merge_and_set_mate(mergedBam, nonRefBam, mappedBam) != 0)
-    {
-        removeTmpDir(options.tmpDir, options.workingDirectory);
         return 1;
-    }
+
     remove(toCString(mappedBam));
     //remove(toCString(nonRefBam));
 
@@ -267,7 +227,6 @@ int popins_contigmap(int argc, char const ** argv)
     if (system(cmd.str().c_str()) != 0)
     {
         std::cerr << "ERROR while sorting " << mergedBam << " by beginPos using " << SAMTOOLS << std::endl;
-        removeTmpDir(options.tmpDir, options.workingDirectory);
         return 1;
     }
     remove(toCString(mergedBam));
@@ -279,13 +238,8 @@ int popins_contigmap(int argc, char const ** argv)
     if (system(cmd.str().c_str()) != 0)
     {
         std::cerr << "ERROR while indexing " << nonRefNew << " using " << SAMTOOLS << std::endl;
-        removeTmpDir(options.tmpDir, options.workingDirectory);
         return 1;
     }
-
-    // Remove temporary directory.
-    if (removeTmpDir(options.tmpDir, options.workingDirectory) != 0)
-        return 1;
 
     // Find anchoring locations of contigs for this individual.
     std::cerr << "[" << time(0) << "] " << "Computing contig locations from anchoring reads in " << nonRefNew << std::endl;
