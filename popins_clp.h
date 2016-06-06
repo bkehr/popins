@@ -13,8 +13,8 @@ using namespace seqan;
 // Returns true if file exists, otherwise false.
 inline bool exists(CharString const & filename)
 {
-  struct stat buffer;
-  return (stat(toCString(filename), &buffer) == 0);
+    struct stat buffer;
+    return (stat(toCString(filename), &buffer) == 0);
 }
 
 // ==========================================================================
@@ -272,21 +272,21 @@ enum genotypingModelType { randomSequenceGenotyping, duplicationGenotyping };
 
 genotypingModelType
 genotypingModelEnum( CharString& gmString ){
-  if( gmString == "DUP" ){
-    return duplicationGenotyping;
-  }else{
-    return randomSequenceGenotyping;
-  }
+    if( gmString == "DUP" ){
+        return duplicationGenotyping;
+    }else{
+        return randomSequenceGenotyping;
+    }
 }
 
 void
 genotypingModelName( genotypingModelType gm, CharString& gmString ){
-  if( gm == duplicationGenotyping ){
-    gmString = CharString( "DUP" );
+    if( gm == duplicationGenotyping ){
+        gmString = CharString( "DUP" );
 
-  }else{
-    gmString = CharString( "RANDOM" );
-  }
+    }else{
+        gmString = CharString( "RANDOM" );
+    }
 }
 
 
@@ -303,7 +303,7 @@ struct GenotypingOptions {
     int gapOpen;
     int gapExtend;
     int minAlignScore;
-  genotypingModelType genotypingModel;
+    genotypingModelType genotypingModel;
 
     int maxInsertSize;
     int bpQclip;
@@ -320,9 +320,9 @@ struct GenotypingOptions {
     bool useReadCounts;
     bool fullOverlap;
 
-    GenotypingOptions() : 
+    GenotypingOptions() :
         sampleName("sample"), match(1), mismatch(-2), gapOpen(-4), gapExtend(-1), minAlignScore(55),
-	genotypingModel( randomSequenceGenotyping ), maxInsertSize( 500 ), bpQclip(0), minSeqLen(10), 
+        genotypingModel( randomSequenceGenotyping ), maxInsertSize( 500 ), bpQclip(0), minSeqLen(10),
         minReadProb(0.00001), maxBARcount(200), regionWindowSize(50), addReadGroup(false), verbose(false),
         callBoth(false), useReadCounts(false), fullOverlap(false)
     {}
@@ -362,9 +362,9 @@ setupParser(ArgumentParser & parser, AssemblyOptions & options)
     // Define usage line and long description.
     addUsageLine(parser, "[\\fIOPTIONS\\fP] \\fIBAM FILE\\fP [\\fIMP BAM FILE\\fP]");
     addDescription(parser, "Finds the unmapped reads in a bam files. If a fasta file is specified, the unmapped reads "
-                           "will first be remapped to this reference using bwa and only reads that remain unmapped are "
-                           "further processed. All unmapped reads are quality filtered using sickle and passed to "
-                           "assembly with velvet.");
+            "will first be remapped to this reference using bwa and only reads that remain unmapped are "
+            "further processed. All unmapped reads are quality filtered using sickle and passed to "
+            "assembly with velvet.");
 
     // Require a bam file as argument.
     addArgument(parser, ArgParseArgument(ArgParseArgument::INPUTFILE, "BAMFILE"));
@@ -405,12 +405,12 @@ setupParser(ArgumentParser & parser, MergingOptions & options)
     addUsageLine(parser, "[\\fIOPTIONS\\fP] \\fIFA FILE 1\\fP ... \\fIFA FILE N\\fP");
     addUsageLine(parser, "[\\fIOPTIONS\\fP] \\fIFILE LIST FILE\\fP");
     addDescription(parser, "Merges the sequences given in fasta files into a single set of supercontigs. The fasta "
-                           "files can be listed either on the command line or in a file (FILE LIST FILE). In the "
-                           "latter case, a two-column file is expected, the first column giving path/to/contigs.fa and "
-                           "the second column specifying the number of contigs in the fasta file. The algorithm first "
-                           "partitions the sequences into sets of similar sequences using the SWIFT filtering "
-                           "approach, and then aligns each set of sequences into a graph of supercontigs. These two "
-                           "steps of the algorithm can be split into several program calls (see Note below).");
+            "files can be listed either on the command line or in a file (FILE LIST FILE). In the "
+            "latter case, a two-column file is expected, the first column giving path/to/contigs.fa and "
+            "the second column specifying the number of contigs in the fasta file. The algorithm first "
+            "partitions the sequences into sets of similar sequences using the SWIFT filtering "
+            "approach, and then aligns each set of sequences into a graph of supercontigs. These two "
+            "steps of the algorithm can be split into several program calls (see Note below).");
 
     // Require a list of fasta files as argument.
     addArgument(parser, ArgParseArgument(ArgParseArgument::INPUTFILE, "FAFILE", true));
@@ -443,11 +443,11 @@ setupParser(ArgumentParser & parser, MergingOptions & options)
     // Note on usage.
     addSection(parser, "Note");
     addText(parser, "When merging a large number of contigs, the q-gram index in the partitioning step might not fit "
-                    "into memory. In this case, you can split the merging into several program calls using different "
-                    "program modes: First, generate a set of component files by running 'popins merge' with the -b "
-                    "and -i options. Afterwards, combine the component files and construct the supercontigs in a "
-                    "separate call to 'popins merge' by specifying the -c option. By specifying the -c option "
-                    "together with the -b and -i option, the supercontig construction is split into batches.");
+            "into memory. In this case, you can split the merging into several program calls using different "
+            "program modes: First, generate a set of component files by running 'popins merge' with the -b "
+            "and -i options. Afterwards, combine the component files and construct the supercontigs in a "
+            "separate call to 'popins merge' by specifying the -c option. By specifying the -c option "
+            "together with the -b and -i option, the supercontig construction is split into batches.");
 
     // Set minimal/maximal/lists of valid values.
     setMinValue(parser, "e", "0");
@@ -484,9 +484,9 @@ setupParser(ArgumentParser & parser, ContigMapOptions & options)
     // Define usage line and long description.
     addUsageLine(parser, "[\\fIOPTIONS\\fP] \\fIFA FILE\\fP");
     addDescription(parser, "Aligns unmapped reads from fastq files in working directory to a set of contigs specified "
-                           "in the fasta file using bwa-mem. Merges the bwa output file with the file non_ref.bam in "
-                           "the working directory and sets the read mate's information in all bam records. Note that "
-                           "the fasta file needs to be indexed for alignment with bwa-mem.");
+            "in the fasta file using bwa-mem. Merges the bwa output file with the file non_ref.bam in "
+            "the working directory and sets the read mate's information in all bam records. Note that "
+            "the fasta file needs to be indexed for alignment with bwa-mem.");
 
     // Require a fasta file as argument.
     addArgument(parser, ArgParseArgument(ArgParseArgument::INPUTFILE, "FAFILE"));
@@ -522,26 +522,26 @@ setupParser(ArgumentParser & parser, PlacingOptions & options)
     addUsageLine(parser, "[\\fIOPTIONS\\fP] \\fILOCFILE\\fP \\fIOUTPUTFILE\\fP");
     addUsageLine(parser, "[\\fIOPTIONS\\fP] -c \\fICONTIGFILE\\fP -r \\fIGENOME\\fP \\fILOCFILE\\fP \\fIOUTPUTFILE\\fP");
     addDescription(parser, "Places (super-)contigs into the reference genome and writes a VCF file with records for "
-                           "placed contig ends. The command consists of four steps that can be run in one program "
-                           "call or in separate calls. To run all four steps together, the options -l, -b, -c, and -r "
-                           "need to be specified and the \\fIOUTPUTFILE\\fP's ending needs to be 'vcf'. The \\fILOCFILE\\fP has "
-                           "to list the location files for all samples. When running the steps separately, the "
-                           "specified parameters determine which step is being run:");
+            "placed contig ends. The command consists of four steps that can be run in one program "
+            "call or in separate calls. To run all four steps together, the options -l, -b, -c, and -r "
+            "need to be specified and the \\fIOUTPUTFILE\\fP's ending needs to be 'vcf'. The \\fILOCFILE\\fP has "
+            "to list the location files for all samples. When running the steps separately, the "
+            "specified parameters determine which step is being run:");
     addDescription(parser, "1. First, the contig locations determined for all samples (files listed in \\fILOCFILE\\fP) need "
-                           "to be merged into one set of locations (written to \\fIOUTPUTFILE\\fP).");
+            "to be merged into one set of locations (written to \\fIOUTPUTFILE\\fP).");
     addDescription(parser, "2. Then, prefixes/suffixes of all contigs (specify with -c option) are aligned to these "
-                           "locations (specify as \\fILOCFILE\\fP) in the reference genome (specify with -r option) and VCF "
-                           "records are written to \\fIOUTPUTFILE\\fP if the alignment is successful. The \\fIOUTPUTFILE\\fP's "
-                           "ending has to be 'vcf'. Additional output files \\fIlocations_unplaced.txt\\fP are being written "
-                           "for each sample.");
+            "locations (specify as \\fILOCFILE\\fP) in the reference genome (specify with -r option) and VCF "
+            "records are written to \\fIOUTPUTFILE\\fP if the alignment is successful. The \\fIOUTPUTFILE\\fP's "
+            "ending has to be 'vcf'. Additional output files \\fIlocations_unplaced.txt\\fP are being written "
+            "for each sample.");
     addDescription(parser, "3. Next, contigs (specify -c option) that do not align to the reference genome (specify "
-                           "-r option) are passed on to split-read alignment. This step is run by sample. The "
-                           "sample's original BAM file needs to be specified. The program arguments, the \\fILOCFILE\\fP "
-                           "and \\fIOUTPUTFILE\\fP, need to be the sample's \\fIlocations_unplaced.txt\\fP file and a "
-                           "\\fIlocations_placed.txt\\fP file for the sample.");
+            "-r option) are passed on to split-read alignment. This step is run by sample. The "
+            "sample's original BAM file needs to be specified. The program arguments, the \\fILOCFILE\\fP "
+            "and \\fIOUTPUTFILE\\fP, need to be the sample's \\fIlocations_unplaced.txt\\fP file and a "
+            "\\fIlocations_placed.txt\\fP file for the sample.");
     addDescription(parser, "4. Finally, the results from split-read alignment (the \\fIlocations_placed.txt\\fP files) of all "
-                           "samples (input files listed in \\fILOCFILE\\fP) are being combined and appended to the "
-                           "\\fIOUTPUTFILE\\fP (file ending has to be 'vcf').");
+            "samples (input files listed in \\fILOCFILE\\fP) are being combined and appended to the "
+            "\\fIOUTPUTFILE\\fP (file ending has to be 'vcf').");
 
     // Require a locations file and an output file as argument.
     addArgument(parser, ArgParseArgument(ArgParseArgument::INPUTFILE, "LOCFILE")); // Name of locations file OR name of file listing locations files, one per line.
@@ -593,11 +593,11 @@ setupParser(ArgumentParser & parser, GenotypingOptions & options)
 
     addUsageLine(parser, "[\\fIOPTIONS\\fP] \\fIFASTAFILE\\fP \\fIBAMFILE\\fP \\fIFASTAFILEALT\\fP \\fIBAMFILEALT\\fP \\fIVCFFILE\\fP");
     addDescription(parser, "The genotype command takes as input a fasta file of the reference genome, a bam file of a "
-                           "single individual, the fasta file with the supercontigs, the bam file of contig mapped and "
-                           "unmapped reads (<WD>/non_ref.bam), and the VCF file with all predicted insertion "
-                           "positions. It computes genotype likelihoods by aligning all reads from each insertion "
-                           "location and contig to the reference and to the alternative insertion sequence. It outputs "
-                           "VCF records with the genotype likelihoods in GT:PL format for the individual to std::out.");
+            "single individual, the fasta file with the supercontigs, the bam file of contig mapped and "
+            "unmapped reads (<WD>/non_ref.bam), and the VCF file with all predicted insertion "
+            "positions. It computes genotype likelihoods by aligning all reads from each insertion "
+            "location and contig to the reference and to the alternative insertion sequence. It outputs "
+            "VCF records with the genotype likelihoods in GT:PL format for the individual to std::out.");
 
     // Require five files as arguments.
     addArgument(parser, ArgParseArgument(ArgParseArgument::INPUTFILE, "fastafile"));
@@ -649,7 +649,7 @@ setupParser(ArgumentParser & parser, GenotypingOptions & options)
     setDefaultValue(parser, "window", options.regionWindowSize);
     setDefaultValue(parser, "samplename", options.sampleName);
     CharString gmName;
-    genotypingModelName( options.genotypingModel, gmName ); 
+    genotypingModelName( options.genotypingModel, gmName );
     setDefaultValue(parser, "genotypingmodel", gmName );
 }
 
@@ -679,7 +679,7 @@ getOptionValues(AssemblyOptions & options, ArgumentParser const & parser)
     if (isSet(parser, "matepair")) {
         options.matepair = true;
         if (!getArgumentValue(options.matepairFile, parser, 1)) {
-          return 1;
+            return 1;
         }
     }
 
@@ -895,10 +895,10 @@ getOptionValues(GenotypingOptions & options, ArgumentParser & parser)
     if (isSet(parser, "samplename"))
         getOptionValue(options.sampleName, parser, "samplename");
     if (isSet(parser, "genotypingmodel")){
-      CharString gmString;
-      getOptionValue( gmString, parser, "genotypingmodel");
-      options.genotypingModel = genotypingModelEnum( gmString );
-    }        
+        CharString gmString;
+        getOptionValue( gmString, parser, "genotypingmodel");
+        options.genotypingModel = genotypingModelEnum( gmString );
+    }
     if(isSet(parser, "window"))
         getOptionValue( options.regionWindowSize, parser, "window");
     options.addReadGroup = isSet(parser, "addreadgroup");

@@ -69,7 +69,7 @@ isCandidateSplitRead(BamAlignmentRecord & record, bool locOri)
 {
     // Check cigar.
     if (length(record.cigar) == 1 || (length(record.cigar) == 3 &&
-        record.cigar[1].count < 10 && (record.cigar[1].operation == 'D' || record.cigar[1].operation == 'I')))
+            record.cigar[1].count < 10 && (record.cigar[1].operation == 'D' || record.cigar[1].operation == 'I')))
         return false; // read matches the reference
 
     // Check flags.
@@ -130,11 +130,11 @@ std::pair<unsigned, unsigned>
 getSplitPosition(Gaps<typename Infix<Dna5String>::Type> & contigGaps,
         Gaps<Dna5String> & refGaps,
         unsigned offset)
-{
+        {
     unsigned refPos = offset + toSourcePosition(refGaps, 0);
     unsigned contigPos = length(host(source(contigGaps))) - length(source(contigGaps)) + toSourcePosition(contigGaps, clippedEndPosition(contigGaps));
     return std::pair<unsigned, unsigned>(refPos, contigPos);
-}
+        }
 
 // ---------------------------------------------------------------------------------------
 
@@ -144,11 +144,11 @@ std::pair<unsigned, unsigned>
 getSplitPosition(Gaps<typename Infix<Dna5String>::Type> & contigGaps,
         Gaps<ModifiedString<ModifiedString<Dna5String, ModComplementDna5>, ModReverse> > & refGaps,
         unsigned offset)
-{
+        {
     unsigned refPos = offset + length(source(refGaps)) - toSourcePosition(refGaps, 0) - 1;
     unsigned contigPos = length(source(contigGaps)) - toSourcePosition(contigGaps, clippedEndPosition(contigGaps));
     return std::pair<unsigned, unsigned>(refPos, contigPos);
-}
+        }
 
 // ---------------------------------------------------------------------------------------
 
@@ -158,11 +158,11 @@ std::pair<unsigned, unsigned>
 getSplitPosition(Gaps<ModifiedString<ModifiedString<typename Infix<Dna5String>::Type, ModComplementDna5>, ModReverse> > & contigGaps,
         Gaps<Dna5String> & refGaps,
         unsigned offset)
-{
+        {
     unsigned refPos = offset + toSourcePosition(refGaps, 0);
     unsigned contigPos = length(host(host(host(source(contigGaps))))) - length(source(contigGaps)) + toSourcePosition(contigGaps, clippedEndPosition(contigGaps));
     return std::pair<unsigned, unsigned>(refPos, contigPos);
-}
+        }
 
 // ---------------------------------------------------------------------------------------
 
@@ -172,11 +172,11 @@ std::pair<unsigned, unsigned>
 getSplitPosition(Gaps<ModifiedString<ModifiedString<typename Infix<Dna5String>::Type, ModComplementDna5>, ModReverse> > & contigGaps,
         Gaps<ModifiedString<ModifiedString<Dna5String, ModComplementDna5>, ModReverse> > & refGaps,
         unsigned offset)
-{
+        {
     unsigned refPos = offset + length(source(refGaps)) - toSourcePosition(refGaps, 0) - 1;
     unsigned contigPos = length(source(contigGaps)) - toSourcePosition(contigGaps, clippedEndPosition(contigGaps));
     return std::pair<unsigned, unsigned>(refPos, contigPos);
-}
+        }
 
 // ---------------------------------------------------------------------------------------
 // Function alignRead()
@@ -191,7 +191,7 @@ alignRead(std::pair<unsigned, unsigned> & insPos, Dna5String readSeq, TContigSeq
     Gaps<TContigSeq> contigRowLeft;
     Gaps<Dna5String> readRowRight;
     Gaps<TRefSeq> refRowRight;
-    
+
     setSource(readRowLeft, readSeq);
     setSource(contigRowLeft, contigPrefix);
     setSource(readRowRight, readSeq);
@@ -200,20 +200,20 @@ alignRead(std::pair<unsigned, unsigned> & insPos, Dna5String readSeq, TContigSeq
     Score<int, Simple> scoringScheme(1, -3, -4, -5);
     Pair<int, int> splitScore = splitAlignment(readRowLeft, contigRowLeft, readRowRight, refRowRight, scoringScheme);
 
-//    std::cout << "\nSplit score = " << splitScore.i1 + splitScore.i2 << " (" << splitScore.i1 << " + " << splitScore.i2 << ")" << std::endl;
-//    std::cout << readRowLeft << "\n" << contigRowLeft << "\n\n" << readRowRight << "\n" << refRowRight << std::endl;
+    //    std::cout << "\nSplit score = " << splitScore.i1 + splitScore.i2 << " (" << splitScore.i1 << " + " << splitScore.i2 << ")" << std::endl;
+    //    std::cout << readRowLeft << "\n" << contigRowLeft << "\n\n" << readRowRight << "\n" << refRowRight << std::endl;
 
     int minOverhang = 0.1 * length(readSeq);
     if (splitScore.i1 < minOverhang || splitScore.i2 < minOverhang || splitScore.i1 + splitScore.i2 < length(readSeq) * 0.5)
         return 1;
 
-//    // Split position on the read.
-//    unsigned readPos = toSourcePosition(readRowLeft, clippedEndPosition(readRowLeft));
-//    std::cout << "read pos = " << readPos << "   read len =  " << length(readSeq) << std::endl;
-    
+    //    // Split position on the read.
+    //    unsigned readPos = toSourcePosition(readRowLeft, clippedEndPosition(readRowLeft));
+    //    std::cout << "read pos = " << readPos << "   read len =  " << length(readSeq) << std::endl;
+
     // Find the split position on the reference and contig.
     insPos = getSplitPosition(contigRowLeft, refRowRight, refOffset);
-//    std::cout << "refPos = " << insPos.first << "   contigPos = " << insPos.second << std::endl;
+    //    std::cout << "refPos = " << insPos.first << "   contigPos = " << insPos.second << std::endl;
 
     return 0;
 }

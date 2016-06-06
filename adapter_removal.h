@@ -77,7 +77,7 @@ complementUniversalOneError(TTag tag)
         }
         errSeq[i] = adaptSeqs[0][i];
     }
-    
+
     return adaptSeqs;
 }
 
@@ -135,7 +135,7 @@ inline StringSet<Dna5String>
 truSeqs(HiSeqAdapters)
 {
     StringSet<Dna5String> adaptSeqs;
-    
+
     appendValue(adaptSeqs, "AGATCGGAAGAGCACACGTCTGAACTCCAGTCAC" "ATCACG"   "ATCTCGTATGCCGTCTTCTGCTTG");
     appendValue(adaptSeqs, "AGATCGGAAGAGCACACGTCTGAACTCCAGTCAC" "CGATGT"   "ATCTCGTATGCCGTCTTCTGCTTG");
     appendValue(adaptSeqs, "AGATCGGAAGAGCACACGTCTGAACTCCAGTCAC" "TTAGGC"   "ATCTCGTATGCCGTCTTCTGCTTG");
@@ -160,7 +160,7 @@ truSeqs(HiSeqAdapters)
     appendValue(adaptSeqs, "AGATCGGAAGAGCACACGTCTGAACTCCAGTCAC" "GAGTGGAT" "ATCTCGTATGCCGTCTTCTGCTTG");
     appendValue(adaptSeqs, "AGATCGGAAGAGCACACGTCTGAACTCCAGTCAC" "ACTGATAT" "ATCTCGTATGCCGTCTTCTGCTTG");
     appendValue(adaptSeqs, "AGATCGGAAGAGCACACGTCTGAACTCCAGTCAC" "ATTCCTTT" "ATCTCGTATGCCGTCTTCTGCTTG");
-    
+
     return adaptSeqs;
 }
 
@@ -176,7 +176,7 @@ truSeqs(HiSeqXAdapters)
     appendValue(adaptSeqs, "AATGATACGGCGACCACCGAGATCTACAC" "TAATCTTA" "ACACTCTTTCCCTACACGACGCTCTTCCGATCT");
     appendValue(adaptSeqs, "AATGATACGGCGACCACCGAGATCTACAC" "CAGGACGT" "ACACTCTTTCCCTACACGACGCTCTTCCGATCT");
     appendValue(adaptSeqs, "AATGATACGGCGACCACCGAGATCTACAC" "GTACTGAC" "ACACTCTTTCCCTACACGACGCTCTTCCGATCT");
-    
+
     appendValue(adaptSeqs, "GATCGGAAGAGCACACGTCTGAACTCCAGTCAC" "ATTACTCG" "ATCTCGTATGCCGTCTTCTGCTTG");
     appendValue(adaptSeqs, "GATCGGAAGAGCACACGTCTGAACTCCAGTCAC" "TCCGGAGA" "ATCTCGTATGCCGTCTTCTGCTTG");
     appendValue(adaptSeqs, "GATCGGAAGAGCACACGTCTGAACTCCAGTCAC" "CGCTCATT" "ATCTCGTATGCCGTCTTCTGCTTG");
@@ -202,7 +202,7 @@ reverseTruSeqsOneError(TAdapterTag tag)
     typedef Dna TAlphabet;
 
     StringSet<TSeq> adaptSeqs = truSeqs(tag);
-    
+
     // Append all sequences with one mismatch to sequence set.
     TSize len = length(adaptSeqs);
     for (TSize s = 0; s < len; ++s)
@@ -219,7 +219,7 @@ reverseTruSeqsOneError(TAdapterTag tag)
             errSeq[i] = adaptSeqs[s][i];
         }
     }
-    
+
     return adaptSeqs;
 }
 
@@ -243,7 +243,7 @@ prefixMatchLength(Index<TIndexSeq, TSpec> & suffixIndex, TSequence const & seq)
         {
             // if all of seq matches the beginning of some suffix
             if (infix(representative(it), parentRepLength(it) + 1, length(seq)) ==
-                infix(seq, parentRepLength(it) + 1, length(seq)))
+                    infix(seq, parentRepLength(it) + 1, length(seq)))
             {
                 len = length(seq);
             }
@@ -252,7 +252,7 @@ prefixMatchLength(Index<TIndexSeq, TSpec> & suffixIndex, TSequence const & seq)
 
         // if mismatch in remaining characters along this branch
         if (infix(representative(it), parentRepLength(it) + 1, repLength(it)) !=
-            infix(seq, parentRepLength(it) + 1, repLength(it)))
+                infix(seq, parentRepLength(it) + 1, repLength(it)))
         {
             break;
         }
@@ -273,11 +273,11 @@ cigarPrefix(String<CigarElement<> > const & cigar, TSize len)
 {
     typedef String<CigarElement<> > TCigar;
     typedef typename Iterator<TCigar const>::Type TIter;
-    
+
     TCigar prefixCigar;
-    
+
     TSize pos = 0;
-    
+
     TIter itEnd = end(cigar);
     for (TIter it = begin(cigar); it != itEnd; ++it)
     {
@@ -297,7 +297,7 @@ cigarPrefix(String<CigarElement<> > const & cigar, TSize len)
             break;
         }
     }
-    
+
     return prefixCigar;
 }
 
@@ -307,11 +307,11 @@ cigarSuffix(String<CigarElement<> > const & cigar, TSize len)
 {
     typedef String<CigarElement<> > TCigar;
     typedef typename Iterator<TCigar const>::Type TIter;
-    
+
     TCigar suffixCigar;
-    
+
     TSize pos = 0;
-    
+
     TIter it = begin(cigar);
     TIter itEnd = end(cigar);
     for (; it != itEnd; ++it)
@@ -319,35 +319,35 @@ cigarSuffix(String<CigarElement<> > const & cigar, TSize len)
         pos += (*it).count;
         if (pos >= len) break;
     }
-    
+
     if (it != itEnd && pos > len)
         appendValue(suffixCigar, CigarElement<>((*it).operation, pos - len));
-        
+
     for (; it != itEnd; ++it)
         appendValue(suffixCigar, *it);
-    
+
     return suffixCigar;
 }
 
 template<typename TSequence, typename TTag>
 int
 removeAdapter(BamAlignmentRecord & record,
-              Index<StringSet<TSequence> > & indexUniversal,
-              Index<StringSet<TSequence> > & indexTruSeqs,
-              unsigned minAdapterLength,
-              TTag tag)
+        Index<StringSet<TSequence> > & indexUniversal,
+        Index<StringSet<TSequence> > & indexTruSeqs,
+        unsigned minAdapterLength,
+        TTag tag)
 {
     typedef typename Size<TSequence>::Type TSize;
     typedef ModifiedString<const TSequence, ModReverse> TRevSequence;
-//  typedef ModifiedString<const TSequence, ModComplementDna5> TComplSequence;
-//  typedef ModifiedString<const TComplSequence, ModReverse> TRevComplSequence; // TODO: This modifier seems to be buggy!
-    
+    //  typedef ModifiedString<const TSequence, ModComplementDna5> TComplSequence;
+    //  typedef ModifiedString<const TComplSequence, ModReverse> TRevComplSequence; // TODO: This modifier seems to be buggy!
+
     TSize seqLen = length(record.seq);
-    
+
     if (hasFlagRC(record))
     {
         TSequence complSeq = record.seq; reverseComplement(complSeq);
-        
+
         // Check for adapter at begin of read.
         if (hasFlagFirst(record))
         {
@@ -361,12 +361,12 @@ removeAdapter(BamAlignmentRecord & record,
             int score = globalAlignmentScore(universal, prefix(complSeq, length(universal)), Score<int>(1,0,0), -2, 2);
             if (score > (int)length(universal) - 5) return 2;
         }
-        
+
         // Search prefix of complemented read in *TruSeq* index.
         reverse(complSeq);
         //TComplSequence complSeq(record.seq);
         TSize adaptLen = prefixMatchLength(indexTruSeqs, complSeq);
-    
+
         if (adaptLen == seqLen)
         {
             // Read starts with adapter.
@@ -381,10 +381,10 @@ removeAdapter(BamAlignmentRecord & record,
             record.cigar = cigarSuffix(record.cigar, adaptLen);
             return 1;
         }
-        
+
         // Search prefix of complemented read in *Universal* index.
         adaptLen = prefixMatchLength(indexUniversal, complSeq);
-        
+
         if (adaptLen == seqLen)
         {
             // Read starts with adapter.
@@ -419,7 +419,7 @@ removeAdapter(BamAlignmentRecord & record,
         // Search prefix of reversed read in *TruSeq* index.
         TRevSequence revSeq(record.seq);
         TSize adaptLen = prefixMatchLength(indexTruSeqs, revSeq);
-    
+
         if (adaptLen == seqLen)
         {
             // Read starts with adapter.
@@ -434,10 +434,10 @@ removeAdapter(BamAlignmentRecord & record,
             record.cigar = cigarPrefix(record.cigar, adaptLen);
             return 1;
         }
-    
+
         // Search prefix of read in *Universal* index.
         adaptLen = prefixMatchLength(indexUniversal, revSeq);
-            
+
         if (adaptLen == seqLen)
         {
             // Read starts with adapter.
@@ -460,10 +460,10 @@ removeAdapter(BamAlignmentRecord & record,
 template<typename TSequence>
 int
 removeAdapter(BamAlignmentRecord &,
-              Index<StringSet<TSequence> > &,
-              Index<StringSet<TSequence> > &,
-              unsigned,
-              NoAdapters)
+        Index<StringSet<TSequence> > &,
+        Index<StringSet<TSequence> > &,
+        unsigned,
+        NoAdapters)
 {
     return 0;
 }

@@ -18,7 +18,7 @@ struct ContigComponent
 
     StringSet<ContigId, Dependent<> > ids;
     StringSet<TSeq, Dependent<> > contigs;
-    
+
     std::set<Pair<TSize> > alignedPairs;
 
     ContigComponent()

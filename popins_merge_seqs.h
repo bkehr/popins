@@ -19,14 +19,14 @@ struct Path
 
     TSeq seq;
     std::map<TPos, TVertexDescriptor> positionMap;
-    
+
     Path()
     {}
-    
+
     Path(Path<TSeq, TVertexDescriptor> & other) :
         seq(other.seq), positionMap(other.positionMap)
     {}
-    
+
     Path(Path<TSeq, TVertexDescriptor> const & other) :
         seq(other.seq), positionMap(other.positionMap)
     {}
@@ -63,7 +63,7 @@ bool
 isSource(ComponentGraph<TSeq> & graph, typename ComponentGraph<TSeq>::TVertexDescriptor & v)
 {
     typedef typename ComponentGraph<TSeq>::TVertexDescriptor TVertexDescriptor;
-    
+
     typename Iterator<String<TVertexDescriptor> >::Type itEnd = end(graph.sources);
     for (typename Iterator<String<TVertexDescriptor> >::Type it = begin(graph.sources); it < itEnd; ++it)
         if (v == *it) return true;
@@ -88,9 +88,9 @@ addVertex(ComponentGraph<TSeq1> & graph, TSeq2 & seq)
 template<typename TSeq, typename TSeq1, typename TSeq2>
 typename ComponentGraph<TSeq>::TVertexDescriptor
 splitVertex(ComponentGraph<TSeq> & graph,
-            typename ComponentGraph<TSeq>::TVertexDescriptor & u,
-            TSeq1 & uSeq,
-            TSeq2 & vSeq)
+        typename ComponentGraph<TSeq>::TVertexDescriptor & u,
+        TSeq1 & uSeq,
+        TSeq2 & vSeq)
 {
     typedef typename Iterator<typename ComponentGraph<TSeq>::TGraph_, OutEdgeIterator>::Type TOutEdgeIter;
     typedef typename ComponentGraph<TSeq>::TVertexDescriptor TVertexDescriptor;
@@ -114,32 +114,32 @@ splitVertex(ComponentGraph<TSeq> & graph,
 template<typename TSeq>
 typename Size<String<TSeq> >::Type
 enumeratePathsDfs(String<Path<TSeq, typename ComponentGraph<TSeq>::TVertexDescriptor> > & paths,
-                  Path<TSeq, typename ComponentGraph<TSeq>::TVertexDescriptor> & prevPath,
-                  ComponentGraph<TSeq> & graph,
-                  typename ComponentGraph<TSeq>::TVertexDescriptor & v)
+        Path<TSeq, typename ComponentGraph<TSeq>::TVertexDescriptor> & prevPath,
+        ComponentGraph<TSeq> & graph,
+        typename ComponentGraph<TSeq>::TVertexDescriptor & v)
 {
     typedef typename ComponentGraph<TSeq>::TVertexDescriptor TVertexDescriptor;
     typedef typename Size<String<Path<TSeq, TVertexDescriptor> > >::Type TSize;
     typedef typename Iterator<typename ComponentGraph<TSeq>::TGraph_, OutEdgeIterator>::Type TOutEdgeIter;
-    
+
     TSize len = length(paths);
-    
+
     append(prevPath.seq, graph.sequenceMap[v]);
     prevPath.positionMap[length(prevPath.seq)] = v;
-    
+
     if (outDegree(graph.graph, v) == 0)
     {
         appendValue(paths, prevPath);
         return 1;
     }
-    
+
     for (TOutEdgeIter it(graph.graph, v); !atEnd(it); ++it)
     {
         Path<TSeq, TVertexDescriptor> path(prevPath);
         TVertexDescriptor u = targetVertex(it);
         enumeratePathsDfs(paths, path, graph, u);
     }    
-    
+
     return length(paths) - len;
 }
 
@@ -150,11 +150,11 @@ enumeratePathsDfs(String<Path<TSeq, typename ComponentGraph<TSeq>::TVertexDescri
 template<typename TSeq>
 typename Size<String<TSeq> >::Type
 enumeratePaths(String<Path<TSeq, typename ComponentGraph<TSeq>::TVertexDescriptor> > & paths,
-               ComponentGraph<TSeq> & graph)
+        ComponentGraph<TSeq> & graph)
 {
     typedef typename ComponentGraph<TSeq>::TVertexDescriptor TVertexDescriptor;
     typedef typename Size<String<TSeq> >::Type TSize;
-    
+
     for (TSize i = 0; i < length(graph.sources); ++i)
     {
         Path<TSeq, TVertexDescriptor> path;
@@ -176,12 +176,12 @@ getSeqsByAlignOrder(ContigComponent<TSeq> & component, TContigs & contigs)
     typedef typename std::set<Pair<TSize> >::iterator TPairIter;
 
     // --- find a possible order ---
-    
+
     String<TSize> order;
     std::set<TSize> ordered;
     appendValue(order, (*component.alignedPairs.begin()).i1);
     ordered.insert((*component.alignedPairs.begin()).i1);
-    
+
     TSize i = 0;
     while (i < length(order))
     {
@@ -199,7 +199,7 @@ getSeqsByAlignOrder(ContigComponent<TSeq> & component, TContigs & contigs)
         ++i;
     }
     clear(ordered);
-    
+
     // --- bring contigs and contig ids into the order ---
     for (TSize i = 0; i < length(order); ++i)
         appendValue(component.contigs, contigs[order[i]]);
@@ -219,7 +219,7 @@ bestDiagonal(TSeq1 & seq1, TSeq2 & seq2, unsigned qgramLength)
 
     unsigned len1 = length(seq1);
     unsigned len2 = length(seq2);
-    
+
     if (qgramLength > len1 || qgramLength > len2) return maxValue<int>();
 
     // Build a k-mer index of seq1
@@ -255,13 +255,13 @@ bestDiagonal(TSeq1 & seq1, TSeq2 & seq2, unsigned qgramLength)
     {
         if (maxCount < counters[i])
         {
-             maxCount = counters[i];
-             diag = i - len1;
+            maxCount = counters[i];
+            diag = i - len1;
         }
     }
-    
+
     if (diag == maxValue<int>()) return bestDiagonal(seq1, seq2, qgramLength*2/3);
-    
+
     return diag;
 }
 
@@ -271,11 +271,11 @@ bestDiagonal(TSeq1 & seq1, TSeq2 & seq2, unsigned qgramLength)
 
 template<typename TSeq1, typename TSeq2, typename TVertexDescriptor, typename TLength>
 bool mergeSeqWithGraph(ComponentGraph<TSeq1> & compGraph,
-                       Path<TSeq1, TVertexDescriptor> & path,
-                       TSeq2 & seq,
-                       Gaps<TSeq1> & gapsPath,
-                       Gaps<TSeq2> & gapsSeq,
-                       TLength minBranchLen)
+        Path<TSeq1, TVertexDescriptor> & path,
+        TSeq2 & seq,
+        Gaps<TSeq1> & gapsPath,
+        Gaps<TSeq2> & gapsSeq,
+        TLength minBranchLen)
 {
     typedef typename Position<TSeq1>::Type TPos;
     typedef typename Size<TSeq1>::Type TSize;
@@ -329,7 +329,7 @@ bool mergeSeqWithGraph(ComponentGraph<TSeq1> & compGraph,
     {
         TPos uPos = path.positionMap.upper_bound(alignBeginPath)->first;
         TVertexDescriptor u = path.positionMap[uPos];
-        
+
         if (alignBeginPath == 0)
         {
             replace(compGraph.sequenceMap[u], 0, 0, prefix(seq, alignBeginSeq));
@@ -366,11 +366,11 @@ bool mergeSeqWithGraph(ComponentGraph<TSeq1> & compGraph,
 template<typename TSeq1, typename TSeq2, typename TSpec, typename TLength, typename TValueMatch, typename TValueError>
 bool
 addSequencesToGraph(ComponentGraph<TSeq1> & compGraph,
-                    StringSet<Contig<TSeq2>, TSpec> & contigs,
-                    TLength minBranchLen,
-                    TValueMatch matchScore,
-                    TValueError errorPenalty,
-                    unsigned qgramLength)
+        StringSet<Contig<TSeq2>, TSpec> & contigs,
+        TLength minBranchLen,
+        TValueMatch matchScore,
+        TValueError errorPenalty,
+        unsigned qgramLength)
 {
     typedef int TScoreValue;
     typedef ComponentGraph<TSeq1> TGraph;
@@ -383,7 +383,7 @@ addSequencesToGraph(ComponentGraph<TSeq1> & compGraph,
     {
         String<TPath> paths;
         enumeratePaths(paths, compGraph);
-        
+
         if (length(paths) > 50) return false;
 
         TScoreValue maxScore = minValue<TScoreValue>();
@@ -424,12 +424,12 @@ addSequencesToGraph(ComponentGraph<TSeq1> & compGraph,
 template<typename TSeq1, typename TSeq2, typename TSpec, typename TLength, typename TValueMatch, typename TValueError>
 bool
 mergeSequences(String<TSeq1> & mergedSeqs,
-               StringSet<Contig<TSeq2>, TSpec> & contigs,
-               TLength & minBranchLen,
-               TValueMatch matchScore,
-               TValueError errorPenalty,
-               unsigned qgramLength,
-               bool verbose)
+        StringSet<Contig<TSeq2>, TSpec> & contigs,
+        TLength & minBranchLen,
+        TValueMatch matchScore,
+        TValueError errorPenalty,
+        unsigned qgramLength,
+        bool verbose)
 {
     typedef ComponentGraph<TSeq1> TGraph;
     typedef Path<TSeq1, typename TGraph::TVertexDescriptor> TPath;
@@ -493,8 +493,8 @@ writeSupercontigs(TStream & outputStream, String<TSeq> & mergedSeqs, unsigned nu
         for (TSize i = 0; i < length(mergedSeqs); ++i)
         {
             outputStream << ">COMPONENT_" << batchIndex << "." << pos << "_" << char('a'+i)
-                         << "_length_" << length(mergedSeqs[i])
-                         << "_size_" << numContigs << std::endl;
+                                 << "_length_" << length(mergedSeqs[i])
+                                 << "_size_" << numContigs << std::endl;
             outputStream << mergedSeqs[i] << std::endl;
         }
     }
@@ -503,8 +503,8 @@ writeSupercontigs(TStream & outputStream, String<TSeq> & mergedSeqs, unsigned nu
         for (TSize i = 0; i < length(mergedSeqs); ++i)
         {
             outputStream << ">COMPONENT_" << batchIndex << "." << pos << "_" << char('a'+i/26) << char('a'+i%26)
-                         << "_length_" << length(mergedSeqs[i])
-                         << "_size_" << numContigs << std::endl;
+                                 << "_length_" << length(mergedSeqs[i])
+                                 << "_size_" << numContigs << std::endl;
             outputStream << mergedSeqs[i] << std::endl;
         }
     }
@@ -517,17 +517,17 @@ writeSupercontigs(TStream & outputStream, String<TSeq> & mergedSeqs, unsigned nu
 template<typename TSize, typename TSequence, typename TContigs>
 void
 constructSupercontigs(std::map<TSize, ContigComponent<TSequence> > & components,
-                      TContigs & contigs,
-                      MergingOptions & options)
+        TContigs & contigs,
+        MergingOptions & options)
 {
     typedef std::map<TSize, ContigComponent<TSequence> > TComponents;
-    
+
     if (options.verbose) std::cerr << "[" << time(0) << "] " << "Constructing supercontigs" << std::endl;
 
     unsigned numSingleton = 0;
     unsigned numBranching = 0;
     unsigned numVeryBranching = 0;
-    
+
     // Iterate over the set of components.
     unsigned pos = 0;
     for (typename TComponents::iterator it = components.begin(); it != components.end(); ++it)
@@ -557,8 +557,8 @@ constructSupercontigs(std::map<TSize, ContigComponent<TSequence> > & components,
         // --- MERGE CONTIGS OF THE COMPONENT ---
         String<TSequence> mergedSeqs;
         if (!mergeSequences(mergedSeqs, component.contigs,
-                            options.minTipScore, options.matchScore, options.errorPenalty, options.qgramLength,
-                            options.verbose))
+                options.minTipScore, options.matchScore, options.errorPenalty, options.qgramLength,
+                options.verbose))
         {
             if (options.verbose)
                 std::cout << "COMPONENT_" << options.batchIndex << "." << pos << " size:" << length(component.contigs) << " given up." << std::endl;
@@ -575,7 +575,7 @@ constructSupercontigs(std::map<TSize, ContigComponent<TSequence> > & components,
 
         // Output the supercontig.
         writeSupercontigs(options.outputStream, mergedSeqs, length(component.contigs), options.batchIndex, pos);
-        
+
         clear(component);
         ++pos;
     }

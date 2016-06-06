@@ -42,9 +42,9 @@ void printHelp(char const * name)
 int main(int argc, char const ** argv)
 {
     std::time_t start_time = std::time(0);
-    
+
     int ret = 0;
-    const char * prog_name = argv[0];    
+    const char * prog_name = argv[0];
     if (argc < 2)
     {
         printHelp(prog_name);

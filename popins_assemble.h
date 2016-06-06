@@ -34,13 +34,13 @@ removeAssemblyDirectory(CharString & path)
 
 inline int
 remapping(Triple<CharString> & fastqFilesTemp,
-          Triple<CharString> & fastqFiles,
-          CharString const & referenceFile,
-          CharString const & tempDir,
-          unsigned humanSeqs,
-          unsigned threads,
-          CharString & memory,
-          CharString & prefix)
+        Triple<CharString> & fastqFiles,
+        CharString const & referenceFile,
+        CharString const & tempDir,
+        unsigned humanSeqs,
+        unsigned threads,
+        CharString & memory,
+        CharString & prefix)
 {
     std::stringstream cmd;
 
@@ -180,9 +180,9 @@ setMates(BamAlignmentRecord & record1, BamAlignmentRecord & record2)
 template<typename TNameStore>
 inline void
 readRecordAndCorrectRIds(BamAlignmentRecord & record,
-            BamStream & stream,
-            TNameStore & nameStor,
-            NameStoreCache<TNameStore> & nameStoreCache)
+        BamStream & stream,
+        TNameStore & nameStor,
+        NameStoreCache<TNameStore> & nameStoreCache)
 {
     readRecord(record, stream);
 
@@ -202,10 +202,10 @@ readRecordAndCorrectRIds(BamAlignmentRecord & record,
 
 inline void
 mergeHeaders(BamHeader & header,
-             StringSet<CharString> & nameStore,
-             NameStoreCache<StringSet<CharString> > & nameStoreCache,
-             BamHeader const & header1,
-             BamHeader const & header2)
+        StringSet<CharString> & nameStore,
+        NameStoreCache<StringSet<CharString> > & nameStoreCache,
+        BamHeader const & header1,
+        BamHeader const & header2)
 {
     // Write sequenceInfos, name store and cache for this header.
     unsigned idx = 0;
@@ -301,7 +301,7 @@ compare_qName(CharString & a, CharString & b)
 
 bool
 merge_and_set_mate(CharString & mergedBam, CharString & nonRefBam, CharString & remappedBam)
- {
+{
     typedef StringSet<CharString> TNameStore;
 
     std::cerr << "[" << time(0) << "] " << "Merging bam files " << nonRefBam << " and " << remappedBam << std::endl;
@@ -380,7 +380,7 @@ merge_and_set_mate(CharString & mergedBam, CharString & nonRefBam, CharString & 
     }
 
     return 0;
- }
+}
 
 // ==========================================================================
 // Function sickle_filtering()
@@ -388,8 +388,8 @@ merge_and_set_mate(CharString & mergedBam, CharString & nonRefBam, CharString & 
 
 inline bool
 sickle_filtering(Triple<CharString> & filteredFiles,
-                 Triple<CharString> & fastqFiles,
-                 CharString & workingDirectory)
+        Triple<CharString> & fastqFiles,
+        CharString & workingDirectory)
 {
     std::stringstream cmd;
 
@@ -441,14 +441,14 @@ velvet_assembly(Triple<CharString> & filteredFiles, Triple<CharString> & filtere
     cmd << VELVETH << " " << assemblyDirectory << " " << kmerLength << " -short -fastq " << filteredFiles.i3;
     cmd << " -shortPaired -fastq -separate " << filteredFiles.i1 << " " << filteredFiles.i2;
     if (matepair) {
-      cmd << " -shortPaired2 -fastq -separate " << filteredMPFiles.i1 << " " << filteredMPFiles.i2;
+        cmd << " -shortPaired2 -fastq -separate " << filteredMPFiles.i1 << " " << filteredMPFiles.i2;
     }
     if (system(cmd.str().c_str()) != 0) // prepares velvet assembly, use k=47 for longer contigs
     {
         std::cerr << "ERROR while preparing assembly with " << VELVETH << " of ";
         std::cerr << filteredFiles.i3 << ", " << filteredFiles.i1 << ", and " << filteredFiles.i2 << std::endl;
         if (matepair) {
-          std::cerr << "and matepair files " << filteredMPFiles.i1 << " and " << filteredMPFiles.i2 << std::endl;
+            std::cerr << "and matepair files " << filteredMPFiles.i1 << " and " << filteredMPFiles.i2 << std::endl;
         }
         return 1;
     }
@@ -457,7 +457,7 @@ velvet_assembly(Triple<CharString> & filteredFiles, Triple<CharString> & filtere
     cmd.str("");
     cmd << VELVETG << " " << assemblyDirectory << " -exp_cov auto -cov_cutoff 2 -max_coverage 100 -scaffolding no";
     if (matepair) {
-      cmd << " -shortMatePaired2 yes";
+        cmd << " -shortMatePaired2 yes";
     }
     if (system(cmd.str().c_str()) != 0) // runs the velvet graph part
     {
@@ -554,7 +554,7 @@ int popins_assemble(int argc, char const ** argv)
             CharString remappedBam = getFileName(options.workingDirectory, "remapped.bam");
             CharString prefix = "";
             if (remapping(fastqFilesTemp, fastqFiles, options.referenceFile, options.workingDirectory,
-                          options.humanSeqs, options.threads, options.memory, prefix) != 0)
+                    options.humanSeqs, options.threads, options.memory, prefix) != 0)
                 return 1;
 
             // Set the mate's location and merge non_ref.bam and remapped.bam into a single file.
@@ -643,7 +643,7 @@ int popins_assemble(int argc, char const ** argv)
                 CharString remappedMPBam = getFileName(options.workingDirectory, "MP.remapped.bam");
                 CharString prefix = "MP.";
                 if (remapping(fastqMPFilesTemp, fastqMPFiles, options.referenceFile, options.workingDirectory,
-                              options.humanSeqs, options.threads, options.memory, prefix) != 0)
+                        options.humanSeqs, options.threads, options.memory, prefix) != 0)
                     return 1;
 
                 // Set the mate's location and merge non_ref.bam and remapped.bam into a single file.
@@ -677,9 +677,9 @@ int popins_assemble(int argc, char const ** argv)
     remove(toCString(singleFiltered));
 
     if (options.matepair) {
-      remove(toCString(firstMPFiltered));
-      remove(toCString(secondMPFiltered));
-      remove(toCString(singleMPFiltered));
+        remove(toCString(firstMPFiltered));
+        remove(toCString(secondMPFiltered));
+        remove(toCString(singleMPFiltered));
     }
 
     // Copy contigs file to workingDirectory.

@@ -19,12 +19,12 @@ using namespace seqan;
 
 bool
 write_fastq(CharString & fastqFirst,
-            CharString & fastqSecond,
-            CharString & fastqSingle,
-            CharString & unmappedBam)
+        CharString & fastqSecond,
+        CharString & fastqSingle,
+        CharString & unmappedBam)
 {
     typedef std::map<CharString, Pair<CharString> > TFastqMap;
-    
+
     // Create maps for fastq records (first read in pair and second read in pair).
     TFastqMap firstReads, secondReads;
 
@@ -39,8 +39,8 @@ write_fastq(CharString & fastqFirst,
     // Open the output fastq files.    
     SequenceStream fastqFirstStream, fastqSecondStream, fastqSingleStream;
     if (openFastq(fastqFirstStream, fastqFirst) != 0 || openFastq(fastqSecondStream, fastqSecond) != 0 ||
-        openFastq(fastqSingleStream, fastqSingle) != 0) return 1;
-    
+            openFastq(fastqSingleStream, fastqSingle) != 0) return 1;
+
     // Iterate over bam file and append fastq records.
     BamAlignmentRecord record;
     while(!atEnd(inStream))
@@ -86,7 +86,7 @@ fill_sequences(CharString & outFile, CharString & inFile)
     while (!atEnd(inStream))
     {
         readRecord(nextRecord, inStream);
-        
+
         if (firstRecord.qName != nextRecord.qName || hasFlagFirst(firstRecord) != hasFlagFirst(nextRecord))
         {
             // update first record
@@ -123,7 +123,7 @@ fill_sequences(CharString & outFile, CharString & inFile)
                 }
             }
         }
-        
+
         writeRecord(outStream, nextRecord);
     }
 

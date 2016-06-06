@@ -13,36 +13,36 @@ using namespace seqan;
 void
 probsToGtString(std::vector<double> & probs, std::string & gtString)
 {
-  int max = 0;
-  double maxP = probs[0];
-  if( probs[1] > maxP ){
-    maxP = probs[1];
-    max = 1;
-  }
-  if( probs[2] > maxP ){
-    maxP = probs[2];
-    max = 2;
-  }
-  std::ostringstream buff;
-  if( max == 0 ){
-    buff << "0/0:";
-  }else if( max == 1 ){
-    buff << "0/1:";
-  }else{
-    buff << "1/1:";
-  }
-  double lp0 = log10( probs[0]/maxP );
-  double lp1 = log10( probs[1]/maxP );
-  double lp2 = log10( probs[2]/maxP );
-  if( lp0 < LL_THRESHOLD ) lp0 = LL_THRESHOLD; 
-  if( lp1 < LL_THRESHOLD ) lp1 = LL_THRESHOLD; 
-  if( lp2 < LL_THRESHOLD ) lp2 = LL_THRESHOLD;
+    int max = 0;
+    double maxP = probs[0];
+    if( probs[1] > maxP ){
+        maxP = probs[1];
+        max = 1;
+    }
+    if( probs[2] > maxP ){
+        maxP = probs[2];
+        max = 2;
+    }
+    std::ostringstream buff;
+    if( max == 0 ){
+        buff << "0/0:";
+    }else if( max == 1 ){
+        buff << "0/1:";
+    }else{
+        buff << "1/1:";
+    }
+    double lp0 = log10( probs[0]/maxP );
+    double lp1 = log10( probs[1]/maxP );
+    double lp2 = log10( probs[2]/maxP );
+    if( lp0 < LL_THRESHOLD ) lp0 = LL_THRESHOLD;
+    if( lp1 < LL_THRESHOLD ) lp1 = LL_THRESHOLD;
+    if( lp2 < LL_THRESHOLD ) lp2 = LL_THRESHOLD;
 
-  int phr0 = int( -10*lp0 );
-  int phr1 = int( -10*lp1 );
-  int phr2 = int( -10*lp2 );
-  buff  << phr0 << "," << phr1 << "," << phr2;
-  gtString = buff.str();
+    int phr0 = int( -10*lp0 );
+    int phr1 = int( -10*lp1 );
+    int phr2 = int( -10*lp2 );
+    buff  << phr0 << "," << phr1 << "," << phr2;
+    gtString = buff.str();
 }
 
 // ==========================================================================
@@ -67,20 +67,20 @@ popins_genotype(int argc, char const ** argv)
     VcfStream vcfOut("-", VcfStream::WRITE);
     vcfOut.header = vcfIn.header;
 
-   string chr, f1,f2,f3,f4,f5,f6,f7,f8;
-  ifstream f;
-  /* The chromosomes in the output file need to be in the same order as in the input file */
-  f.open( toCString( options.vcfFile ) );
-  map< string, int> chrs;
-  f >> chr >> f1 >> f2 >> f3 >> f4 >> f5 >> f6 >> f7 >> f8;
-  while( f ){
+    string chr, f1,f2,f3,f4,f5,f6,f7,f8;
+    ifstream f;
+    /* The chromosomes in the output file need to be in the same order as in the input file */
+    f.open( toCString( options.vcfFile ) );
+    map< string, int> chrs;
     f >> chr >> f1 >> f2 >> f3 >> f4 >> f5 >> f6 >> f7 >> f8;
-    if( chrs.count( chr ) == 0 ){
-      appendValue(vcfOut.header.sequenceNames, chr.c_str());
-      chrs[chr] = 1;
+    while( f ){
+        f >> chr >> f1 >> f2 >> f3 >> f4 >> f5 >> f6 >> f7 >> f8;
+        if( chrs.count( chr ) == 0 ){
+            appendValue(vcfOut.header.sequenceNames, chr.c_str());
+            chrs[chr] = 1;
+        }
     }
-  }
-  f.close();
+    f.close();
 
     // Build an index of the fasta file (reference genome).
     FaiIndex faIndex;
@@ -99,7 +99,7 @@ popins_genotype(int argc, char const ** argv)
     Stream<Bgzf> bamStream;
     res = initializeBam(toCString(options.bamFile), context, bamIndex, bamStream);
     if (res != 0) return 1;
-    
+
     // Build an index of the insertion sequences' fasta file.
     FaiIndex faIndexAlt;
     res = build(faIndexAlt, toCString(options.altFastaFile));
@@ -118,7 +118,7 @@ popins_genotype(int argc, char const ** argv)
     res = initializeBam(toCString(options.altBamFile), contextAlt, bamIndexAlt, bamStreamAlt);
     if (res != 0) return 1;
 
-  appendValue( vcfOut.header.sampleNames, options.sampleName );
+    appendValue( vcfOut.header.sampleNames, options.sampleName );
 
     // Iterate over VCF file and call the variants.
     VcfRecord record;    

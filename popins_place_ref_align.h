@@ -98,10 +98,10 @@ void setOtherEndBit(String<LocationInfo> & locations, bool checkPos = false)
 
         if (!checkPos || (*it).insPos != -1)
         {
-        	if ((*it).loc.contigOri)
-        		fwd = true;
-        	else
-        		rev = true;
+            if ((*it).loc.contigOri)
+                fwd = true;
+            else
+                rev = true;
         }
 
         ++it;
@@ -182,16 +182,16 @@ otherEnd(Location & loc, unsigned readLength, unsigned maxInsertSize)
 void
 appendGroups(String<String<unsigned> > & groups, String<String<LocationInfo> > & locGroups)
 {
-	for (unsigned i = 0; i < length(locGroups); ++i)
-	{
-		String<unsigned> group;
-		resize(group, length(locGroups[i]));
+    for (unsigned i = 0; i < length(locGroups); ++i)
+    {
+        String<unsigned> group;
+        resize(group, length(locGroups[i]));
 
-		for (unsigned j = 0; j < length(locGroups[i]); ++j)
-			group[j] = locGroups[i][j].idx - 1;
+        for (unsigned j = 0; j < length(locGroups[i]); ++j)
+            group[j] = locGroups[i][j].idx - 1;
 
-		appendValue(groups, group);
-	}
+        appendValue(groups, group);
+    }
 }
 
 // ---------------------------------------------------------------------------------------
@@ -219,28 +219,28 @@ findExcludeLocs(std::vector<Pair<CharString, bool> > & exclude, String<LocationI
 
     while (groupsIt != groupsEnd)
     {
-    	TGroupIter it = begin(*groupsIt);
-    	TGroupIter itEnd = end(*groupsIt);
+        TGroupIter it = begin(*groupsIt);
+        TGroupIter itEnd = end(*groupsIt);
 
-    	bool placed = false;
-    	while (it != itEnd)
-    	{
-    		placed |= locations[*it].otherEnd;
-    		++it;
-    	}
+        bool placed = false;
+        while (it != itEnd)
+        {
+            placed |= locations[*it].otherEnd;
+            ++it;
+        }
 
-    	if (placed)
-    	{
-    		it = begin(*groupsIt);
-    		while (it != itEnd)
-    		{
-    			Location loc = locations[*it].loc;
-    			exclude.push_back(Pair<CharString, bool>(loc.contig, !loc.contigOri));
-    			++it;
-    		}
-    	}
+        if (placed)
+        {
+            it = begin(*groupsIt);
+            while (it != itEnd)
+            {
+                Location loc = locations[*it].loc;
+                exclude.push_back(Pair<CharString, bool>(loc.contig, !loc.contigOri));
+                ++it;
+            }
+        }
 
-    	++groupsIt;
+        ++groupsIt;
     }
 
     std::stable_sort(exclude.begin(), exclude.end());
@@ -313,7 +313,7 @@ writeSplitAlignList(CharString path, std::vector<int> & list, std::vector<Pair<C
 
     while (it != itEnd)
     {
-    	Location loc;
+        Location loc;
         if (*it > 0)
             loc = locations[(*it) - 1].loc;
         else
@@ -323,7 +323,7 @@ writeSplitAlignList(CharString path, std::vector<int> & list, std::vector<Pair<C
         std::vector<Pair<CharString, bool> >::iterator cIt = lower_bound(exclude.begin(), exclude.end(), c);
 
         if (cIt != exclude.end() && ((*cIt).i1 != c.i1 || (*cIt).i2 != c.i2))
-        	writeLoc(outStream, loc);
+            writeLoc(outStream, loc);
 
         ++it;
     }
@@ -421,7 +421,7 @@ align(Gaps<TSeqA> & gapsA, Gaps<TSeqB> & gapsB, TSeqA & a, TSeqB & b)
 
     int score = localAlignment(gapsA, gapsB, scoring);
 
-//    std::cout << gapsA << std::endl << gapsB << std::endl;
+    //    std::cout << gapsA << std::endl << gapsB << std::endl;
 
     if (score > 25)        // TODO: Make this 25 a program parameter.
         return true;
@@ -457,8 +457,8 @@ contigEndsAlign(LocationInfo & a, LocationInfo & b, std::vector<std::pair<CharSt
 
     SEQAN_ASSERT_EQ(a.loc.chrOri, b.loc.chrOri);
 
-//    std::cout << itA->first << "  " << length(itA->second) << std::endl;
-//    std::cout << itB->first << "  " << length(itB->second) << std::endl;
+    //    std::cout << itA->first << "  " << length(itA->second) << std::endl;
+    //    std::cout << itB->first << "  " << length(itB->second) << std::endl;
 
     if (!a.loc.contigOri)
     {
@@ -620,10 +620,10 @@ alignsToRef(LocationInfo & loc,
                     return true;
 
                 if (suffixEndPos - suffixBeginPos < preSufLen) // all of the contig aligns to the reference
-                {
+                        {
                     loc.insPos = -1;
                     return true;
-                }
+                        }
 
                 suffixEndPos -= preSufLen/2;
                 suffixBeginPos = suffixEndPos - _min(preSufLen, suffixEndPos);
@@ -650,10 +650,10 @@ alignsToRef(LocationInfo & loc,
                     return true;
 
                 if (prefixEndPos - prefixBeginPos < preSufLen) // all of the contig aligns to the reference
-                {
+                        {
                     loc.insPos = -1;
                     return true;
-                }
+                        }
 
                 prefixBeginPos += preSufLen/2;
                 prefixEndPos = _min(prefixBeginPos + preSufLen, length(contigIt->second));
@@ -914,10 +914,10 @@ findUnalignedGroups(String<String<LocationInfo> > & groups,
                     added = true;
                 }
                 if (added)
-                	break;
+                    break;
             }
             if (added)
-            	break;
+                break;
         }
 
         if (!added)
@@ -926,7 +926,7 @@ findUnalignedGroups(String<String<LocationInfo> > & groups,
             appendValue(newGroup, *it);
             appendValue(groups, newGroup);
             if (largestGroupSize == 0)
-            	largestGroupSize = 1;
+                largestGroupSize = 1;
         }
 
         ++it;
@@ -966,7 +966,7 @@ template<typename TStream1, typename TStream2>
 void
 processOverlappingLocs(TStream1 & vcfStream,
         TStream2 & groupStream,
-		String<String<unsigned> > & groups,
+        String<String<unsigned> > & groups,
         SampleLists & splitAlignLists,
         String<LocationInfo> & locations,
         std::vector<std::pair<CharString, Dna5String> > & contigs,
@@ -977,9 +977,9 @@ processOverlappingLocs(TStream1 & vcfStream,
     String<String<LocationInfo> > unalignedGroups;
     String<LocationInfo> unaligned;
 
-//    std::cout << "\nProcessing group of " << length(locations) << " overlapping locations." << std::endl;
-//    for (unsigned i = 0; i < length(locations); ++i)
-//        std::cout << locations[i].loc.chr << "\t" << locations[i].loc.chrStart << "\t" << (locations[i].otherEnd?"true":"false") << std::endl;
+    //    std::cout << "\nProcessing group of " << length(locations) << " overlapping locations." << std::endl;
+    //    for (unsigned i = 0; i < length(locations); ++i)
+    //        std::cout << locations[i].loc.chr << "\t" << locations[i].loc.chrStart << "\t" << (locations[i].otherEnd?"true":"false") << std::endl;
 
     // Sort the set of overlapping locations by bit and then by contig length.
     std::stable_sort(begin(locations), end(locations), LocationInfoGreater());
@@ -988,14 +988,14 @@ processOverlappingLocs(TStream1 & vcfStream,
     findRefAlignedGroups(refAlignedGroups, unaligned, locations, contigs, fai, options);
     clear(locations);
 
-//    std::cout << "refAlignedGroups: " << length(refAlignedGroups) << std::endl;
+    //    std::cout << "refAlignedGroups: " << length(refAlignedGroups) << std::endl;
 
     // Handle the ref-aligned groups.
     processRefAlignedGroups(vcfStream, groupStream, refAlignedGroups, splitAlignLists, contigs, fai, options);
     appendGroups(groups, refAlignedGroups);
     clear(refAlignedGroups);
 
-//    std::cout << "   unaligned: " << length(unaligned) << std::endl;
+    //    std::cout << "   unaligned: " << length(unaligned) << std::endl;
 
     // Split the unaligned locations into groups.
     findUnalignedGroups(unalignedGroups, unaligned, contigs);
@@ -1005,7 +1005,7 @@ processOverlappingLocs(TStream1 & vcfStream,
     processUnalignedGroups(vcfStream, groupStream, unalignedGroups, splitAlignLists, contigs, fai, options);
     appendGroups(groups, unalignedGroups);
 
-//    std::cout << "   unlignedGroups: " << length(unalignedGroups) << std::endl;
+    //    std::cout << "   unlignedGroups: " << length(unalignedGroups) << std::endl;
 }
 
 // =======================================================================================

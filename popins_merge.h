@@ -22,11 +22,11 @@ using namespace seqan;
 template<typename TSize, typename TSeq>
 bool
 readContigFile(std::map<TSize, Contig<TSeq> > & contigs,
-               CharString & filename,
-               int min,
-               int max,
-               CharString & index,
-               bool verbose)
+        CharString & filename,
+        int min,
+        int max,
+        CharString & index,
+        bool verbose)
 {
     // open fasta file
     SequenceStream stream(toCString(filename));
@@ -65,7 +65,7 @@ readContigFile(std::map<TSize, Contig<TSeq> > & contigs,
     }
 
     if (verbose) std::cerr << "[" << time(0) << "] " << "Loaded " << filename << ": " << basepairs << " bp in "
-                                                     << (length(contigs) - numContigsBefore) << " contigs." << std::endl;
+            << (length(contigs) - numContigsBefore) << " contigs." << std::endl;
 
     return 0;
 }
@@ -77,8 +77,8 @@ readContigFile(std::map<TSize, Contig<TSeq> > & contigs,
 template<typename TSize, typename TSeq>
 bool
 readContigs(std::map<TSize, Contig<TSeq> > & contigs,
-            ContigBatch & batch,
-            bool verbose)
+        ContigBatch & batch,
+        bool verbose)
 {
     std::cerr << "[" << time(0) << "] " << "Reading contig files" << std::endl;
 
@@ -102,15 +102,15 @@ readContigs(std::map<TSize, Contig<TSeq> > & contigs,
 template<typename TSize, typename TSeq>
 bool
 readContigSubset(std::map<TSize, Contig<TSeq> > & contigs,
-                 ContigBatch & batch,
-                 bool verbose)
+        ContigBatch & batch,
+        bool verbose)
 {
     unsigned batchOffset = indexOffset(batch);
     unsigned batchEnd = std::min(batchOffset + getSize(batch), batch.contigsInTotal);
 
     std::cerr << "[" << time(0) << "] " << "Reading batch " << batch.number << "/" << totalBatches(batch) << " of "
-                                        << batch.contigsInTotal << " contigs from contig files" << std::endl;
-    
+            << batch.contigsInTotal << " contigs from contig files" << std::endl;
+
     // open and read the files containing contigs of one individual one by one
 
     unsigned contigCount = 0;
@@ -121,7 +121,7 @@ readContigSubset(std::map<TSize, Contig<TSeq> > & contigs,
         SEQAN_ASSERT_LT(i, length(batch.contigFiles));
         contigCount += batch.contigsPerFile[i];
     }
-    
+
     for (; contigCount < batchEnd; ++i)
     {
         SEQAN_ASSERT_LT(i, length(batch.contigFiles));
@@ -154,9 +154,9 @@ insertIndex(std::set<unsigned> & indices, unsigned index, int totalContigs)
 template<typename TSize, typename TSeq>
 bool
 readContigs(std::map<TSize, Contig<TSeq> > & contigs,
-            std::map<TSize, ContigComponent<TSeq> > & components,
-            ContigBatch & batch,
-            bool verbose)
+        std::map<TSize, ContigComponent<TSeq> > & components,
+        ContigBatch & batch,
+        bool verbose)
 {
     typedef std::map<TSize, ContigComponent<TSeq> > TComponents;
     typedef typename std::set<Pair<TSize> >::iterator TPairsIter;
@@ -176,11 +176,11 @@ readContigs(std::map<TSize, Contig<TSeq> > & contigs,
             insertIndex(indices, (*pairsIt).i2, batch.contigsInTotal);
         }
     }
-    
+
     std::cerr << " (" << indices.size() << " contigs)" << std::endl;
-    
+
     // Read the contigs with these indices.
-    
+
     int fileIndex = 0;
     int firstIndexInCurrFile = 0;
     SequenceStream stream(toCString(batch.contigFiles[fileIndex]));
@@ -217,7 +217,7 @@ readContigs(std::map<TSize, Contig<TSeq> > & contigs,
 
             if (verbose) std::cerr  << "[" << time(0) << "] " << "Opened " << batch.contigFiles[fileIndex] << std::endl;
         }
-    
+
         Contig<TSeq> contig;
         contig.id.pn = sample;
         contig.id.orientation = true;
@@ -258,10 +258,10 @@ readContigs(std::map<TSize, Contig<TSeq> > & contigs,
 template<typename TSize, typename TSeq>
 bool
 readInputFiles(std::map<TSize, Contig<TSeq> > & contigs,
-               std::map<TSize, ContigComponent<TSeq> > & components,
-               std::set<int> & skipped,
-               ContigBatch & batch,
-               MergingOptions & options)
+        std::map<TSize, ContigComponent<TSeq> > & components,
+        std::set<int> & skipped,
+        ContigBatch & batch,
+        MergingOptions & options)
 {
     if (length(options.componentFiles) == 0) // -c option is not set
     {
@@ -306,14 +306,14 @@ addReverseComplementContigs(std::map<TSize, Contig<TSeq> > & contigs, ContigBatc
     TIter itEnd = contigs.end();
     for (TIter it = contigs.begin(); it != itEnd; ++it)
     {
-    
+
         TSeq revSeq = (it->second).seq;
         reverseComplement(revSeq);
 
         SEQAN_ASSERT((it->second).id.orientation);
         ContigId revId = (it->second).id;
         revId.orientation = false;
-        
+
         contigs[globalIndexRC(it->first, batch)] = Contig<TSeq>(revSeq, revId);
     }
 }
@@ -388,7 +388,7 @@ int popins_merge(int argc, char const ** argv)
     {
         if (partitionContigs(uf, alignedPairs, contigs, batch, options) != 0) 
             return 1;
-        
+
         // Write aligned pairs or convert union find data structure into set of components.
         if (options.batches != 1)
             writeAlignedPairs(options.outputStream, alignedPairs);
@@ -398,7 +398,7 @@ int popins_merge(int argc, char const ** argv)
             addSingletons(components, contigs, skipped, uf, batch.contigsInTotal);
         }
     }
-    
+
     // Write contigs that were skipped because they form too large components.
     if (options.skippedFile != "")
         writeSkipped(options.skippedStream, contigs, skipped);

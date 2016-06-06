@@ -19,16 +19,16 @@ using namespace seqan;
 struct GenomicInterval
 {
     typedef Position<CharString>::Type TPos;
-    
+
     CharString chr;
     TPos begin;
     TPos end;
     bool ori;
-    
+
     GenomicInterval(CharString & c, TPos b, TPos e, bool o) :
         chr(c), begin(b), end(e), ori(o)
     {}
-    
+
     GenomicInterval(GenomicInterval const & other) :
         chr(other.chr), begin(other.begin), end(other.end), ori(other.ori)
     {}
@@ -56,7 +56,7 @@ struct AnchoringRecord
 
 struct AnchoringRecordLess : public std::binary_function<AnchoringRecord, AnchoringRecord, bool>
 {
-	AnchoringRecordLess() {}
+    AnchoringRecordLess() {}
 
     inline int compare(AnchoringRecord const & a, AnchoringRecord const & b) const
     {
@@ -108,10 +108,10 @@ struct Location
 
     unsigned numReads;
     double score;
-    
+
     std::map<CharString, unsigned> bestSamples;
     unsigned fileIndex;
-    
+
     Location ()
     {
         chr = "";
@@ -120,11 +120,11 @@ struct Location
         contig = "";
         score = -1;
     }
-    
+
     Location (CharString h, TPos hs, TPos he, bool ho, CharString c, bool co, unsigned n, double s) :
         chr(h), chrStart(hs), chrEnd(he), chrOri(ho), contig(c), contigOri(co), numReads(n), score(s)
     {}
-    
+
     Location (AnchoringRecord const & r) :
         chr(r.chr), chrStart(r.chrStart), chrEnd(r.chrEnd), chrOri(r.chrOri),
         contig(r.contig), contigOri(r.contigOri),
@@ -137,7 +137,7 @@ struct Location
 struct LocationPosLess : public std::binary_function<Location, Location, bool>
 {
     LocationPosLess() {}
-    
+
     inline int compare(Location const & a, Location const & b) const
     {
         bool chrADigit = std::isdigit(a.chr[0]);
@@ -157,25 +157,25 @@ struct LocationPosLess : public std::binary_function<Location, Location, bool>
         }
         else if (chrADigit && !chrBDigit) return 1;
         else if (!chrADigit && chrBDigit) return -1;
-        
+
         if (a.chrStart > b.chrStart) return -1;
         if (a.chrStart < b.chrStart) return 1;
-        
+
         if (a.contig > b.contig) return -1;
         if (a.contig < b.contig) return 1;
-        
+
         if (a.chrOri && !b.chrOri) return -1;
         if (!a.chrOri && b.chrOri) return 1;
-        
+
         if (a.contigOri && !b.contigOri) return -1;
         if (!a.contigOri && b.contigOri) return 1;
-        
+
         if (a.chrEnd > b.chrEnd) return -1;
         if (a.chrEnd < b.chrEnd) return 1;
-        
+
         return 0;
     }
-    
+
     inline bool operator() (Location const & a, Location const & b) const
     {
         return compare(a, b) == 1;
@@ -187,15 +187,15 @@ struct LocationPosLess : public std::binary_function<Location, Location, bool>
 struct LocationTypeLess : public std::binary_function<Location, Location, bool> 
 {
     LocationTypeLess() {}
-    
+
     inline int compare(Location const & a, Location const & b) const
     {
         if (a.contig > b.contig) return -1;
         if (a.contig < b.contig) return 1;
-        
+
         if (a.contigOri && !b.contigOri) return -1;
         if (!a.contigOri && b.contigOri) return 1;
-        
+
         bool chrADigit = std::isdigit(a.chr[0]);
         bool chrBDigit = std::isdigit(b.chr[0]);
         if (chrADigit && chrBDigit)
@@ -213,19 +213,19 @@ struct LocationTypeLess : public std::binary_function<Location, Location, bool>
         }
         else if (chrADigit && !chrBDigit) return 1;
         else if (!chrADigit && chrBDigit) return -1;
-        
+
         if (a.chrStart > b.chrStart) return -1;
         if (a.chrStart < b.chrStart) return 1;
-        
+
         if (a.chrOri && !b.chrOri) return -1;
         if (!a.chrOri && b.chrOri) return 1;
-        
+
         if (a.chrEnd > b.chrEnd) return -1;
         if (a.chrEnd < b.chrEnd) return 1;
-        
+
         return 0;
     }
-    
+
     inline bool operator() (Location const & a, Location const & b) const
     {
         return compare(a, b) == 1;
@@ -237,15 +237,15 @@ struct LocationTypeLess : public std::binary_function<Location, Location, bool>
 struct LocationTypeGreater : public std::binary_function <Location, Location, bool> 
 {
     LocationTypeGreater() {}
-    
+
     inline int compare(Location const & a, Location const & b) const
     {
         if (a.contig > b.contig) return -1;
         if (a.contig < b.contig) return 1;
-        
+
         if (a.contigOri && !b.contigOri) return -1;
         if (!a.contigOri && b.contigOri) return 1;
-        
+
         bool chrADigit = std::isdigit(a.chr[0]);
         bool chrBDigit = std::isdigit(b.chr[0]);
         if (chrADigit && chrBDigit)
@@ -263,19 +263,19 @@ struct LocationTypeGreater : public std::binary_function <Location, Location, bo
         }
         else if (chrADigit && !chrBDigit) return 1;
         else if (!chrADigit && chrBDigit) return -1;
-        
+
         if (a.chrStart > b.chrStart) return -1;
         if (a.chrStart < b.chrStart) return 1;
-        
+
         if (a.chrOri && !b.chrOri) return -1;
         if (!a.chrOri && b.chrOri) return 1;
-        
+
         if (a.chrEnd > b.chrEnd) return -1;
         if (a.chrEnd < b.chrEnd) return 1;
-        
+
         return 0;
     }
-    
+
     inline bool operator() (Location const & a, Location const & b) const
     {
         return compare(a, b) == -1;
@@ -348,9 +348,9 @@ isChromosome(CharString & name) // TODO: Allow user to specify sequence names.
     typedef Position<CharString>::Type TPos;
     TPos i = 0;
     if (length(name) > 3 && prefix(name, 3) == "chr") i = 3;
-    
+
     if ((length(name) == i+1 && (isdigit(name[i]) || name[i] == 'X' || name[i] == 'Y')) ||
-        (length(name) == i+2 && isdigit(name[i]) && isdigit(name[i+1])))
+            (length(name) == i+2 && isdigit(name[i]) && isdigit(name[i+1])))
         return true;
 
     return false;
@@ -362,22 +362,22 @@ inline Pair<CigarElement<>::TCount>
 mappedInterval(String<CigarElement<> > & cigar)
 {
     typedef CigarElement<>::TCount TSize;
-    
+
     TSize len = 0;
     TSize beginPos = 0;
     TSize endPos = 0;
-    
+
     Iterator<String<CigarElement<> > >::Type itEnd = end(cigar);
     for (Iterator<String<CigarElement<> > >::Type it = begin(cigar); it < itEnd; ++it)
     {
         len += (*it).count;
-        
+
         switch ((*it).operation)
         {
         case 'S':
-            if (it == begin(cigar))
-                beginPos += (*it).count;
-            break;
+        if (it == begin(cigar))
+            beginPos += (*it).count;
+        break;
         case 'D': case 'H':
             len -= (*it).count;
             break;
@@ -386,7 +386,7 @@ mappedInterval(String<CigarElement<> > & cigar)
             break;
         }
     }
-    
+
     return Pair<TSize>(beginPos, endPos);
 }
 
@@ -397,12 +397,12 @@ avgQuality(CharString & qual, Pair<CigarElement<>::TCount> & interval)
 {
     if (interval.i1 >= interval.i2) return 0;
     if (length(qual) == 0) return 50; // Accept undefined quality strings ('*' in sam format).
-    
+
     Iterator<CharString>::Type it = begin(qual);
     Iterator<CharString>::Type itEnd = begin(qual);
     it += interval.i1;
     itEnd += interval.i2;
-    
+
     unsigned totalQual = 0;
     while (it != itEnd)
     {
@@ -423,7 +423,7 @@ alignmentScore(BamAlignmentRecord & record)
     {
         unsigned score = 0;
         extractTagValue(score, tagsDict, idx);
-        
+
         return score;
     }
     return length(record.seq);
@@ -588,7 +588,7 @@ findLocations(String<Location> & locations, CharString & nonRefFile, unsigned ma
 
     std::map<CharString, unsigned> contigLengths;
     for (unsigned  i = 0; i < length(inStream.header.sequenceInfos); ++i)
-    contigLengths[inStream.header.sequenceInfos[i].i1] = inStream.header.sequenceInfos[i].i2;
+        contigLengths[inStream.header.sequenceInfos[i].i1] = inStream.header.sequenceInfos[i].i2;
 
     StringSet<CharString> names = nameStore(inStream.bamIOContext);
 
@@ -620,7 +620,7 @@ findLocations(String<Location> & locations, CharString & nonRefFile, unsigned ma
         else
             ++anchorsToOther[TContigEnd(record.contig, i%2)];
     }
-    
+
     for (unsigned i = 0; i < length(lists); ++i)
     {
         std::stable_sort(begin(lists[i]), end(lists[i]), AnchoringRecordLess());
@@ -634,8 +634,8 @@ findLocations(String<Location> & locations, CharString & nonRefFile, unsigned ma
     TMapIter endMap = anchorsToOther.end();
     for (TMapIter it = anchorsToOther.begin(); it != endMap; ++it)
         append(locations, Location("OTHER", 0, 0, true,
-                                   (it->first).i1, ((it->first).i2 == 0 ? true : false), it->second, 0));
-                                  
+                (it->first).i1, ((it->first).i2 == 0 ? true : false), it->second, 0));
+
     // Sort locations by contig, contigOri, chr, chrStart, chrOri.
     LocationTypeLess less;
     std::stable_sort(begin(locations, Standard()), end(locations, Standard()), less);
@@ -932,12 +932,12 @@ int
 writeLocations(std::fstream & stream, String<Location> & locations)
 {
     typedef Iterator<String<Location> >::Type TIterator;
-    
+
     // Iterate over locations to output them one per line.
     TIterator itEnd = end(locations);
     for (TIterator it = begin(locations); it != itEnd; ++it)
         writeLoc(stream, *it);
-    
+
     return 0;
 }
 
@@ -950,7 +950,7 @@ writeLocations(CharString & filename, String<Location> & locations)
         std::cerr << "ERROR: Could not open temporary locations file " << filename << " for writing." << std::endl;
         return 1;
     }
-    
+
     return writeLocations(stream, locations);
 }
 
@@ -1003,8 +1003,8 @@ int mergeLocationsBatch(std::fstream & stream, String<Location> & locations, Str
     std::priority_queue<Location, std::vector<Location>, LocationTypeGreater> heap;
 
     unsigned last = std::min(offset+batchSize, length(locationsFiles));
-    
-    
+
+
     // Open files and store String of reader pointers.
     String<TPtrPair> readerPtr;
     resize(readerPtr, length(locationsFiles));
@@ -1032,7 +1032,7 @@ int mergeLocationsBatch(std::fstream & stream, String<Location> & locations, Str
 
         // Output all the locations for a contig.
         if ((forward.contig != "" && (forward.contig != loc.contig || (forward.contig == loc.contig && forward.contigOri != loc.contigOri))) ||
-            (reverse.contig != "" && (reverse.contig != loc.contig || (reverse.contig == loc.contig && reverse.contigOri != loc.contigOri))))
+                (reverse.contig != "" && (reverse.contig != loc.contig || (reverse.contig == loc.contig && reverse.contigOri != loc.contigOri))))
         {
             if (forward.contig != "") appendValue(locations, forward);
             if (reverse.contig != "") appendValue(locations, reverse);
@@ -1071,7 +1071,7 @@ int mergeLocationsBatch(std::fstream & stream, String<Location> & locations, Str
     Location loc = Location();
     if (forward.contig != "") appendValue(locations, forward);
     if (reverse.contig != "") appendValue(locations, reverse);
-    
+
     // Compute the score for each location.
     Iterator<String<Location> >::Type itEnd = end(locations);
     for (Iterator<String<Location> >::Type it = begin(locations); it != itEnd; ++it)
@@ -1101,7 +1101,7 @@ mergeLocations(std::fstream & stream, String<Location> & locations, String<CharS
 {
     String<CharString> tmpFiles;
     unsigned batchSize = 500;
-    
+
     if (length(locationsFiles) > batchSize*batchSize)
     {
         std::cerr << "ERROR: Too many locations files, max: " << batchSize*batchSize << ", given: " << length(locationsFiles) << std::endl;

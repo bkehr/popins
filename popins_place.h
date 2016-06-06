@@ -30,7 +30,7 @@ openVcf(TStream & vcfStream, CharString & filename)
         std::cerr << "ERROR: Could not open VCF output file " << filename << std::endl;
         return 1;
     }
-    
+
     return 0;
 }
 
@@ -44,7 +44,7 @@ initVcf(TStream & vcfStream, PlacingOptions & options, FaiIndex & fai)
         std::cerr << "ERROR: Could not open VCF output file " << options.outFile << std::endl;
         return 1;
     }
-    
+
     // Get today's date, e.g. '2016-Apr-15'.
     time_t now = time(0);
     struct tm tstruct;
@@ -68,7 +68,7 @@ initVcf(TStream & vcfStream, PlacingOptions & options, FaiIndex & fai)
 
     vcfStream << "##FORMAT=<ID=GT,Number=1,Type=String,Description=\"Genotype\">" << std::endl;
     vcfStream << "##FORMAT=<ID=PL,Number=G,Type=Integer,Description=\"PHRED-scaled genotype likelihoods\">" << std::endl;
-    
+
     vcfStream << "#CHROM" << "\t" << "POS" << "\t" << "ID" << "\t" << "REF" << "\t" << "ALT";
     vcfStream << "\t" << "QUAL" << "\t" << "FILTER" << "\t" << "INFO" << "\t" << "FORMAT" << std::endl;
 
@@ -124,9 +124,9 @@ loadLocations(String<LocationInfo> & locations, PlacingOptions & options)
         {
             if (options.verbose)
                 std::cerr << "[" << time(0) << "] " << "Reading locations in " << options.interval.i1 << ":" << options.interval.i2 << "-" << options.interval.i3
-                                                    << " from " << options.locationsFile << std::endl;
-                if (readLocations(locations, options.locationsFile, options.interval, filter) != 0)
-                    return 1;
+                << " from " << options.locationsFile << std::endl;
+            if (readLocations(locations, options.locationsFile, options.interval, filter) != 0)
+                return 1;
         }
     }
     else
@@ -151,12 +151,12 @@ loadLocations(String<LocationInfo> & locations, PlacingOptions & options)
 template<typename TSeq>
 bool
 loadContigs(std::vector<std::pair<CharString, TSeq> > & contigs,
-            String<LocationInfo> & locs,
-            CharString & filename,
-            bool verbose)
+        String<LocationInfo> & locs,
+        CharString & filename,
+        bool verbose)
 {
     typedef std::pair<CharString, TSeq> TPair;
-    
+
     if (verbose)
         std::cerr << "[" << time(0) << "] " << "Reading contig sequences from " << filename << std::endl;
 
@@ -190,11 +190,11 @@ loadContigs(std::vector<std::pair<CharString, TSeq> > & contigs,
             std::cerr << "ERROR: Could not read FASTA record from " << filename << std::endl;
             return 1;
         }
-        
+
         unsigned i = 0;
         for (; i < length(id); ++i) if (id[i] == ' ') break;
         id = prefix(id, i);
-        
+
         // Append the contig and erase it from set.
         if (contigSet.count(id) != 0)
         {
@@ -250,7 +250,7 @@ int popins_place(int argc, char const ** argv)
             std::cerr << "ERROR: Could not open FAI index for " << options.referenceFile << std::endl;
             return 1;
         }
-    
+
         if (options.isVcf)
         {
             // Step 2: DO THE REFERENCE ALIGNMENT FOR ALL LOCATIONS

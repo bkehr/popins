@@ -16,7 +16,7 @@ struct Contig
 {
     TSeq seq;
     ContigId id;
-    
+
     Contig() {}
 
     Contig(TSeq & s, ContigId & i) :
@@ -60,18 +60,18 @@ struct ContigBatch
     String<CharString> contigFiles;
     String<unsigned> contigsPerFile;
     unsigned contigsInTotal;
-    
+
     // Specific info for this batch of contigs
     unsigned number;
     unsigned batchesInTotal;
     int size; // of all batches
     int actualSize; // of this specific batch (last batch may be smaller than the other batches)
     int offset; // start index of this batch
-    
+
     ContigBatch() :
         number(0), batchesInTotal(1), size(-1), actualSize(-1), offset(-1)
     {}
-    
+
     ContigBatch(String<CharString> & files, unsigned batches, unsigned batchIndex) :
         contigFiles(files), number(batchIndex), batchesInTotal(batches), size(-1), actualSize(-1), offset(-1)
     {}
@@ -133,7 +133,7 @@ int totalBatches(ContigBatch & batch)
 bool countContigs(ContigBatch & batch)
 {
     unsigned count = 0;
-    
+
     // Case A) Use counts specified by user.
     for (unsigned i = 0; i < length(batch.contigsPerFile); ++i)
         count += batch.contigsPerFile[i];
@@ -154,7 +154,7 @@ bool countContigs(ContigBatch & batch)
                 std::cerr << "ERROR: Could not open " << batch.contigFiles[i] << " as fasta file." << std::endl;
                 return 1;
             }
-            
+
             // Count records in file.
             while (!atEnd(stream))
             {
@@ -169,9 +169,9 @@ bool countContigs(ContigBatch & batch)
             prevCount = count;
         }
     }
-    
+
     batch.contigsInTotal = count;
-    
+
     return 0;
 }
 

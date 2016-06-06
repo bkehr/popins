@@ -36,10 +36,10 @@ formattedIndex(unsigned i, TLen max)
         max /= 10;
         digits++;
     }
-    
+
     std::stringstream s;
     s << std::setfill('0') << std::setw(digits) << i;
-    
+
     return s.str();
 }
 
@@ -64,8 +64,8 @@ inline bool
 operator!=(ContigId const & left, ContigId const & right)
 {
     return (left.pn != right.pn) ||
-        (left.contigId != right.contigId) ||
-        (left.orientation != right.orientation);
+            (left.contigId != right.contigId) ||
+            (left.orientation != right.orientation);
 }
 
 // --------------------------------------------------------------------------
@@ -76,8 +76,8 @@ inline bool
 operator<(ContigId const & left, ContigId const & right)
 {
     return (left.pn < right.pn) ||
-        (left.pn == right.pn && left.contigId < right.contigId) ||
-        (left.pn == right.pn && left.contigId == right.contigId && left.orientation && !right.orientation);
+            (left.pn == right.pn && left.contigId < right.contigId) ||
+            (left.pn == right.pn && left.contigId == right.contigId && left.orientation && !right.orientation);
 }
 
 // --------------------------------------------------------------------------
@@ -88,8 +88,8 @@ inline bool
 operator>(ContigId const & left, ContigId const & right)
 {
     return (left.pn > right.pn) ||
-        (left.pn == right.pn && left.contigId > right.contigId) ||
-        (left.pn == right.pn && left.contigId == right.contigId && !left.orientation && right.orientation);
+            (left.pn == right.pn && left.contigId > right.contigId) ||
+            (left.pn == right.pn && left.contigId == right.contigId && !left.orientation && right.orientation);
 }
 
 

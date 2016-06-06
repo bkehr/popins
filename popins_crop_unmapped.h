@@ -32,14 +32,14 @@ inline bool
 hasLowMappingQuality(BamAlignmentRecord & record, int humanSeqs)
 {
     typedef Iterator<String<CigarElement<> > >::Type TIter;
-    
+
     // Check for mapping location of other read end. If within 1000 bp and opposite orientation, accept the mapping.
     if (record.rID == record.rNextId && abs(record.beginPos - record.pNext) < 1000 &&
-        hasFlagRC(record) != hasFlagNextRC(record))
+            hasFlagRC(record) != hasFlagNextRC(record))
         return false;
 
     if (record.rID > humanSeqs) return false;
-    
+
     // Check for less than 50 bp matches ('M') in cigar string.
     unsigned matches = 0;
     TIter itEnd = end(record.cigar);
@@ -49,11 +49,11 @@ hasLowMappingQuality(BamAlignmentRecord & record, int humanSeqs)
 
     // Check for soft-clipping at BOTH ENDS by more than 24 bp.
     if (record.cigar[0].operation == 'S' &&
-        record.cigar[0].count > 24 &&
-        record.cigar[length(record.cigar)-1].operation == 'S' &&
-        record.cigar[length(record.cigar)-1].count > 24)
+            record.cigar[0].count > 24 &&
+            record.cigar[length(record.cigar)-1].operation == 'S' &&
+            record.cigar[length(record.cigar)-1].count > 24)
         return true;
-    
+
     // Check for AS (alignment score) lower than 0.5 * readLength.
     BamTagsDict tagsDict(record.tags);
     unsigned idx;
@@ -100,7 +100,7 @@ removeLowQuality(BamAlignmentRecord & record, TSize_ qualThresh)
             record.qual = suffix(record.qual, position(windowBegin));
             break;
         }
-        
+
         windowQual -= *windowBegin - 33;
         windowQual += *windowEnd - 33;
     }
@@ -169,10 +169,10 @@ setMateUnmapped(BamAlignmentRecord & record)
 // Append a read to map of fastq records.
 bool
 appendFastqRecord(SequenceStream & firstStream,
-                  SequenceStream & secondStream,
-                  std::map<CharString, Pair<CharString> > & firstReads,
-                  std::map<CharString, Pair<CharString> > & secondReads,
-                  BamAlignmentRecord const & record)
+        SequenceStream & secondStream,
+        std::map<CharString, Pair<CharString> > & firstReads,
+        std::map<CharString, Pair<CharString> > & secondReads,
+        BamAlignmentRecord const & record)
 {
     CharString seq = record.seq;
     CharString qual = record.qual;
@@ -200,7 +200,7 @@ appendFastqRecord(SequenceStream & firstStream,
         }
     }
     else // hasFlagLast(record)
-    {
+            {
         if (firstReads.count(record.qName) != 0)
         {
             Pair<CharString> first = firstReads[record.qName];
@@ -214,7 +214,7 @@ appendFastqRecord(SequenceStream & firstStream,
             secondReads[record.qName] = Pair<CharString>(seq, qual);
             return 0;
         }
-    }
+            }
 }
 
 bool
@@ -235,10 +235,10 @@ openFastq(SequenceStream & stream, CharString & file)
 
 int
 writeFastq(SequenceStream & fastqFirst,
-           SequenceStream & fastqSecond,
-           SequenceStream & fastqSingle,
-           std::map<CharString, Pair<CharString> > const & firstReads,
-           std::map<CharString, Pair<CharString> > const & secondReads)
+        SequenceStream & fastqSecond,
+        SequenceStream & fastqSingle,
+        std::map<CharString, Pair<CharString> > const & firstReads,
+        std::map<CharString, Pair<CharString> > const & secondReads)
 {
     typedef std::map<CharString, Pair<CharString> > TFastqMap;
 
@@ -291,8 +291,8 @@ writeFastq(SequenceStream & fastqFirst,
 template<typename TPos>
 int
 findOtherReads(BamStream & matesStream,
-               std::map<Pair<TPos>, Pair<CharString, bool> > & otherReads,
-               CharString const & mappingBam)
+        std::map<Pair<TPos>, Pair<CharString, bool> > & otherReads,
+        CharString const & mappingBam)
 {
     typedef std::map<Pair<TPos>, Pair<CharString, bool> > TOtherMap;
 
@@ -337,7 +337,7 @@ findOtherReads(BamStream & matesStream,
 
         // Skip reads not in list.
         while (!atEnd(inStream) && record.rID == it->first.i1 &&
-              (record.beginPos < it->first.i2 || (record.beginPos == it->first.i2 && record.qName != it->second.i1)))
+                (record.beginPos < it->first.i2 || (record.beginPos == it->first.i2 && record.qName != it->second.i1)))
         {
             if (readRecord(record, inStream) != 0)
             {
@@ -348,7 +348,7 @@ findOtherReads(BamStream & matesStream,
 
         // Output record if it matches qName, rID, and beginPos.
         if (!atEnd(inStream) &&
-            record.qName == it->second.i1 && record.rID == it->first.i1 && record.beginPos == it->first.i2)
+                record.qName == it->second.i1 && record.rID == it->first.i1 && record.beginPos == it->first.i2)
         {
             // Check if both ends are low-quality mapped and, hence, are already in fastq files.
             if (otherReads.count(Pair<TPos>(record.rNextId, record.pNext)) == 0)
@@ -370,10 +370,10 @@ findOtherReads(BamStream & matesStream,
 template<typename TAdapterTag>
 int
 crop_unmapped(Triple<CharString> & fastqFiles,
-              CharString & matesBam,
-              CharString const & mappingBam,
-              int humanSeqs,
-              TAdapterTag tag)
+        CharString & matesBam,
+        CharString const & mappingBam,
+        int humanSeqs,
+        TAdapterTag tag)
 {
     typedef __int32 TPos;
     typedef std::map<CharString, Pair<CharString> > TFastqMap; // Reads to go into fastq files.
@@ -404,7 +404,7 @@ crop_unmapped(Triple<CharString> & fastqFiles,
     // Open the output fastq files.    
     SequenceStream fastqFirstStream, fastqSecondStream, fastqSingleStream;
     if (openFastq(fastqFirstStream, fastqFiles.i1) != 0 || openFastq(fastqSecondStream, fastqFiles.i2) != 0 ||
-        openFastq(fastqSingleStream, fastqFiles.i3) != 0) return 1;
+            openFastq(fastqSingleStream, fastqFiles.i3) != 0) return 1;
 
     // Retrieve the adapter sequences with up to one error and create indices.
     TStringSet universal = complementUniversalOneError(tag);
@@ -425,7 +425,7 @@ crop_unmapped(Triple<CharString> & fastqFiles,
 
         // Check for flags that indicate 'uninteresting' bam records.
         if (hasFlagDuplicate(record) or hasFlagSecondary(record) or
-            hasFlagQCNoPass(record) or hasFlagSupplementary(record)) continue;
+                hasFlagQCNoPass(record) or hasFlagSupplementary(record)) continue;
 
         // Check the read's unmapped flag.
         if (hasFlagUnmapped(record))
