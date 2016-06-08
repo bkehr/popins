@@ -386,11 +386,12 @@ setupParser(ArgumentParser & parser, AssemblyOptions & options)
 
     // Require a bam file as argument.
     addArgument(parser, ArgParseArgument(ArgParseArgument::INPUTFILE, "BAMFILE"));
-    addArgument(parser, ArgParseArgument(ArgParseArgument::INPUTFILE, "MPFILE"));
 
     // Setup the options.
     addOption(parser, ArgParseOption("d", "directory", "Path to working directory.", ArgParseArgument::STRING, "PATH"));
     setDefaultValue(parser, "directory", "current directory");
+
+    addOption(parser, ArgParseOption("mp", "matePair", "", ArgParseArgument::INPUTFILE, "BAMFILE"));
 
     addOption(parser, ArgParseOption("k", "kmerLength", "The k-mer size for velvet assembly.", ArgParseArgument::INTEGER, "INT"));
     setDefaultValue(parser, "kmerLength", options.kmerLength);
@@ -693,11 +694,10 @@ getOptionValues(AssemblyOptions & options, ArgumentParser const & parser)
         getOptionValue(options.threads, parser, "threads");
     if (isSet(parser, "memory"))
         getOptionValue(options.memory, parser, "memory");
-    if (isSet(parser, "matepair")) {
+    if (isSet(parser, "matepair"))
+    {
         options.matepair = true;
-        if (!getArgumentValue(options.matepairFile, parser, 1)) {
-            return 1;
-        }
+        getOptionValue(options.matepairFile, parser, "matepair");
     }
 
     return 0;
