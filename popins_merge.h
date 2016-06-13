@@ -315,6 +315,8 @@ addReverseComplementContigs(std::map<TSize, Contig<TSeq> > & contigs, ContigBatc
 {
     typedef typename std::map<TSize, Contig<TSeq> >::iterator TIter;
 
+    typedef Pair<TSize, Contig<TSeq> > TPair;
+    String<TPair> revContigs;
     TIter itEnd = contigs.end();
     for (TIter it = contigs.begin(); it != itEnd; ++it)
     {
@@ -326,8 +328,11 @@ addReverseComplementContigs(std::map<TSize, Contig<TSeq> > & contigs, ContigBatc
         ContigId revId = (it->second).id;
         revId.orientation = false;
 
-        contigs[globalIndexRC(it->first, batch)] = Contig<TSeq>(revSeq, revId);
+        appendValue(revContigs, TPair(globalIndexRC(it->first, batch), Contig<TSeq>(revSeq, revId)));
     }
+
+    for (unsigned i = 0; i < length(revContigs); ++i)
+        contigs[revContigs[i].i1] = revContigs[i].i2;
 }
 
 // --------------------------------------------------------------------------
