@@ -65,7 +65,7 @@ readContigFile(std::map<TSize, Contig<TSeq> > & contigs,
 
     std::ostringstream msg;
     msg << "Loaded " << filename << ": " << basepairs << " bp in " << (length(contigs) - numContigsBefore) << " contigs.";
-    printStatus("");
+    printStatus(msg);
 
     return 0;
 }
