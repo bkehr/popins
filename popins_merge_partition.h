@@ -217,7 +217,7 @@ partitionContigs(UnionFind<int> & uf,
         // initialization of swift finder
         TFinder swiftFinder(contig.seq, 1000, 1);
 
-        hash(swiftPattern.shape, hostIterator(hostIterator(swiftFinder)));
+        hash(swiftPattern.data_host.data_value->shape, hostIterator(hostIterator(swiftFinder)));
         while (find(swiftFinder, swiftPattern, options.errorRate, options.minimalLength))
         {
 
