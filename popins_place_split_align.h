@@ -4,7 +4,7 @@
 #include <seqan/bam_io.h>
 
 #include "popins_location.h"
-#include "align_split.h"
+#include <seqan/align_split.h>
 
 using namespace seqan;
 
@@ -198,7 +198,8 @@ alignRead(std::pair<unsigned, unsigned> & insPos, Dna5String readSeq, TContigSeq
     setSource(refRowRight, ref);
 
     Score<int, Simple> scoringScheme(1, -3, -4, -5);
-    Pair<int, int> splitScore = splitAlignment(readRowLeft, contigRowLeft, readRowRight, refRowRight, scoringScheme);
+    AlignConfig<false, true, true, false> config;
+    Pair<int, int> splitScore = splitAlignment(readRowLeft, contigRowLeft, readRowRight, refRowRight, scoringScheme, config);
 
     //    std::cout << "\nSplit score = " << splitScore.i1 + splitScore.i2 << " (" << splitScore.i1 << " + " << splitScore.i2 << ")" << std::endl;
     //    std::cout << readRowLeft << "\n" << contigRowLeft << "\n\n" << readRowRight << "\n" << refRowRight << std::endl;
@@ -225,7 +226,7 @@ alignRead(std::pair<unsigned, unsigned> & insPos, Dna5String readSeq, TContigSeq
 template<typename TContigSeq, typename TRefSeq>
 bool
 splitAlignReads(std::map<std::pair<unsigned, unsigned>, unsigned> & insPos,
-        BamStream & bamStream,
+        BamFileIn & bamStream,
         BamIndex<Bai> & bai,
         TContigSeq & contigPrefix,
         TRefSeq & ref,
@@ -237,8 +238,7 @@ splitAlignReads(std::map<std::pair<unsigned, unsigned>, unsigned> & insPos,
 
     // Find the rID in BAM file for the location's chromosome.
     int rID = 0;
-    BamIOContext<StringSet<CharString> > context = bamStream.bamIOContext;
-    getIdByName(nameStore(context), loc.chr, rID, nameStoreCache(context));
+    getIdByName(rID, contigNamesCache(context(bamStream)), loc.chr);
 
     // Jump to the location in BAM file.
     bool hasAlignments;
@@ -296,7 +296,7 @@ splitAlignReads(std::map<std::pair<unsigned, unsigned>, unsigned> & insPos,
 template<typename TRefSeq>
 bool
 loadContigAndSplitAlign(std::map<std::pair<unsigned, unsigned>, unsigned> & insPos,
-        BamStream & bamStream,
+        BamFileIn & bamStream,
         BamIndex<Bai> & bai,
         TRefSeq & ref,
         Dna5String & contig,
@@ -389,18 +389,18 @@ popins_place_split_read_align(String<LocationInfo> & locs,
     typedef std::pair<CharString, Dna5String> TPair;
 
     // Open the BAM file.
-    BamStream bamStream;
-    if (open(bamStream, toCString(options.bamFile)) != 0)
-    {
-        std::cerr << "ERROR: Could not open BAM file " << options.bamFile << std::endl;
-        return 1;
-    }
+    BamFileIn bamStream(toCString(options.bamFile));
+
+    // Read the header and clear it since we don't need it.
+    BamHeader header;
+    readHeader(header, bamStream);
+    clear(header);
 
     // Load the BAI file.
     BamIndex<Bai> bai;
     CharString baiFile = options.bamFile;
     baiFile += ".bai";
-    if (read(bai, toCString(baiFile)) != 0)
+    if (!open(bai, toCString(baiFile)))
     {
         std::cerr << "ERROR: Could not read BAI index file " << baiFile << std::endl;
         return 1;

@@ -168,8 +168,8 @@ setMateUnmapped(BamAlignmentRecord & record)
 
 // Append a read to map of fastq records.
 bool
-appendFastqRecord(SequenceStream & firstStream,
-        SequenceStream & secondStream,
+appendFastqRecord(SeqFileOut & firstStream,
+        SeqFileOut & secondStream,
         std::map<CharString, Pair<CharString> > & firstReads,
         std::map<CharString, Pair<CharString> > & secondReads,
         BamAlignmentRecord const & record)
@@ -217,26 +217,14 @@ appendFastqRecord(SequenceStream & firstStream,
             }
 }
 
-bool
-openFastq(SequenceStream & stream, CharString & file)
-{
-    open(stream, toCString(file), SequenceStream::WRITE, SequenceStream::FASTQ);
-    if (!isGood(stream))
-    {
-        std::cerr << "ERROR while opening temporary output file " << file << std::endl;
-        return 1;
-    }
-    return 0;
-}
-
 // --------------------------------------------------------------------------
 // Function writeFastq()
 // --------------------------------------------------------------------------
 
 int
-writeFastq(SequenceStream & fastqFirst,
-        SequenceStream & fastqSecond,
-        SequenceStream & fastqSingle,
+writeFastq(SeqFileOut & fastqFirst,
+        SeqFileOut & fastqSecond,
+        SeqFileOut & fastqSingle,
         std::map<CharString, Pair<CharString> > const & firstReads,
         std::map<CharString, Pair<CharString> > const & secondReads)
 {
@@ -290,7 +278,7 @@ writeFastq(SequenceStream & fastqFirst,
 
 template<typename TPos>
 int
-findOtherReads(BamStream & matesStream,
+findOtherReads(BamFileOut & matesStream,
         std::map<Pair<TPos>, Pair<CharString, bool> > & otherReads,
         CharString const & mappingBam)
 {
@@ -299,18 +287,15 @@ findOtherReads(BamStream & matesStream,
     int numFound = 0; // Return value.
 
     // Open input file.
-    BamStream inStream(toCString(mappingBam));
-    if (!isGood(inStream))
-    {
-        std::cerr << "ERROR while opening input bam file " << mappingBam << std::endl;
-        return -1;
-    }
+    BamFileIn inStream(toCString(mappingBam));
+    BamHeader header;
+    readHeader(header, inStream);
 
     // Load bam index.
     CharString baiFile = mappingBam;
     baiFile += ".bai";
     BamIndex<Bai> bamIndex;
-    if (read(bamIndex, toCString(baiFile)) != 0)
+    if (!open(bamIndex, toCString(baiFile)))
     {
         std::cerr << "ERROR: Could not read BAI index file " << baiFile << std::endl;
         return -1;
@@ -328,23 +313,13 @@ findOtherReads(BamStream & matesStream,
             rID = it->first.i1;
             bool hasAligns;
             jumpToRegion(inStream, hasAligns, rID, it->first.i2, maxValue<TPos>(), bamIndex);
-            if (readRecord(record, inStream) != 0)
-            {
-                std::cerr << "ERROR while reading bam record from " << mappingBam << std::endl;
-                return -1;
-            }
+            readRecord(record, inStream);
         }
 
         // Skip reads not in list.
         while (!atEnd(inStream) && record.rID == it->first.i1 &&
                 (record.beginPos < it->first.i2 || (record.beginPos == it->first.i2 && record.qName != it->second.i1)))
-        {
-            if (readRecord(record, inStream) != 0)
-            {
-                std::cerr << "ERROR while reading bam record from " << mappingBam << std::endl;
-                return -1;
-            }
-        }
+            readRecord(record, inStream);
 
         // Output record if it matches qName, rID, and beginPos.
         if (!atEnd(inStream) &&
@@ -380,31 +355,23 @@ crop_unmapped(Triple<CharString> & fastqFiles,
     typedef std::map<Pair<TPos>, Pair<CharString, bool> > TOtherMap; // Reads to crop in a second pass of the input file.
     typedef StringSet<Dna5String> TStringSet;
 
-    // Open the input bam file.
-    BamStream inStream(toCString(mappingBam));
-    if (!isGood(inStream))
-    {
-        std::cerr << "ERROR while opening input bam file " << mappingBam << std::endl;
-        return 1;
-    }
+    // Open the input and output bam files.
+    BamFileIn inStream(toCString(mappingBam));
+    BamFileOut matesStream(context(inStream), toCString(matesBam));
 
-    // Open the bam output file and copy the header from the input file.
-    BamStream matesStream(toCString(matesBam), BamStream::WRITE);
-    if (!isGood(matesStream))
-    {
-        std::cerr << "ERROR while opening output bam file " << matesBam << std::endl;
-        return 1;
-    }
-    matesStream.header = inStream.header;
+    // Copy the header.
+    BamHeader header;
+    readHeader(header, inStream);
+    writeHeader(matesStream, header);
 
     // Create maps for fastq records (first read in pair and second read in pair) and bam records without mate.
     TFastqMap firstReads, secondReads;
     TOtherMap otherReads;
 
     // Open the output fastq files.    
-    SequenceStream fastqFirstStream, fastqSecondStream, fastqSingleStream;
-    if (openFastq(fastqFirstStream, fastqFiles.i1) != 0 || openFastq(fastqSecondStream, fastqFiles.i2) != 0 ||
-            openFastq(fastqSingleStream, fastqFiles.i3) != 0) return 1;
+    SeqFileOut fastqFirstStream(toCString(fastqFiles.i1));
+    SeqFileOut fastqSecondStream(toCString(fastqFiles.i2));
+    SeqFileOut fastqSingleStream(toCString(fastqFiles.i3));
 
     // Retrieve the adapter sequences with up to one error and create indices.
     TStringSet universal = complementUniversalOneError(tag);
@@ -417,11 +384,7 @@ crop_unmapped(Triple<CharString> & fastqFiles,
     while (!atEnd(inStream))
     {
         // Read the next read from input file.
-        if (readRecord(record, inStream) != 0)
-        {
-            std::cerr << "ERROR while reading bam record from " << mappingBam << std::endl;
-            return 1;
-        }
+        readRecord(record, inStream);
 
         // Check for flags that indicate 'uninteresting' bam records.
         if (hasFlagDuplicate(record) or hasFlagSecondary(record) or
@@ -450,10 +413,11 @@ crop_unmapped(Triple<CharString> & fastqFiles,
             writeRecord(matesStream, record);
         }
     }
+    close(inStream);
 
     std::ostringstream msg;
     msg << "Map of low quality mates has " << otherReads.size() << " records.";
-    printStatus("");
+    printStatus(msg);
 
     // Write the remaining fastq records.
     if (writeFastq(fastqFirstStream, fastqSecondStream, fastqSingleStream, firstReads, secondReads) != 0) return 1;
@@ -462,7 +426,7 @@ crop_unmapped(Triple<CharString> & fastqFiles,
 
     msg.str("");
     msg << "Unmapped reads written to " << fastqFiles.i1 << ", " << fastqFiles.i2 << ", " << fastqFiles.i3;
-    printStatus("");
+    printStatus(msg);
 
     // Find the other read end of the low quality mapping reads and write them to the output bam file. 
     int found = findOtherReads(matesStream, otherReads, mappingBam);
@@ -470,7 +434,7 @@ crop_unmapped(Triple<CharString> & fastqFiles,
 
     msg.str("");
     msg << "Mapped mates of unmapped reads written to " << matesBam << " , " << found << " found in second pass.";
-    printStatus("");
+    printStatus(msg);
 
     return 0;
 }

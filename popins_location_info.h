@@ -108,7 +108,7 @@ Dna5String
 loadInterval(FaiIndex & fai, CharString & chrom, unsigned beginPos, unsigned endPos)
 {
     unsigned idx = 0;
-    if (!getIdByName(fai, chrom, idx))
+    if (!getIdByName(idx, fai, chrom))
     {
         std::cerr << "ERROR: Could not find " << chrom << " in FAI index." << std::endl;
         return 1;

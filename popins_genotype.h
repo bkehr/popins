@@ -57,19 +57,23 @@ popins_genotype(int argc, char const ** argv)
     if (parseCommandLine(options, argc, argv) != 0)
         return 1;
 
-    // Open the input VCF file and prepare output vcf stream.
-    VcfStream vcfIn(toCString(options.vcfFile));
-    if (!isGood(vcfIn))
-    {
-        std::cerr << "ERROR: Could not open vcf input file " << options.vcfFile << std::endl;
-        return 1;
-    }
-    VcfStream vcfOut("-", VcfStream::WRITE);
-    vcfOut.header = vcfIn.header;
+    printStatus("Opening input files.");
 
+    // Open the input VCF file and prepare output vcf stream.
+    VcfFileIn vcfIn(toCString(options.vcfFile));
+    VcfFileOut vcfOut(vcfIn);
+    open(vcfOut, std::cout, Vcf());
+
+    appendName(sampleNamesCache(context(vcfOut)), options.sampleName);
+
+    VcfHeader header;
+    readHeader(header, vcfIn);
+    writeHeader(vcfOut, header);
+
+    /*
     string chr, f1,f2,f3,f4,f5,f6,f7,f8;
     ifstream f;
-    /* The chromosomes in the output file need to be in the same order as in the input file */
+    // The chromosomes in the output file need to be in the same order as in the input file
     f.open( toCString( options.vcfFile ) );
     map< string, int> chrs;
     f >> chr >> f1 >> f2 >> f3 >> f4 >> f5 >> f6 >> f7 >> f8;
@@ -81,53 +85,53 @@ popins_genotype(int argc, char const ** argv)
         }
     }
     f.close();
+    */
 
     // Build an index of the fasta file (reference genome).
     FaiIndex faIndex;
-    int res = build(faIndex, toCString(options.referenceFile));
-    if (res != 0)
+    if (!open(faIndex, toCString(options.referenceFile)))
     {
-        std::cerr << "ERROR: Could not build the index of " << options.referenceFile << std::endl;
-        return 1;
+        if (!build(faIndex, toCString(options.referenceFile)))
+        {
+            std::cerr << "ERROR: Could not build the index of " << options.referenceFile << std::endl;
+            return 1;
+        }
     }
 
-    // Open the bam file. (A bam file needs the header names, the bai index and the bam file stream.)
-    TNameStore      headerNames;
-    TNameStoreCache headerNamesCache(headerNames);
-    TBamIOContext   context(headerNames, headerNamesCache);
+    // Open the bam file. (A bam file needs the bai index and the bam file stream.)
     BamIndex<Bai> bamIndex;
-    Stream<Bgzf> bamStream;
-    res = initializeBam(toCString(options.bamFile), context, bamIndex, bamStream);
-    if (res != 0) return 1;
+    BamFileIn bamStream;
+    if (initializeBam(toCString(options.bamFile), bamIndex, bamStream) != 0) return 1;
 
     // Build an index of the insertion sequences' fasta file.
     FaiIndex faIndexAlt;
-    res = build(faIndexAlt, toCString(options.altFastaFile));
-    if (res != 0)
+    if (!open(faIndexAlt, toCString(options.altFastaFile)))
     {
-        std::cerr << "ERROR: Could not build the index of " << options.altFastaFile << std::endl;
-        return 1;
+        if (!build(faIndexAlt, toCString(options.altFastaFile)))
+        {
+            std::cerr << "ERROR: Could not build the index of " << options.altFastaFile << std::endl;
+            return 1;
+        }
     }
 
-    // Open the bam file. (A bam file needs the header names, the bai index and the bam file stream.)
-    TNameStore      headerNamesAlt;
-    TNameStoreCache headerNamesCacheAlt(headerNamesAlt);
-    TBamIOContext   contextAlt(headerNamesAlt, headerNamesCacheAlt);
+    // Open the bam file. (A bam file needs the bai index and the bam file stream.)
     BamIndex<Bai> bamIndexAlt;
-    Stream<Bgzf> bamStreamAlt;
-    res = initializeBam(toCString(options.altBamFile), contextAlt, bamIndexAlt, bamStreamAlt);
-    if (res != 0) return 1;
+    BamFileIn bamStreamAlt;
+    if (initializeBam(toCString(options.altBamFile), bamIndexAlt, bamStreamAlt))
+        return 1;
 
-    appendValue( vcfOut.header.sampleNames, options.sampleName );
+    std::ostringstream msg;
+    msg << "Genotyping VCF records in \'" << options.vcfFile << "\' for " << options.sampleName << ".";
+    printStatus(msg);
 
     // Iterate over VCF file and call the variants.
     VcfRecord record;    
     while (!atEnd(vcfIn))
     {
-        res = readRecord(record, vcfIn);
+        readRecord(record, vcfIn);
 
         std::vector<double> vC(3);
-        variantCallRegion(record, vcfIn.header, faIndex, faIndexAlt, bamIndex, bamStream, context, bamIndexAlt, bamStreamAlt, contextAlt, options, vC);
+        variantCallRegion(record, vcfIn, faIndex, faIndexAlt, bamIndex, bamStream, bamIndexAlt, bamStreamAlt, options, vC);
 
         std::string gtString;
         probsToGtString(vC, gtString);

@@ -43,165 +43,91 @@ struct PlacedLocLess : public std::binary_function<PlacedLocation, PlacedLocatio
 // ---------------------------------------------------------------------------------------
 
 bool
-readPlacedLocation(PlacedLocation & loc, RecordReader<std::fstream, SinglePass<> > & reader, CharString & filename)
+readPlacedLocation(PlacedLocation & loc, std::stringstream & stream, CharString & filename)
 {
-    CharString buffer;
+    std::string genomicPos;
+    stream >> genomicPos;
 
-    if (readUntilOneOf(loc.loc.chr, reader, ':', '\t', ' ') != 0)
+    size_t colon;
+    if ((colon = genomicPos.find(':')) != std::string::npos)
     {
-        std::cerr << "ERROR: Reading CHR from " << filename << " failed." << std::endl;
-        return 1;
-    }
+        loc.loc.chr = genomicPos.substr(0, colon);
 
-    if (value(reader) == ':')
-    {
-        skipChar(reader, ':');
+        size_t dash = genomicPos.find('-');
 
-        if (readUntilChar(buffer, reader, '-') != 0)
+        std::string start = genomicPos.substr(colon+1, dash-colon-1);
+        if (!lexicalCast<Location::TPos>(loc.loc.chrStart, start))
         {
-            std::cerr << "ERROR: Reading CHR_START from " << filename << " failed." << std::endl;
+            std::cerr << "ERROR: Could not parse " << start << " as location start position in \'" << filename << "\'." << std::endl;
             return 1;
         }
-        lexicalCast2<Location::TPos>(loc.loc.chrStart, buffer);
-        skipChar(reader, '-');
 
-        clear(buffer);
-        if (readDigits(buffer, reader) != 0)
+        std::string end = genomicPos.substr(dash+1);
+        if (!lexicalCast<Location::TPos>(loc.loc.chrEnd, end))
         {
-            std::cerr << "ERROR: Reading CHR_END from " << filename << " failed." << std::endl;
+            std::cerr << "ERROR: Could not parse " << end << " as location end position in \'" << filename << "\'." << std::endl;
             return 1;
         }
-        lexicalCast2<Location::TPos>(loc.loc.chrEnd, buffer);
     }
-    skipWhitespaces(reader);
-
-    if (value(reader) == '+') loc.loc.chrOri = true;
-    else if (value(reader) == '-') loc.loc.chrOri = false;
     else
     {
-        std::cerr << "ERROR: Reading CHR_ORI from " << filename << " failed." << std::endl;
-        return 1;
+        loc.loc.chr = genomicPos;
     }
-    skipNChars(reader, 1);
-    skipWhitespaces(reader);
 
-    if (readUntilWhitespace(loc.loc.contig, reader) != 0)
-    {
-        std::cerr << "ERROR: Reading CONTIG from " << filename << " failed." << std::endl;
-        return 1;
-    }
-    skipWhitespaces(reader);
+    char ori;
+    stream >> ori;
 
-    if (value(reader) == '+') loc.loc.contigOri = true;
-    else if (value(reader) == '-') loc.loc.contigOri = false;
+    if (ori == '+') loc.loc.chrOri = true;
+    else if (ori == '-') loc.loc.chrOri = false;
     else
     {
-        std::cerr << "ERROR: Reading CONTIG_ORI from " << filename << " failed." << std::endl;
+        std::cerr << "ERROR: Reading CHR_ORI from locations file " << filename << " failed." << std::endl;
         return 1;
     }
-    skipNChars(reader, 1);
-    skipWhitespaces(reader);
 
-    clear(buffer);
-    if (readDigits(buffer, reader) != 0)
+    std::string buffer;
+    stream >> buffer;
+    loc.loc.contig = buffer;
+
+    stream >> ori;
+    if (ori == '+') loc.loc.contigOri = true;
+    else if (ori == '-') loc.loc.contigOri = false;
+    else
     {
-        std::cerr << "ERROR: Reading NUM_READS from " << filename << " failed." << std::endl;
+        std::cerr << "ERROR: Reading CONTIG_ORI from locations file " << filename << " failed." << std::endl;
         return 1;
     }
-    lexicalCast2<unsigned>(loc.loc.numReads, buffer);
-    skipWhitespaces(reader);
 
-    clear(buffer);
-    if (readUntilTabOrLineBreak(buffer, reader) != 0)
-    {
-        std::cerr << "ERROR: Reading SCORE from " << filename << " failed." << std::endl;
-        return 1;
-    }
-    lexicalCast2<double>(loc.loc.score, buffer);
+    stream >> loc.loc.numReads;
+    stream >> loc.loc.score;
 
-    if (value(reader) == '\r' || value(reader) == '\n')
-    {
-        skipLine(reader);
+    if (stream.eof())
         return 0;
-    }
 
-    skipWhitespaces(reader);
+    stream >> std::ws;
 
-    if (value(reader) == 'h')
+    if (stream.peek() == 'h')
     {
-        clear(buffer);
-        readLine(buffer, reader);
-        if (buffer == "high_coverage")
+        std::string buffer;
+        std::getline(stream, buffer);
+        if (buffer.compare("high_coverage") == 0)
             return 0;
 
         std::cerr << "ERROR: Unexpected word \'" << buffer << "\' in " << filename << "." << std::endl;
         return 1;
     }
 
-    unsigned refPos, contigPos, posSupport;
-
-    clear(buffer);
-    if (readDigits(buffer, reader) != 0)
+    std::string refPosStr, contigPosStr, posSupportStr;
+    while (std::getline(stream, refPosStr, ',') && std::getline(stream, contigPosStr, ':') && std::getline(stream, posSupportStr, ';'))
     {
-        std::cerr << "ERROR: Reading refPos from " << filename << " failed." << std::endl;
-        return 1;
-    }
-    lexicalCast2<unsigned>(refPos, buffer);
-    skipChar(reader, ',');
-
-    clear(buffer);
-    if (readDigits(buffer, reader) != 0)
-    {
-        std::cerr << "ERROR: Reading contigPos from " << filename << " failed." << std::endl;
-        return 1;
-    }
-    lexicalCast2<unsigned>(contigPos, buffer);
-    skipChar(reader, ':');
-
-    clear(buffer);
-    if (readDigits(buffer, reader) != 0)
-    {
-        std::cerr << "ERROR: Reading readSupport from " << filename << " failed." << std::endl;
-        return 1;
-    }
-    lexicalCast2<unsigned>(posSupport, buffer);
-
-    loc.insPos[std::pair<unsigned, unsigned>(refPos, contigPos)] = posSupport;
-
-    while (value(reader) != '\r' && value(reader) != '\n') // while not at end of line
-    {
-        skipChar(reader, ';');
-
-        clear(buffer);
-        if (readDigits(buffer, reader) != 0)
-        {
-            std::cerr << "ERROR: Reading refPos from " << filename << " failed." << std::endl;
-            return 1;
-        }
-        lexicalCast2<unsigned>(refPos, buffer);
-        skipChar(reader, ',');
-
-        clear(buffer);
-        if (readDigits(buffer, reader) != 0)
-        {
-            std::cerr << "ERROR: Reading contigPos from " << filename << " failed." << std::endl;
-            return 1;
-        }
-        lexicalCast2<unsigned>(contigPos, buffer);
-        skipChar(reader, ':');
-
-        clear(buffer);
-        if (readDigits(buffer, reader) != 0)
-        {
-            std::cerr << "ERROR: Reading readSupport from " << filename << " failed." << std::endl;
-            return 1;
-        }
-        lexicalCast2<unsigned>(posSupport, buffer);
+        unsigned refPos = 0, contigPos = 0, posSupport = 0;
+        lexicalCast<unsigned>(refPos, refPosStr);
+        lexicalCast<unsigned>(contigPos, contigPosStr);
+        lexicalCast<unsigned>(posSupport, posSupportStr);
 
         loc.insPos[std::pair<unsigned, unsigned>(refPos, contigPos)] = posSupport;
     }
 
-    skipLine(reader);
     return 0;
 }
 
@@ -219,12 +145,15 @@ loadPlacedLocations(std::vector<PlacedLocation> & locs, CharString & filename)
         std::cerr << "ERROR: Could not open locations file " << filename << std::endl;
         return 1;
     }
-    RecordReader<std::fstream, SinglePass<> > reader(stream);
 
-    while (!atEnd(reader))
+    std::string line;
+    while (std::getline(stream, line))
     {
+        std::stringstream ss;
+        ss.str(line);
+
         PlacedLocation loc;
-        if (readPlacedLocation(loc, reader, filename) != 0)
+        if (readPlacedLocation(loc, ss, filename) != 0)
             return 1;
         locs.push_back(loc);
     }
@@ -421,7 +350,7 @@ popins_place_combine(TStream & vcfStream, PlacingOptions & options)
 
     // Open the FAI file of the reference genome.
     FaiIndex fai;
-    if (read(fai, toCString(options.referenceFile)) != 0)
+    if (!open(fai, toCString(options.referenceFile)))
     {
         std::cerr << "ERROR: Could not open FAI index for " << options.referenceFile << std::endl;
         return 1;

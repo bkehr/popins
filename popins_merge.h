@@ -28,12 +28,7 @@ readContigFile(std::map<TSize, Contig<TSeq> > & contigs,
         CharString & index)
 {
     // open fasta file
-    SequenceStream stream(toCString(filename));
-    if (!isGood(stream))
-    {
-        std::cerr << "ERROR: Could not open " << filename << " as fasta file." << std::endl;
-        return 1;
-    }
+    SeqFileIn stream(toCString(filename));
 
     unsigned numContigsBefore = length(contigs);
 
@@ -46,11 +41,7 @@ readContigFile(std::map<TSize, Contig<TSeq> > & contigs,
         TSeq seq;
 
         // read record
-        if (readRecord(id, seq, stream))
-        {
-            std::cerr << "ERROR: Could not read fasta record from " << filename << std::endl;
-            return 1;
-        }
+        readRecord(id, seq, stream);
 
         if (numContigs >= min && numContigs < max)
         {
@@ -65,7 +56,7 @@ readContigFile(std::map<TSize, Contig<TSeq> > & contigs,
 
     std::ostringstream msg;
     msg << "Loaded " << filename << ": " << basepairs << " bp in " << (length(contigs) - numContigsBefore) << " contigs.";
-    printStatus("");
+    printStatus(msg);
 
     return 0;
 }
@@ -79,7 +70,7 @@ bool
 readContigs(std::map<TSize, Contig<TSeq> > & contigs,
         ContigBatch & batch)
 {
-	printStatus("Reading contig files");
+    printStatus("Reading contig files");
 
     // open and read the files containing contigs of one individual one by one
     for (unsigned i = 0; i < length(batch.contigFiles); ++i)
@@ -190,12 +181,7 @@ readContigs(std::map<TSize, Contig<TSeq> > & contigs,
 
     int fileIndex = 0;
     int firstIndexInCurrFile = 0;
-    SequenceStream stream(toCString(batch.contigFiles[fileIndex]));
-    if (!isGood(stream))
-    {
-        std::cerr << "ERROR: Could not open " << batch.contigFiles[fileIndex] << " as fasta file." << std::endl;
-        return 1;
-    }
+    SeqFileIn stream(toCString(batch.contigFiles[fileIndex]));
 
     unsigned index = firstIndexInCurrFile;
     CharString sample = formattedIndex(fileIndex, length(batch.contigFiles));
@@ -214,11 +200,6 @@ readContigs(std::map<TSize, Contig<TSeq> > & contigs,
             while (firstIndexInCurrFile + batch.contigsPerFile[fileIndex] <= *it);
 
             open(stream, toCString(batch.contigFiles[fileIndex]));
-            if (!isGood(stream))
-            {
-                std::cerr << "ERROR: Could not open " << batch.contigFiles[fileIndex] << " as fasta file." << std::endl;
-                return 1;
-            }
             index = firstIndexInCurrFile;
             sample = formattedIndex(fileIndex, length(batch.contigFiles));
 
@@ -234,11 +215,7 @@ readContigs(std::map<TSize, Contig<TSeq> > & contigs,
         // Advance file to *it
         while (index <= *it)
         {
-            if (readRecord(contig.id.contigId, contig.seq, stream))
-            {
-                std::cerr << "ERROR: Could not read fasta record from " << batch.contigFiles[fileIndex] << std::endl;
-                return 1;
-            }
+            readRecord(contig.id.contigId, contig.seq, stream);
             ++index;
         }
 
@@ -315,6 +292,8 @@ addReverseComplementContigs(std::map<TSize, Contig<TSeq> > & contigs, ContigBatc
 {
     typedef typename std::map<TSize, Contig<TSeq> >::iterator TIter;
 
+    typedef Pair<TSize, Contig<TSeq> > TPair;
+    String<TPair> revContigs;
     TIter itEnd = contigs.end();
     for (TIter it = contigs.begin(); it != itEnd; ++it)
     {
@@ -326,8 +305,11 @@ addReverseComplementContigs(std::map<TSize, Contig<TSeq> > & contigs, ContigBatc
         ContigId revId = (it->second).id;
         revId.orientation = false;
 
-        contigs[globalIndexRC(it->first, batch)] = Contig<TSeq>(revSeq, revId);
+        appendValue(revContigs, TPair(globalIndexRC(it->first, batch), Contig<TSeq>(revSeq, revId)));
     }
+
+    for (unsigned i = 0; i < length(revContigs); ++i)
+        contigs[revContigs[i].i1] = revContigs[i].i2;
 }
 
 // --------------------------------------------------------------------------

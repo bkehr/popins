@@ -148,21 +148,12 @@ bool countContigs(ContigBatch & batch)
         for (unsigned i = 0; i < length(batch.contigFiles); ++i)
         {
             // Open file.
-            SequenceStream stream(toCString(batch.contigFiles[i]));
-            if (!isGood(stream))
-            {
-                std::cerr << "ERROR: Could not open " << batch.contigFiles[i] << " as fasta file." << std::endl;
-                return 1;
-            }
+            SeqFileIn stream(toCString(batch.contigFiles[i]));
 
             // Count records in file.
             while (!atEnd(stream))
             {
-                if (readRecord(id, contig, stream))
-                {
-                    std::cerr << "ERROR: Could not read fasta record from " << batch.contigFiles[i] << std::endl;
-                    return 1;
-                }
+                readRecord(id, contig, stream);
                 ++count;
             }
             appendValue(batch.contigsPerFile, count - prevCount); 

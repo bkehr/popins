@@ -199,21 +199,20 @@ setMates(BamAlignmentRecord & record1, BamAlignmentRecord & record2)
 template<typename TNameStore>
 inline void
 readRecordAndCorrectRIds(BamAlignmentRecord & record,
-        BamStream & stream,
-        TNameStore & nameStor,
+        BamFileIn & stream,
         NameStoreCache<TNameStore> & nameStoreCache)
 {
     readRecord(record, stream);
 
     if (record.rID != BamAlignmentRecord::INVALID_REFID)
     {
-        CharString rName = nameStore(stream.bamIOContext)[record.rID];
-        getIdByName(nameStor, rName, record.rID, nameStoreCache);
+        CharString rName = contigNames(context(stream))[record.rID];
+        getIdByName(record.rID, nameStoreCache, rName);
     }
     if (record.rNextId != BamAlignmentRecord::INVALID_REFID)
     {
-        CharString rNextName = stream.header.sequenceInfos[record.rNextId].i1;
-        getIdByName(nameStor, rNextName, record.rNextId, nameStoreCache);
+        CharString rNextName = contigNames(context(stream))[record.rNextId];
+        getIdByName(record.rNextId, nameStoreCache, rNextName);
     }
 }
 
@@ -221,97 +220,74 @@ readRecordAndCorrectRIds(BamAlignmentRecord & record,
 
 inline void
 mergeHeaders(BamHeader & header,
-        StringSet<CharString> & nameStore,
-        NameStoreCache<StringSet<CharString> > & nameStoreCache,
-        BamHeader const & header1,
-        BamHeader const & header2)
+		FormattedFileContext<BamFileOut, Owner<> >::Type & context,
+        BamFileIn & stream1,
+        BamFileIn & stream2)
 {
-    // Write sequenceInfos, name store and cache for this header.
-    unsigned idx = 0;
-    for (unsigned i = 0; i < length(header1.sequenceInfos); ++i)
+	StringSet<CharString> contigNames;
+    NameStoreCache<StringSet<CharString> > nameStoreCache;
+	String<int32_t> contigLengths;
+
+    // Read and append the two headers. Remove duplicate entries.
+    readHeader(header, stream1);
+    BamHeader header2;
+    readHeader(header2, stream2);
+    for (unsigned i = 0; i < length(header2); ++i)
     {
-        if (!getIdByName(nameStore, header1.sequenceInfos[i].i1, idx, nameStoreCache))
+        if (header2[i].type != BAM_HEADER_FIRST)
+            appendValue(header, header2[i]);
+    }
+    std::stable_sort(begin(header, Standard()), end(header, Standard()), BamHeaderRecordTypeLess());
+
+    // Fill sequence names into nameStoreCache.
+    for (unsigned i = 0; i < length(header); ++i)
+    {
+        if (header[i].type == BAM_HEADER_REFERENCE)
         {
-            appendName(nameStore, header1.sequenceInfos[i].i1, nameStoreCache);
-            appendValue(header.sequenceInfos, header1.sequenceInfos[i]);
+            CharString name, len;
+            for (unsigned j = 0; j < length(header[i].tags); ++j)
+            {
+                if (header[i].tags[j].i1 == "SN")
+                    name = header[i].tags[j].i2;
+                else if (header[i].tags[j].i1 == "LN")
+                    len = header[i].tags[j].i2;
+            }
+            appendName(context._contigNamesCache, name);
+            int32_t l;
+            lexicalCast<int32_t>(l, len);
+            appendValue(context._contigLengths, l);
         }
     }
-
-    for (unsigned i = 0; i < length(header2.sequenceInfos); ++i)
-    {
-        if (!getIdByName(nameStore, header2.sequenceInfos[i].i1, idx, nameStoreCache))
-        {
-            appendName(nameStore, header2.sequenceInfos[i].i1, nameStoreCache);
-            appendValue(header.sequenceInfos, header2.sequenceInfos[i]);
-        }
-    }
-
-    // Copy all other than sequence records from header1 and header2.
-    for (unsigned i = 0; i < length(header1.records); ++i)
-    {
-        if (header1.records[i].type != BamHeaderRecordType::BAM_HEADER_REFERENCE)
-            appendValue(header.records, header1.records[i]);
-    }
-    for (unsigned i = 0; i < length(header2.records); ++i)
-    {
-        if (header2.records[i].type != BamHeaderRecordType::BAM_HEADER_REFERENCE && header2.records[i].type != BamHeaderRecordType::BAM_HEADER_FIRST)
-            appendValue(header.records, header2.records[i]);
-    }
-
-    // Add a record for each sequence in sequenceInfos.
-    for (unsigned i = 0; i < length(header.sequenceInfos); ++i)
-    {
-        BamHeaderRecord r;
-        r.type = BamHeaderRecordType::BAM_HEADER_REFERENCE;
-        setTagValue("SN", header.sequenceInfos[i].i1, r);
-        std::stringstream ss;
-        ss << header.sequenceInfos[i].i2;
-        setTagValue("LN", ss.str(), r);
-        appendValue(header.records, r);
-    }
-
-    BamHeaderRecordTypeLess less;
-    std::stable_sort(begin(header.records, Standard()), end(header.records, Standard()), less);
 }
 
 // ==========================================================================
 
+// This function is adapted from samtools code (fuction strnum_cmp in bam_sort.c) to ensure the exact same sort order.
 int
-compare_qName(CharString & a, CharString & b)
+compare_qName(CharString & nameA, CharString & nameB)
 {
-    typedef Iterator<CharString, Rooted>::Type TIter;
-
-    TIter itEndA = end(a);
-    TIter itEndB = end(b);
-
-    TIter itA = begin(a);
-    TIter itB = begin(b);
-
-    while (itA != itEndA && itB != itEndB)
-    {
-        if (std::isdigit(*itA) && std::isdigit(*itB))
-        {
-            while (itA != itEndA && *itA == '0') ++itA;
-            while (itB != itEndB && *itB == '0') ++itB;
-            while (itA != itEndA && std::isdigit(*itA) && itB != itEndB && std::isdigit(*itB) && *itA == *itB) ++itA, ++itB;
-            if (std::isdigit(*itA) && std::isdigit(*itB)) // pointing to two different digits
-            {
-                int dig_a = *itA;
-                int dig_b = *itB;
-                while (itA != itEndA && std::isdigit(*itA) && itB != itEndB && std::isdigit(*itB)) ++itA, ++itB; // is one number longer
-                return std::isdigit(*itA) ? 1 : std::isdigit(*itB) ? -1 : dig_a - dig_b;
-            }
-            else if (std::isdigit(*itA)) return 1;
-            else if (std::isdigit(*itB)) return -1;
-            else if (position(itA) != position(itB)) return position(itA) < position(itB) ? 1 : -1;
-        }
-        else
-        {
-            if (*itA != *itB) return (int)*itA - (int)*itB;
-            ++itA; ++itB;
+	const char * _a = toCString(nameA);
+	const char * _b = toCString(nameB);
+    const unsigned char *a = (const unsigned char*)_a, *b = (const unsigned char*)_b;
+    const unsigned char *pa = a, *pb = b;
+    while (*pa && *pb) {
+        if (isdigit(*pa) && isdigit(*pb)) {
+            while (*pa == '0') ++pa;
+            while (*pb == '0') ++pb;
+            while (isdigit(*pa) && isdigit(*pb) && *pa == *pb) ++pa, ++pb;
+            if (isdigit(*pa) && isdigit(*pb)) {
+                int i = 0;
+                while (isdigit(pa[i]) && isdigit(pb[i])) ++i;
+                return isdigit(pa[i])? 1 : isdigit(pb[i])? -1 : (int)*pa - (int)*pb;
+            } else if (isdigit(*pa)) return 1;
+            else if (isdigit(*pb)) return -1;
+            else if (pa - a != pb - b) return pa - a < pb - b? 1 : -1;
+        } else {
+            if (*pa != *pb) return (int)*pa - (int)*pb;
+            ++pa; ++pb;
         }
     }
-    return itA != itEndA ? 1 : itB != itEndB ? -1 : 0;
+    return *pa? 1 : *pb? -1 : 0;
 }
 
 // ==========================================================================
@@ -321,45 +297,35 @@ compare_qName(CharString & a, CharString & b)
 bool
 merge_and_set_mate(CharString & mergedBam, CharString & nonRefBam, CharString & remappedBam)
 {
-    typedef StringSet<CharString> TNameStore;
-
     std::ostringstream msg;
     msg << "Merging bam files " << nonRefBam << " and " << remappedBam;
     printStatus(msg);
 
-    // Open the two input streams, can read SAM and BAM files.
-    BamStream nonRefStream(toCString(nonRefBam));
-    if (!isGood(nonRefStream))
-    {
-        std::cerr << "ERROR: Could not open input bam/sam file " << nonRefBam << "." << std::endl;
-        return 1;
-    }
+    // Open the two input streams (can read SAM and BAM files).
+    BamFileIn nonRefStream(toCString(nonRefBam));
+    BamFileIn remappedStream(toCString(remappedBam));
 
-    BamStream remappedStream(toCString(remappedBam));
-    if (!isGood(remappedStream))
-    {
-        std::cerr << "ERROR: Could not open input bam/sam file " << remappedBam << "." << std::endl;
-        return 1;
-    }
+    printStatus(" - merging headers...");
 
-    // Open output file.
-    BamStream outStream(toCString(mergedBam), BamStream::WRITE);
-    if (!isGood(remappedStream))
-    {
-        std::cerr << "ERROR: Could not open output bam file " << mergedBam << "." << std::endl;
-        return 1;
-    }
+    // Prepare a header for the output file.
+    BamHeader outHeader;
+    FormattedFileContext<BamFileOut, Owner<> >::Type context;
+    mergeHeaders(outHeader, context, nonRefStream, remappedStream);
 
-    // Prepare a header for the output files.
-    TNameStore nameStor;
-    NameStoreCache<TNameStore> nameStoreCache(nameStor);
-    mergeHeaders(outStream.header, nameStor, nameStoreCache, nonRefStream.header, remappedStream.header);
+    printStatus(" - writing header...");
+
+    // Open the output stream and write the header.
+    FormattedFileContext<BamFileOut, Dependent<> >::Type contextDep(context);
+    BamFileOut outStream(contextDep, toCString(mergedBam));
+    writeHeader(outStream, outHeader);
+
+    printStatus(" - merging read records...");
 
     // Read the first record from each input file. Correct ids in records from remappedStreams for new header.
     BamAlignmentRecord record1, record2;
-    if (!atEnd(nonRefStream)) readRecord(record1, nonRefStream);
+    if (!atEnd(nonRefStream)) readRecordAndCorrectRIds(record1, nonRefStream, contigNamesCache(contextDep));
     else record1.qName = "*";
-    if (!atEnd(remappedStream)) readRecordAndCorrectRIds(record2, remappedStream, nameStor, nameStoreCache);
+    if (!atEnd(remappedStream)) readRecordAndCorrectRIds(record2, remappedStream, contigNamesCache(contextDep));
     else record2.qName = "*";
 
     // Iterate both input files, set mate positions in pairs, and write all records to the output file.
@@ -368,7 +334,7 @@ merge_and_set_mate(CharString & mergedBam, CharString & nonRefBam, CharString & 
         while ((compare_qName(record2.qName, record1.qName) < 0 || record1.qName == "*") && record2.qName != "*")
         {
             writeRecord(outStream, record2);
-            if (!atEnd(remappedStream)) readRecordAndCorrectRIds(record2, remappedStream, nameStor, nameStoreCache);
+            if (!atEnd(remappedStream)) readRecordAndCorrectRIds(record2, remappedStream, contigNamesCache(contextDep));
             else record2.qName = "*";
         }
 
@@ -379,19 +345,19 @@ merge_and_set_mate(CharString & mergedBam, CharString & nonRefBam, CharString & 
             setMates(record1, record2);
             writeRecord(outStream, record1);
             writeRecord(outStream, record2);
-            if (!atEnd(remappedStream)) readRecordAndCorrectRIds(record2, remappedStream, nameStor, nameStoreCache);
+            if (!atEnd(remappedStream)) readRecordAndCorrectRIds(record2, remappedStream, contigNamesCache(contextDep));
             else record2.qName = "*";
         }
         if (incr1)
         {
-            if (!atEnd(nonRefStream)) readRecord(record1, nonRefStream);
+            if (!atEnd(nonRefStream)) readRecordAndCorrectRIds(record1, nonRefStream, contigNamesCache(contextDep));
             else record1.qName = "*";
         }
 
         while ((compare_qName(record1.qName, record2.qName) < 0 || record2.qName == "*") && record1.qName != "*")
         {
             writeRecord(outStream, record1);
-            if (!atEnd(nonRefStream)) readRecord(record1, nonRefStream);
+            if (!atEnd(nonRefStream)) readRecordAndCorrectRIds(record1, nonRefStream, contigNamesCache(contextDep));
             else record1.qName = "*";
         }
     }

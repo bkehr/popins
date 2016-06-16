@@ -143,8 +143,8 @@ struct LocationPosLess : public std::binary_function<Location, Location, bool>
         if (chrADigit && chrBDigit)
         {
             int chrA, chrB;
-            lexicalCast2<int>(chrA, a.chr);
-            lexicalCast2<int>(chrB, b.chr);
+            lexicalCast<int>(chrA, a.chr);
+            lexicalCast<int>(chrB, b.chr);
             if (chrA > chrB) return -1;
             if (chrA < chrB) return 1;
         }
@@ -199,8 +199,8 @@ struct LocationTypeLess : public std::binary_function<Location, Location, bool>
         if (chrADigit && chrBDigit)
         {
             int chrA, chrB;
-            lexicalCast2<int>(chrA, a.chr);
-            lexicalCast2<int>(chrB, b.chr);
+            lexicalCast<int>(chrA, a.chr);
+            lexicalCast<int>(chrB, b.chr);
             if (chrA > chrB) return -1;
             if (chrA < chrB) return 1;
         }
@@ -249,8 +249,8 @@ struct LocationTypeGreater : public std::binary_function <Location, Location, bo
         if (chrADigit && chrBDigit)
         {
             int chrA, chrB;
-            lexicalCast2<int>(chrA, a.chr);
-            lexicalCast2<int>(chrB, b.chr);
+            lexicalCast<int>(chrA, a.chr);
+            lexicalCast<int>(chrB, b.chr);
             if (chrA > chrB) return -1;
             if (chrA < chrB) return 1;
         }
@@ -452,8 +452,7 @@ isGoodQuality(BamAlignmentRecord & record, Pair<CigarElement<>::TCount> & interv
 unsigned
 distanceToContigEnd(BamAlignmentRecord & record,
         Pair<CigarElement<>::TCount> & interval,
-        StringSet<CharString> & names,
-        std::map<CharString, unsigned> & contigLengths)
+        BamFileIn & infile)
 {
     if (hasFlagRC(record))
     {
@@ -462,7 +461,7 @@ distanceToContigEnd(BamAlignmentRecord & record,
     else
     {
         unsigned endPos = record.beginPos + interval.i2 - interval.i1;
-        return contigLengths[names[record.rID]] - endPos;
+        return getContigLength(record, infile) - endPos;
     }
 }
 
@@ -471,18 +470,12 @@ distanceToContigEnd(BamAlignmentRecord & record,
 inline int
 readAnchoringRecord(AnchoringRecord & record,
         std::map<Triple<CharString, CharString, unsigned>, unsigned> & goodReads,
-        BamStream & stream,
-        StringSet<CharString> & names,
-        std::map<CharString, unsigned> & contigLengths)
+        BamFileIn & stream)
 {
     BamAlignmentRecord r;
     while (!atEnd(stream))
     {
-        if (readRecord(r, stream) != 0)
-        {
-            std::cerr << "ERROR: Failed to read BAM alignment record." << std::endl;
-            return 1;
-        }
+        readRecord(r, stream);
 
         if (r.rID == r.rNextId || r.rNextId == -1 || r.rID == -1)
             continue;
@@ -491,37 +484,39 @@ readAnchoringRecord(AnchoringRecord & record,
         if (!isGoodQuality(r, interval))
             continue;
 
-        bool isContig = isComponentOrNode(names[r.rID]);
+        CharString rName = getContigName(r, stream);
+        bool isContig = isComponentOrNode(rName);
 
         if (!isContig && r.mapQ == 0)
             continue;
 
-        if (isContig && distanceToContigEnd(r, interval, names, contigLengths) > 500)
+        if (isContig && distanceToContigEnd(r, interval, stream) > 500)
             continue;
 
-        Triple<CharString, CharString, unsigned> nameChrPos = Triple<CharString, CharString, unsigned>(r.qName, names[r.rNextId], r.pNext);
+        CharString rNextName = contigNames(context(stream))[r.rNextId];
+        Triple<CharString, CharString, unsigned> nameChrPos = Triple<CharString, CharString, unsigned>(r.qName, rNextName, r.pNext);
         if (goodReads.count(nameChrPos) == 0)
         {
-            goodReads[Triple<CharString, CharString, unsigned>(r.qName, names[r.rID], r.beginPos)] = r.beginPos + interval.i2 - interval.i1;
+            goodReads[Triple<CharString, CharString, unsigned>(r.qName, rName, r.beginPos)] = r.beginPos + interval.i2 - interval.i1;
         }
         else if (isContig)
         {
-            record.chr = names[r.rNextId];
+            record.chr = rNextName;
             record.chrStart = r.pNext;
             record.chrEnd = goodReads[nameChrPos];
             record.chrOri = !hasFlagNextRC(r);
-            record.contig = names[r.rID];
+            record.contig = rName;
             record.contigOri = !hasFlagRC(r);
 
             return 0;
         }
         else
         {
-            record.chr = names[r.rID];
+            record.chr = rName;
             record.chrStart = r.beginPos;
             record.chrEnd = r.beginPos + interval.i2 - interval.i1;
             record.chrOri = !hasFlagRC(r);
-            record.contig = names[r.rNextId];
+            record.contig = rNextName;
             record.contigOri = !hasFlagNextRC(r);
 
             return 0;
@@ -577,18 +572,12 @@ findLocations(String<Location> & locations, CharString & nonRefFile, unsigned ma
     typedef std::map<TContigEnd, unsigned> TMap;
     typedef TMap::iterator TMapIter;
 
-    BamStream inStream(toCString(nonRefFile), BamStream::READ);
-    if (!isGood(inStream))
-    {
-        std::cerr << "ERROR: Could not open input bam file " << nonRefFile << std::endl;
-        return 1;
-    }
+    BamFileIn inStream(toCString(nonRefFile));
 
-    std::map<CharString, unsigned> contigLengths;
-    for (unsigned  i = 0; i < length(inStream.header.sequenceInfos); ++i)
-        contigLengths[inStream.header.sequenceInfos[i].i1] = inStream.header.sequenceInfos[i].i2;
-
-    StringSet<CharString> names = nameStore(inStream.bamIOContext);
+    // Read the header and clear it since we don't need it.
+    BamHeader header;
+    readHeader(header, inStream);
+    clear(header);
 
     String<String<AnchoringRecord> > lists;
     resize(lists, 4);
@@ -599,7 +588,7 @@ findLocations(String<Location> & locations, CharString & nonRefFile, unsigned ma
     std::map<Triple<CharString, CharString, unsigned>, unsigned> goodReads; // Triple(qName, chrom, beginPos) -> alignEndPos
     while (!atEnd(inStream))
     {
-        if (readAnchoringRecord(record, goodReads, inStream, names, contigLengths) == 1)
+        if (readAnchoringRecord(record, goodReads, inStream) == 1)
             return 1;
 
         if (record.chrOri)
@@ -675,137 +664,65 @@ scoreLocations(String<Location> & locations)
 // --------------------------------------------------------------------------
 
 bool
-readLocation(Location & loc, RecordReader<std::fstream, SinglePass<> > & reader, CharString & locationsFile)
+readLocation(Location & loc, std::stringstream & stream, CharString & locationsFile)
 {
-    CharString buffer;
+    std::string refPos;
+    stream >> refPos;
 
-    if (readUntilOneOf(loc.chr, reader, ':', '\t', ' ') != 0)
+    size_t colon;
+    if ((colon = refPos.find(':')) != std::string::npos)
     {
-        std::cerr << "ERROR: Reading CHR from locations file " << locationsFile << " failed." << std::endl;
-        return 1;
-    }
+        loc.chr = refPos.substr(0, colon);
 
-    if (value(reader) == ':')
-    {
-        skipChar(reader, ':');
+        size_t dash = refPos.find('-');
 
-        if (readUntilChar(buffer, reader, '-') != 0)
+        std::string start = refPos.substr(colon+1, dash-colon-1);
+        if (!lexicalCast<Location::TPos>(loc.chrStart, start))
         {
-            std::cerr << "ERROR: Reading CHR_START from locations file " << locationsFile << " failed." << std::endl;
+            std::cerr << "ERROR: Could not parse " << start << " as location start position in \'" << locationsFile << "\'." << std::endl;
             return 1;
         }
-        lexicalCast2<Location::TPos>(loc.chrStart, buffer);
-        skipChar(reader, '-');
 
-        clear(buffer);
-        if (readDigits(buffer, reader) != 0)
+        std::string end = refPos.substr(dash+1);
+        if (!lexicalCast<Location::TPos>(loc.chrEnd, end))
         {
-            std::cerr << "ERROR: Reading CHR_END from locations file " << locationsFile << " failed." << std::endl;
+            std::cerr << "ERROR: Could not parse " << end << " as location end position in \'" << locationsFile << "\'." << std::endl;
             return 1;
         }
-        lexicalCast2<Location::TPos>(loc.chrEnd, buffer);
     }
-    skipWhitespaces(reader);
+    else
+    {
+        loc.chr = refPos;
+    }
 
-    if (value(reader) == '+') loc.chrOri = true;
-    else if (value(reader) == '-') loc.chrOri = false;
+    char ori;
+    stream >> ori;
+
+    if (ori == '+') loc.chrOri = true;
+    else if (ori == '-') loc.chrOri = false;
     else
     {
         std::cerr << "ERROR: Reading CHR_ORI from locations file " << locationsFile << " failed." << std::endl;
         return 1;
     }
-    skipNChars(reader, 1);
-    skipWhitespaces(reader);
 
-    if (readUntilWhitespace(loc.contig, reader) != 0)
-    {
-        std::cerr << "ERROR: Reading CONTIG from locations file " << locationsFile << " failed." << std::endl;
-        return 1;
-    }
-    skipWhitespaces(reader);
+    std::string buffer;
+    stream >> buffer;
+    loc.contig = buffer;
 
-    if (value(reader) == '+') loc.contigOri = true;
-    else if (value(reader) == '-') loc.contigOri = false;
+    stream >> ori;
+    if (ori == '+') loc.contigOri = true;
+    else if (ori == '-') loc.contigOri = false;
     else
     {
         std::cerr << "ERROR: Reading CONTIG_ORI from locations file " << locationsFile << " failed." << std::endl;
         return 1;
     }
-    skipNChars(reader, 1);
-    skipWhitespaces(reader);
 
-    clear(buffer);
-    if (readDigits(buffer, reader) != 0)
-    {
-        std::cerr << "ERROR: Reading NUM_READS from locations file " << locationsFile << " failed." << std::endl;
-        return 1;
-    }
-    lexicalCast2<unsigned>(loc.numReads, buffer);
-    skipWhitespaces(reader);
+    stream >> loc.numReads;
+    stream >> loc.score;
 
-    clear(buffer);
-    if (readUntilWhitespace(buffer, reader) != 0)
-    {
-        std::cerr << "ERROR: Reading SCORE from line locations file " << locationsFile << " failed." << std::endl;
-        return 1;
-    }
-    lexicalCast2<double>(loc.score, buffer);
-
-    if (value(reader) != '\r' && value(reader) != '\n') // if not at end of line
-    {
-        skipWhitespaces(reader);
-
-        CharString sampleName;
-        if (readUntilChar(sampleName, reader, ':') != 0)
-        {
-            std::cerr << "ERROR: Reading SAMPLE_ID from locations file " << locationsFile << " failed." << std::endl;
-            return 1;
-        }
-        if (loc.bestSamples.count(sampleName) != 0)
-        {
-            std::cerr << "ERROR: Sample " << sampleName << " listed twice in " << locationsFile << " for " << loc.chr << ":" << loc.chrStart << "-" << loc.chrEnd << "." << std::endl;
-            return 1;
-        }
-        skipChar(reader, ':');
-
-        CharString numBuffer;
-        if (readDigits(numBuffer, reader) != 0)
-        {
-            std::cerr << "ERROR: Reading NUM_READS for sample " << sampleName << " from locations file " << locationsFile << " failed." << std::endl;
-            return 1;
-        }
-        unsigned readCount;
-        lexicalCast2<unsigned>(readCount, numBuffer);
-        loc.bestSamples[sampleName] = readCount;
-
-        while (value(reader) != '\r' && value(reader) != '\n') // while not at end of line
-        {
-            skipChar(reader, ',');
-
-            clear(sampleName);
-            if (readUntilChar(sampleName, reader, ':') != 0)
-            {
-                std::cerr << "ERROR: Reading next SAMPLE_ID from locations file " << locationsFile << " failed." << std::endl;
-                return 1;
-            }
-            if (loc.bestSamples.count(sampleName) != 0)
-            {
-                std::cerr << "ERROR: Sample " << sampleName << " listed twice in " << locationsFile << " for " << loc.chr << ":" << loc.chrStart << "-" << loc.chrEnd << "." << std::endl;
-                return 1;
-            }
-            skipChar(reader, ':');
-
-            clear(numBuffer);
-            if (readDigits(numBuffer, reader) != 0)
-            {
-                std::cerr << "ERROR: Reading NUM_READS for sample " << sampleName << " from locations file " << locationsFile << " failed." << std::endl;
-                return 1;
-            }
-            lexicalCast2<unsigned>(readCount, numBuffer);
-            loc.bestSamples[sampleName] = readCount;
-        }
-    }
-    else
+    if (stream.eof())
     {
         CharString sampleName = locationsFile; // TODO: Replace by an actual sample ID.
         if (suffix(sampleName, length(sampleName) - 14) == "/locations.txt")
@@ -816,10 +733,45 @@ readLocation(Location & loc, RecordReader<std::fstream, SinglePass<> > & reader,
             return 1;
         }
         loc.bestSamples[sampleName] = loc.numReads;
+
+        return 0;
     }
-    skipLine(reader);
+
+    std::string sampleName, readCount;
+    stream >> std::ws;
+    while (std::getline(stream, sampleName, ':') && std::getline(stream, readCount, ','))
+    {
+        unsigned count = 0;
+        if (!lexicalCast<unsigned>(count, readCount))
+        {
+            std::cerr << "ERROR: Could not parse " << readCount << " as read count in \'" << locationsFile << "\'." << std::endl;
+            return 1;
+        }
+
+        CharString name = sampleName;
+        if (loc.bestSamples.count(name) != 0)
+        {
+            std::cerr << "ERROR: Sample " << sampleName << " listed twice in " << locationsFile << " for " << loc.chr << ":" << loc.chrStart << "-" << loc.chrEnd << "." << std::endl;
+            return 1;
+        }
+
+        loc.bestSamples[name] = count;
+    }
 
     return 0;
+}
+
+int
+readLocation(Location & loc, std::fstream & infile, CharString & locationsFile)
+{
+    std::string line;
+    if (!std::getline(infile, line))
+        return -1;
+
+    std::stringstream stream;
+    stream.str(line);
+
+    return readLocation(loc, stream, locationsFile);
 }
 
 // ==========================================================================
@@ -846,13 +798,16 @@ readLocations(String<TLoc> & locations, CharString & locationsFile, LocationsFil
         std::cerr << "ERROR: Could not open locations file " << locationsFile << std::endl;
         return 1;
     }
-    RecordReader<std::fstream, SinglePass<> > reader(stream);
 
-    for (unsigned line = 0; !atEnd(reader); ++line)
+    std::string line;
+    while (std::getline(stream, line))
     {
         Location loc;
 
-        if (readLocation(loc, reader, locationsFile) != 0)
+        std::stringstream ss;
+        ss.str(line);
+
+        if (readLocation(loc, ss, locationsFile) != 0)
             return 1;
 
         if (passesFilter(loc, filterParams))
@@ -871,13 +826,16 @@ readLocations(String<TLoc> & locations, CharString & locationsFile, Triple<CharS
         std::cerr << "ERROR: Could not open locations file " << locationsFile << std::endl;
         return 1;
     }
-    RecordReader<std::fstream, SinglePass<> > reader(stream);
 
-    for (unsigned line = 0; !atEnd(reader); ++line)
+    std::string line;
+    while (std::getline(stream, line))
     {
         Location loc;
 
-        if (readLocation(loc, reader, locationsFile) != 0)
+        std::stringstream ss;
+        ss.str(line);
+
+        if (readLocation(loc, ss, locationsFile) != 0)
             return 1;
 
         if (passesFilter(loc, filterParams) && loc.chr == interval.i1 && loc.chrStart >= interval.i2 && loc.chrStart < interval.i3)
@@ -991,9 +949,6 @@ addLocation(Location & prevLoc, String<Location> & locations, Location & loc, un
 
 int mergeLocationsBatch(std::fstream & stream, String<Location> & locations, String<CharString> locationsFiles, size_t offset, size_t batchSize, unsigned maxInsertSize)
 {
-    typedef RecordReader<std::fstream, SinglePass<> > TReader;
-    typedef Pair<std::fstream *, TReader *> TPtrPair;
-
     Location forward, reverse;
     unsigned contigCount = 0;
 
@@ -1004,7 +959,7 @@ int mergeLocationsBatch(std::fstream & stream, String<Location> & locations, Str
 
 
     // Open files and store String of reader pointers.
-    String<TPtrPair> readerPtr;
+    String<std::fstream *> readerPtr;
     resize(readerPtr, length(locationsFiles));
     for (unsigned i = offset; i < last; ++i)
     {
@@ -1014,11 +969,11 @@ int mergeLocationsBatch(std::fstream & stream, String<Location> & locations, Str
             std::cerr << "ERROR: Could not open locations file " << locationsFiles[i] << std::endl;
             return 1;
         }
-        readerPtr[i] = TPtrPair(stream, new TReader(*stream));
+        readerPtr[i] = stream;
 
         // Read the first location record and push it to min heap.
         Location loc;
-        if (readLocation(loc, *readerPtr[i].i2, locationsFiles[i]) != 0) return 1;
+        if (readLocation(loc, *readerPtr[i], locationsFiles[i]) != 0) return 1;
         loc.fileIndex = i;
         heap.push(loc);
     }
@@ -1056,13 +1011,15 @@ int mergeLocationsBatch(std::fstream & stream, String<Location> & locations, Str
 
         heap.pop();
         unsigned i = loc.fileIndex;
-        if (!atEnd(*readerPtr[i].i2))
+        Location nextLoc;
+        int ret = readLocation(nextLoc, *readerPtr[i], locationsFiles[i]);
+        if (ret == 0)
         {
-            Location nextLoc;
-            if (readLocation(nextLoc, *readerPtr[i].i2, locationsFiles[i]) != 0) return 1;
             nextLoc.fileIndex = i;
             heap.push(nextLoc);
         }
+        else if (ret == 1)
+            return 1;
     }
 
     // Append the remaining locations.
@@ -1082,9 +1039,8 @@ int mergeLocationsBatch(std::fstream & stream, String<Location> & locations, Str
     // clean-up
     for (unsigned i = offset; i < last; ++i)
     {
-        delete readerPtr[i].i2;
-        (*readerPtr[i].i1).close();
-        delete readerPtr[i].i1;
+        (*readerPtr[i]).close();
+        delete readerPtr[i];
     }
 
     return 0;

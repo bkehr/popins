@@ -1,10 +1,8 @@
-#include <seqan/file.h>
-#include <seqan/arg_parse.h>
-
 #ifndef POPINS_CLP_H_
 #define POPINS_CLP_H_
 
 #include <string>
+#include <seqan/arg_parse.h>
 
 using namespace seqan;
 
@@ -70,19 +68,9 @@ readFileNames(String<CharString> & files, CharString & filenameFile)
         return 1;
     }
 
-    RecordReader<std::fstream, SinglePass<> > reader(stream);
-
-    while (!atEnd(reader))
-    {
-        CharString file;
-        int res = readLine(file, reader);
-        if (res != 0)
-        {
-            std::cerr << "ERROR while reading line from " << filenameFile << std::endl;
-            return 1;
-        }
-        appendValue(files, file);
-    }
+    std::string file;
+    while (stream >> file)
+        appendValue(files, CharString(file));
 
     return 0;
 }
@@ -104,33 +92,14 @@ bool readFileNames(String<CharString> & files, String<TValue> & values)
         return 1;
     }
 
-    RecordReader<std::fstream, SinglePass<> > reader(stream);
     clear(files);
+    clear(values);
 
-    while (!atEnd(reader))
+    std::string file;
+    TValue val;
+    while (stream >> file >> val)
     {
-        // Read the file name
-        CharString file;
-        int res = readUntilWhitespace(file, reader);
-        if (res != 0)
-        {
-            std::cerr << "ERROR: Failed reading filename from " << filenameFile << std::endl;
-            return 1;
-        }
         appendValue(files, file);
-
-        skipBlanks(reader);
-
-        // Read the value for this filename
-        CharString buffer;
-        res = readLine(buffer, reader);
-        if (res != 0 || length(buffer) == 0)
-        {
-            std::cerr << "ERROR: Failed reading second column of " << filenameFile << std::endl;
-            return 1;
-        }
-        TValue val;
-        lexicalCast2<TValue>(val, buffer);
         appendValue(values, val);
     }
 
@@ -378,19 +347,20 @@ setupParser(ArgumentParser & parser, AssemblyOptions & options)
     setDate(parser, VERSION_DATE);
 
     // Define usage line and long description.
-    addUsageLine(parser, "[\\fIOPTIONS\\fP] \\fIBAM FILE\\fP [\\fIMP BAM FILE\\fP]");
+    addUsageLine(parser, "[\\fIOPTIONS\\fP] \\fIBAM FILE\\fP");
     addDescription(parser, "Finds the unmapped reads in a bam files. If a fasta file is specified, the unmapped reads "
             "will first be remapped to this reference using bwa and only reads that remain unmapped are "
             "further processed. All unmapped reads are quality filtered using sickle and passed to "
             "assembly with velvet.");
 
     // Require a bam file as argument.
-    addArgument(parser, ArgParseArgument(ArgParseArgument::INPUTFILE, "BAMFILE"));
-    addArgument(parser, ArgParseArgument(ArgParseArgument::INPUTFILE, "MPFILE"));
+    addArgument(parser, ArgParseArgument(ArgParseArgument::INPUT_FILE, "BAMFILE"));
 
     // Setup the options.
     addOption(parser, ArgParseOption("d", "directory", "Path to working directory.", ArgParseArgument::STRING, "PATH"));
     setDefaultValue(parser, "directory", "current directory");
+
+    addOption(parser, ArgParseOption("mp", "matePair", "", ArgParseArgument::INPUT_FILE, "BAMFILE"));
 
     addOption(parser, ArgParseOption("k", "kmerLength", "The k-mer size for velvet assembly.", ArgParseArgument::INTEGER, "INT"));
     setDefaultValue(parser, "kmerLength", options.kmerLength);
@@ -398,7 +368,7 @@ setupParser(ArgumentParser & parser, AssemblyOptions & options)
     addOption(parser, ArgParseOption("a", "adapters", "Enable adapter removal for Illumina reads. Default: \\fIno adapter removal\\fP.", ArgParseArgument::STRING, "STR"));
     setValidValues(parser, "adapters", "HiSeq HiSeqX");
 
-    addOption(parser, ArgParseOption("r", "reference", "Fasta file with reference sequences for remapping. Default: \\fIno remapping\\fP.", ArgParseArgument::INPUTFILE, "FILE"));
+    addOption(parser, ArgParseOption("r", "reference", "Fasta file with reference sequences for remapping. Default: \\fIno remapping\\fP.", ArgParseArgument::INPUT_FILE, "FILE"));
     setValidValues(parser, "reference", "fa fna fasta");
 
     addOption(parser, ArgParseOption("f", "filter", "Consider reads with low quality alignments as unmapped only for first INT sequences in the reference file. Requires reference file for remapping to be set.", ArgParseArgument::INTEGER, "INT"));
@@ -431,7 +401,7 @@ setupParser(ArgumentParser & parser, MergingOptions & options)
             "steps of the algorithm can be split into several program calls (see Note below).");
 
     // Require a list of fasta files as argument.
-    addArgument(parser, ArgParseArgument(ArgParseArgument::INPUTFILE, "FAFILE", true));
+    addArgument(parser, ArgParseArgument(ArgParseArgument::INPUT_FILE, "FAFILE", true));
 
     // Program parameters
     addSection(parser, "Parameters");
@@ -449,12 +419,12 @@ setupParser(ArgumentParser & parser, MergingOptions & options)
     addSection(parser, "Program mode options");
     addOption(parser, ArgParseOption("b", "batches", "Total number of batches (see Note below).", ArgParseArgument::INTEGER, "INT"));
     addOption(parser, ArgParseOption("i", "batchIndex", "Batch number (see Note below).", ArgParseArgument::INTEGER, "INT"));
-    addOption(parser, ArgParseOption("c", "componentFiles", "List of files written by the partioning step. Either the name of a single file that lists one component filename per line, or multiple names of component files, i.e. -c <FILE1> -c <FILE2> ...", ArgParseArgument::INPUTFILE, "FILE", true));
+    addOption(parser, ArgParseOption("c", "componentFiles", "List of files written by the partioning step. Either the name of a single file that lists one component filename per line, or multiple names of component files, i.e. -c <FILE1> -c <FILE2> ...", ArgParseArgument::INPUT_FILE, "FILE", true));
 
     // Output file options.
     addSection(parser, "Output options");
-    addOption(parser, ArgParseOption("o", "outFile", "Name of output file. Either in text format for components or fasta format for the supercontigs.", ArgParseArgument::OUTPUTFILE, "OUTPUTFILE"));
-    addOption(parser, ArgParseOption("os", "skippedFile", "Name of output file for skipped contigs. Default: no output of skipped contigs.", ArgParseArgument::OUTPUTFILE, "OUTPUTFILE"));
+    addOption(parser, ArgParseOption("o", "outFile", "Name of output file. Either in text format for components or fasta format for the supercontigs.", ArgParseArgument::OUTPUT_FILE, "OUTPUTFILE"));
+    addOption(parser, ArgParseOption("os", "skippedFile", "Name of output file for skipped contigs. Default: no output of skipped contigs.", ArgParseArgument::OUTPUT_FILE, "OUTPUTFILE"));
     addOption(parser, ArgParseOption("v", "verbose", "Enable verbose screen output."));
     addOption(parser, ArgParseOption("vv", "veryVerbose", "Enable very verbose screen output."));
 
@@ -507,7 +477,7 @@ setupParser(ArgumentParser & parser, ContigMapOptions & options)
             "the fasta file needs to be indexed for alignment with bwa-mem.");
 
     // Require a fasta file as argument.
-    addArgument(parser, ArgParseArgument(ArgParseArgument::INPUTFILE, "FAFILE"));
+    addArgument(parser, ArgParseArgument(ArgParseArgument::INPUT_FILE, "FAFILE"));
 
     // Setup the option.
     addOption(parser, ArgParseOption("d", "directory", "Path to working directory.", ArgParseArgument::STRING, "PATH"));
@@ -562,18 +532,18 @@ setupParser(ArgumentParser & parser, PlacingOptions & options)
             "\\fIOUTPUTFILE\\fP (file ending has to be 'vcf').");
 
     // Require a locations file and an output file as argument.
-    addArgument(parser, ArgParseArgument(ArgParseArgument::INPUTFILE, "LOCFILE")); // Name of locations file OR name of file listing locations files, one per line.
-    addArgument(parser, ArgParseArgument(ArgParseArgument::INPUTFILE, "OUTFILE")); // Name of output file. Either VCF or text file listing locations.
+    addArgument(parser, ArgParseArgument(ArgParseArgument::INPUT_FILE, "LOCFILE")); // Name of locations file OR name of file listing locations files, one per line.
+    addArgument(parser, ArgParseArgument(ArgParseArgument::INPUT_FILE, "OUTFILE")); // Name of output file. Either VCF or text file listing locations.
 
     // Setup (input) options.
     addSection(parser, "Main options");
 
-    addOption(parser, ArgParseOption("c", "contigFile", "Name of (super-)contigs file.", ArgParseArgument::INPUTFILE, "FILE"));
-    addOption(parser, ArgParseOption("r", "genomeFile", "Name of reference genome file.", ArgParseArgument::INPUTFILE, "FILE"));
+    addOption(parser, ArgParseOption("c", "contigFile", "Name of (super-)contigs file.", ArgParseArgument::INPUT_FILE, "FILE"));
+    addOption(parser, ArgParseOption("r", "genomeFile", "Name of reference genome file.", ArgParseArgument::INPUT_FILE, "FILE"));
     addOption(parser, ArgParseOption("m", "minScore", "Minimal anchoring score for a location.", ArgParseArgument::DOUBLE, "FLOAT"));
     addOption(parser, ArgParseOption("n", "minReads", "Minimal number of anchoring read pairs for a location.", ArgParseArgument::INTEGER, "INT"));
     addOption(parser, ArgParseOption("d", "groupDist", "Minimal distance between groups of locations.", ArgParseArgument::INTEGER, "INT"));
-    addOption(parser, ArgParseOption("b", "bamFile", "Full BAM file of an individual. Specify to determine exact insertion positions from split reads.", ArgParseArgument::INPUTFILE, "FILE"));
+    addOption(parser, ArgParseOption("b", "bamFile", "Full BAM file of an individual. Specify to determine exact insertion positions from split reads.", ArgParseArgument::INPUT_FILE, "FILE"));
     addOption(parser, ArgParseOption("a", "bamCov", "Average coverage of the genome in the BAM file. Required if -b option specified.", ArgParseArgument::DOUBLE, "FLOAT"));
 
     addOption(parser, ArgParseOption("len", "readLength", "The length of the reads.", ArgParseArgument::INTEGER, "INT"));
@@ -582,8 +552,8 @@ setupParser(ArgumentParser & parser, PlacingOptions & options)
 
     // Output file options.
     addSection(parser, "Output options");
-    addOption(parser, ArgParseOption("l", "locations", "Name of merged locations file if placing is run in one program call.", ArgParseArgument::OUTPUTFILE, "FILE"));
-    addOption(parser, ArgParseOption("g", "groups", "Name of groups output file.", ArgParseArgument::OUTPUTFILE, "FILE"));
+    addOption(parser, ArgParseOption("l", "locations", "Name of merged locations file if placing is run in one program call.", ArgParseArgument::OUTPUT_FILE, "FILE"));
+    addOption(parser, ArgParseOption("g", "groups", "Name of groups output file.", ArgParseArgument::OUTPUT_FILE, "FILE"));
 
     setMinValue(parser, "m", "0");
     setMaxValue(parser, "m", "1");
@@ -617,11 +587,11 @@ setupParser(ArgumentParser & parser, GenotypingOptions & options)
             "VCF records with the genotype likelihoods in GT:PL format for the individual to std::out.");
 
     // Require five files as arguments.
-    addArgument(parser, ArgParseArgument(ArgParseArgument::INPUTFILE, "fastafile"));
-    addArgument(parser, ArgParseArgument(ArgParseArgument::INPUTFILE, "bamfile"));
-    addArgument(parser, ArgParseArgument(ArgParseArgument::INPUTFILE, "fastafilealt"));
-    addArgument(parser, ArgParseArgument(ArgParseArgument::INPUTFILE, "bamfilealt"));
-    addArgument(parser, ArgParseArgument(ArgParseArgument::INPUTFILE, "vcffile"));
+    addArgument(parser, ArgParseArgument(ArgParseArgument::INPUT_FILE, "fastafile"));
+    addArgument(parser, ArgParseArgument(ArgParseArgument::INPUT_FILE, "bamfile"));
+    addArgument(parser, ArgParseArgument(ArgParseArgument::INPUT_FILE, "fastafilealt"));
+    addArgument(parser, ArgParseArgument(ArgParseArgument::INPUT_FILE, "bamfilealt"));
+    addArgument(parser, ArgParseArgument(ArgParseArgument::INPUT_FILE, "vcffile"));
 
     // Options.
     addSection(parser, "Alignment options");
@@ -693,11 +663,10 @@ getOptionValues(AssemblyOptions & options, ArgumentParser const & parser)
         getOptionValue(options.threads, parser, "threads");
     if (isSet(parser, "memory"))
         getOptionValue(options.memory, parser, "memory");
-    if (isSet(parser, "matepair")) {
+    if (isSet(parser, "matepair"))
+    {
         options.matepair = true;
-        if (!getArgumentValue(options.matepairFile, parser, 1)) {
-            return 1;
-        }
+        getOptionValue(options.matepairFile, parser, "matepair");
     }
 
     return 0;

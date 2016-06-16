@@ -29,17 +29,17 @@ write_fastq(CharString & fastqFirst,
     TFastqMap firstReads, secondReads;
 
     // Open bam file.
-    BamStream inStream(toCString(unmappedBam), BamStream::READ);
-    if (!isGood(inStream)) 
-    {
-        std::cerr << "ERROR while opening input bam file " << unmappedBam << std::endl;
-        return 1;
-    }
+    BamFileIn inStream(toCString(unmappedBam));
+
+    // Read bam header and clear it since we don't need it.
+    BamHeader header;
+    readHeader(header, inStream);
+    clear(header);
 
     // Open the output fastq files.    
-    SequenceStream fastqFirstStream, fastqSecondStream, fastqSingleStream;
-    if (openFastq(fastqFirstStream, fastqFirst) != 0 || openFastq(fastqSecondStream, fastqSecond) != 0 ||
-            openFastq(fastqSingleStream, fastqSingle) != 0) return 1;
+    SeqFileOut fastqFirstStream(toCString(fastqFirst));
+    SeqFileOut fastqSecondStream(toCString(fastqSecond));
+    SeqFileOut fastqSingleStream(toCString(fastqSingle));
 
     // Iterate over bam file and append fastq records.
     BamAlignmentRecord record;
@@ -65,19 +65,12 @@ fill_sequences(CharString & outFile, CharString & inFile)
 {
     typedef Position<Dna5String>::Type TPos;
 
-    BamStream inStream(toCString(inFile));
-    if (!isGood(inStream))
-    {
-        std::cerr << "ERROR: Could not open bwa output file " << inFile << "" << std::endl;
-        return 1;
-    }
-    BamStream outStream(toCString(outFile), BamStream::WRITE);
-    if (!isGood(outStream))
-    {
-        std::cerr << "ERROR: Could not open output file " << outFile << "" << std::endl;
-        return 1;
-    }
-    outStream.header = inStream.header;
+    BamFileIn inStream(toCString(inFile));
+    BamFileOut outStream(context(inStream), toCString(outFile));
+
+    BamHeader header;
+    readHeader(header, inStream);
+    writeHeader(outStream, header);
 
     BamAlignmentRecord firstRecord, nextRecord;
     while (!atEnd(inStream))
@@ -125,8 +118,6 @@ fill_sequences(CharString & outFile, CharString & inFile)
     }
 
     close(outStream);
-    clear(outStream.header);
-    clear(inStream.header);
 
     return 0;
 }

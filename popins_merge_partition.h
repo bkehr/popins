@@ -95,18 +95,14 @@ filterByEntropy(std::map<TSize, Contig<TSeq> > & contigs,
 
 template<typename TSeq, typename TSize>
 int
-readNextContig(Contig<TSeq> & contig, SequenceStream & stream, TSize & i, String<CharString> & filenames)
+readNextContig(Contig<TSeq> & contig, SeqFileIn & stream, TSize & i, String<CharString> & filenames)
 {
     // Open the next file.
-    while ((i < (int)length(filenames) && atEnd(stream)) || i == -1)
+    while ((i < (int)length(filenames) && atEnd(stream)))
     {
         ++i;
+        close(stream);
         open(stream, toCString(filenames[i]));
-        if (!isGood(stream))
-        {
-            std::cerr << "ERROR: Could not open " << filenames[i] << std::endl;
-            return -1;
-        }
     }
 
     if (atEnd(stream)) return 1;
@@ -114,11 +110,7 @@ readNextContig(Contig<TSeq> & contig, SequenceStream & stream, TSize & i, String
     // Read the next record.
     contig.id.orientation = true;
     contig.id.pn = formattedIndex(i, length(filenames));
-    if (readRecord(contig.id.contigId, contig.seq, stream))
-    {
-        std::cerr << "ERROR: Could not read fasta record from " << filenames[i] << std::endl;
-        return -1;
-    }
+    readRecord(contig.id.contigId, contig.seq, stream);
 
     return 0;
 }
@@ -200,12 +192,13 @@ partitionContigs(UnionFind<int> & uf,
     unsigned fiftieth = std::max((indexOffset(batch)+batchSize(batch))/50, 1);
 
     // stream over the contigs
-    SequenceStream contigStream;
-    int i = -1;
+    int i = 0;
+    SeqFileIn contigStream(toCString(batch.contigFiles[i]));
     //for (unsigned a = 0; a < indexOffset(batch)+length(contigs)/2; ++a)
     for (int a = 0; a < indexOffset(batch)+batchSize(batch); ++a)
     {
-        if (a%fiftieth == 0) std::cerr << "*" << std::flush;
+        if (a%fiftieth == 0)
+            std::cerr << "*" << std::flush;
 
         // read the next contig
         Contig<TSeq> contig;
@@ -217,7 +210,7 @@ partitionContigs(UnionFind<int> & uf,
         // initialization of swift finder
         TFinder swiftFinder(contig.seq, 1000, 1);
 
-        hash(swiftPattern.shape, hostIterator(hostIterator(swiftFinder)));
+        hash(swiftPattern.data_host.data_value->shape, hostIterator(hostIterator(swiftFinder)));
         while (find(swiftFinder, swiftPattern, options.errorRate, options.minimalLength))
         {
 
@@ -303,38 +296,18 @@ readAlignedPairs(UnionFind<int> & uf, std::set<Pair<TSize> > & alignedPairs, Cha
         return 1;
     }
 
-    RecordReader<std::fstream, SinglePass<> > reader(stream);
-    CharString buffer;
+    TSize key, val, key_rev, val_rev;
 
     TSize numPairs = 0;
 
     // Read the components line by line.
-    while (!atEnd(reader))
+    while (stream >> key >> val)
     {
-        TSize key, val, key_rev, val_rev;
-        clear(buffer);
-        if (readDigits(buffer, reader) != 0)
-        {
-            std::cerr << "ERROR: File format error. Reading key from " << fileName << " failed." << std::endl;
-            return 1;
-        }
-        lexicalCast2<TSize>(key, buffer);
         if (key < len) key_rev = key + len;
         else key_rev = key - len;
 
-        skipWhitespaces(reader);
-
-        clear(buffer);
-        if (readDigits(buffer, reader) != 0)
-        {
-            std::cerr << "ERROR: File format error. Reading value from " << fileName << " failed." << std::endl;
-            return 1;
-        }
-        lexicalCast2<TSize>(val, buffer);
         if (val < len) val_rev = val + len;
         else val_rev = val - len;
-
-        skipLine(reader);
 
         if (findSet(uf, key) == findSet(uf, val)) continue;
 

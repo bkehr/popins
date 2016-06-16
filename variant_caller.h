@@ -38,9 +38,8 @@ enum component_dir{
 class bamF
 {
 public:
-    TBamIOContext hN;
     BamIndex< Bai> baiI;
-    Stream< Bgzf> bamS;
+    BamFileIn bamS;
     bamF();
 };
 
@@ -221,7 +220,7 @@ void transformLogLtoP( std::vector< double>& L )
 
 // Should create a class containing the hN, baiI and bamS
 // and another class that contains the reads in the given region
-int readBamRegion(TBamIOContext& hN, BamIndex< Bai>& baiI, Stream< Bgzf>& bamS,
+int readBamRegion(BamIndex< Bai>& baiI, BamFileIn& bamS,
         CharString& chrom, int beg, int end, bool addReadGroup, bool verbose,
         std::map< CharString, BamAlignmentRecord>& bars1, std::map< CharString, BamAlignmentRecord>& bars2 )
 {
@@ -229,31 +228,31 @@ int readBamRegion(TBamIOContext& hN, BamIndex< Bai>& baiI, Stream< Bgzf>& bamS,
     if( verbose ) std::cout << "reading Bam region " << chrom << " " << beg << " " << end << std::endl;
 
     int rID = 0;
-    if (!getIdByName( nameStore( hN ), chrom, rID, nameStoreCache( hN ) ))
+    if (!getIdByName( rID, contigNamesCache(context( bamS )), chrom ))
     {
         if( verbose ) std::cout << "ERROR: Reference sequence named " << chrom << " not known.\n";
         return 1;
     }
 
+    BamAlignmentRecord record;
+    readRecord(record, bamS);
+
     // Jump the BGZF stream to this position.
     bool hasAlignments = false;
-    if (!jumpToRegion( bamS, hasAlignments, hN, rID, beg, end, baiI))
+    unsigned regionBeg = std::max(0, beg - (int)length(record.seq));
+    if (!jumpToRegion( bamS, hasAlignments, rID, regionBeg, end, baiI ))
     {
-        std::cerr << "ERROR: Could not jump to " << rID << " " << chrom << ":" << beg << "-" << end << "\n";
+        std::cerr << "ERROR: Could not jump to " << rID << " " << chrom << ":" << regionBeg << "-" << end << "\n";
         return 1;
     }
     if( verbose ) std::cout << "hasAlignments " << hasAlignments << std::endl;
     if (!hasAlignments)
         return 0;  // No alignments here.
 
-    BamAlignmentRecord record;
     while (!atEnd(bamS))
     {
-        if (readRecord(record, hN, bamS, Bam()) != 0)
-        {
-            std::cerr << "ERROR: Could not read record from BAM file.\n";
-            return 1;
-        }
+        readRecord(record, bamS);
+
         //  if( verbose ) std::cout << "Reading " << record.qName << std::endl;
         // If we are on the next reference or at the end already then we stop.
         if (record.rID == -1 || record.rID > rID || record.beginPos >= end )
@@ -267,7 +266,8 @@ int readBamRegion(TBamIOContext& hN, BamIndex< Bai>& baiI, Stream< Bgzf>& bamS,
                 BamTagsDict tagsDict(record.tags);
                 unsigned idx;
                 if (findTagKey(idx, tagsDict, "RG")){
-                    CharString readGroup = getTagValue(tagsDict, idx);
+                    CharString readGroup;
+                    extractTagValue(readGroup, tagsDict, idx);
 
                     readGroup = infix(readGroup, 1, length(readGroup)-1);
                     readGroup += ":";
@@ -436,8 +436,8 @@ parseInfoField( CharString& infoField, bool verbose, int& refDl, int& refDr ){
 template<typename TOptions>
 int variantCallRegionReadPair(CharString & chrom, CharString & componentName,
         int beginPos, int devL, int devR, component_dir componentDir,
-        BamIndex< Bai>& baiI, Stream< Bgzf>& bamS, TBamIOContext& hN,
-        BamIndex< Bai>& baiIAlt, Stream< Bgzf>& bamSAlt, TBamIOContext& hNAlt,
+        BamIndex< Bai>& baiI, BamFileIn& bamS,
+        BamIndex< Bai>& baiIAlt, BamFileIn& bamSAlt,
         TOptions & options, std::vector< double>& vC)
 {
     std::map< CharString, BamAlignmentRecord> bars1L;
@@ -447,9 +447,9 @@ int variantCallRegionReadPair(CharString & chrom, CharString & componentName,
     std::map< CharString, BamAlignmentRecord> bars2R;
     std::map< CharString, BamAlignmentRecord> bars2Ins;
 
-    readBamRegion( hN, baiI, bamS, chrom, beginPos-options.maxInsertSize + devL, beginPos + devL, options.addReadGroup, options.verbose, bars1L, bars2L );
-    readBamRegion( hN, baiI, bamS, chrom, beginPos+devR, beginPos + devR + options.maxInsertSize, options.addReadGroup, options.verbose, bars1R, bars2R );
-    readBamRegion( hNAlt, baiIAlt, bamSAlt, componentName, 0, 1e9, options.addReadGroup, options.verbose, bars1Ins, bars2Ins );
+    readBamRegion( baiI, bamS, chrom, beginPos-options.maxInsertSize + devL, beginPos + devL, options.addReadGroup, options.verbose, bars1L, bars2L );
+    readBamRegion( baiI, bamS, chrom, beginPos+devR, beginPos + devR + options.maxInsertSize, options.addReadGroup, options.verbose, bars1R, bars2R );
+    readBamRegion( baiIAlt, bamSAlt, componentName, 0, 1e9, options.addReadGroup, options.verbose, bars1Ins, bars2Ins );
     if( options.verbose ) std::cout << "variantCallRegionReadPair " << bars1L.size() << " " << bars2L.size() << " " << bars1R.size() << " " << bars2R.size() << " " << bars1Ins.size() << " " << bars2Ins.size() << std::endl;
     if( componentDir == left_dir_forward or componentDir == left_dir_reverse ){
         for( auto i = bars1L.begin(); i != bars1L.end(); i++ ){
@@ -479,10 +479,10 @@ int variantCallRegionReadPair(CharString & chrom, CharString & componentName,
     reads in the region
  */
 template<typename TOptions>
-int variantCallRegion(VcfRecord & variant, VcfHeader & vcfH,
+int variantCallRegion(VcfRecord & variant, VcfFileIn & vcfS,
         FaiIndex & faiI, FaiIndex & faiIAlt,
-        BamIndex<Bai> & baiI, Stream<Bgzf> & bamS, TBamIOContext & hN,
-        BamIndex<Bai> & baiIAlt, Stream<Bgzf> & bamSAlt, TBamIOContext & hNAlt,
+        BamIndex<Bai> & baiI, BamFileIn & bamS,
+        BamIndex<Bai> & baiIAlt, BamFileIn & bamSAlt,
         TOptions & options, std::vector< double> & vC)
 {
     // Look at all the reads that map to this location, compute the likelihood of the different mappings
@@ -500,8 +500,8 @@ int variantCallRegion(VcfRecord & variant, VcfHeader & vcfH,
     __int32 rID = variant.rID;
     __int32 beginPos = variant.beginPos;
     unsigned idx = 0;
-    CharString chrom = vcfH.sequenceNames[rID];
-    if (!getIdByName(faiI, chrom, idx)){
+    CharString chrom = contigNames(context(vcfS))[rID];
+    if (!getIdByName(idx, faiI, chrom)){
         if( options.verbose ) std::cout << "rID " << chrom << " " << beginPos << " ERROR: reference FAI index has no entry for rID in Ref mapped.\n";
     }
     CharString componentName;
@@ -512,13 +512,9 @@ int variantCallRegion(VcfRecord & variant, VcfHeader & vcfH,
 
     TSequence refSeq;
     if( componentDir == left_dir_forward || componentDir == left_dir_reverse ){
-        if (readRegion( refSeq, faiI, idx, beginPos-options.regionWindowSize+1, beginPos+length(ref)+options.regionWindowSize+1) != 0){
-            if( options.verbose ) std::cout << "ERROR: Could not load reference sequence.\n";
-        }
+        readRegion( refSeq, faiI, idx, beginPos-options.regionWindowSize+1, beginPos+length(ref)+options.regionWindowSize+1);
     }else{
-        if (readRegion( refSeq, faiI, idx, beginPos-options.regionWindowSize, beginPos+length(ref)+options.regionWindowSize) != 0){
-            if( options.verbose ) std::cout << "ERROR: Could not load reference sequence.\n";
-        }
+        readRegion( refSeq, faiI, idx, beginPos-options.regionWindowSize, beginPos+length(ref)+options.regionWindowSize);
     }
     if( options.verbose ) std::cout << "refSeq " << refSeq << " " << chrom << " " << beginPos << std::endl;
 
@@ -526,7 +522,7 @@ int variantCallRegion(VcfRecord & variant, VcfHeader & vcfH,
     parseInfoField( variant.info, options.verbose, devL, devR );
     if( not compIsPlaced || options.callBoth ){
         if( options.verbose ) std::cout << "variantCallRegionReadPair " << devL << " " << devR << " " << std::endl; 
-        variantCallRegionReadPair( chrom, componentName, variant.beginPos, devL, devR, componentDir, baiI, bamS, hN, baiIAlt, bamSAlt, hNAlt, options, vC);
+        variantCallRegionReadPair( chrom, componentName, variant.beginPos, devL, devR, componentDir, baiI, bamS, baiIAlt, bamSAlt, options, vC);
         if( not options.callBoth ){
             transformLogLtoP( vC ); 
             return 0;
@@ -534,7 +530,7 @@ int variantCallRegion(VcfRecord & variant, VcfHeader & vcfH,
     }
 
     unsigned idxAlt = 0;
-    if(!getIdByName( faiIAlt, componentName, idxAlt ) && options.verbose ){
+    if(!getIdByName( idxAlt, faiIAlt, componentName ) && options.verbose ){
         if( options.verbose ) std::cout << "rID " << componentName << " " << beginPosC << " " << endPosC << std::endl;
         if( options.verbose ) std::cout << "ERROR: reference FAI index has no entry for rID in Alt mapped.\n";
     }
@@ -577,23 +573,19 @@ int variantCallRegion(VcfRecord & variant, VcfHeader & vcfH,
     TSequence altSeq;
     if( componentDir == left_dir_forward )
     { 
-        if (readRegion(altSeq, faiI, idx, beginPos-options.regionWindowSize +1, beginPos +1 ) != 0 && options.verbose)
-            std::cout << "ERROR: Could not load sequence.\n";
+        readRegion(altSeq, faiI, idx, beginPos-options.regionWindowSize +1, beginPos +1 );
         TSequence post;
-        if (readRegion(post, faiIAlt, idxAlt, altRegBeg, altRegEnd) != 0 && options.verbose)
-            std::cout << "ERROR: Could not load sequence.\n";
+        readRegion(post, faiIAlt, idxAlt, altRegBeg, altRegEnd);
         for( int bp = 0; bp < begNs; bp++ ) append( altSeq, 'N' );
         append( altSeq, post );
         if( options.verbose ) std::cout << "AltSeq left_dir_forward " << altSeq << std::endl;
     }
     else if( componentDir == left_dir_reverse )
     { 
-        if (readRegion(altSeq, faiI, idx, beginPos-options.regionWindowSize+1, beginPos+1 ) != 0)
-            std::cerr << "ERROR: Could not load sequence.\n";
+        readRegion(altSeq, faiI, idx, beginPos-options.regionWindowSize+1, beginPos+1 );
         TSequence post;
         // We need to read from the end 
-        if (readRegion(post, faiIAlt, idxAlt, altRegBeg, altRegEnd ) != 0 && options.verbose)
-            std::cout << "ERROR: Could not load sequence.\n";
+        readRegion(post, faiIAlt, idxAlt, altRegBeg, altRegEnd );
         reverseComplement( post );
         for( int bp = 0; bp < endNs; bp++ ) append( altSeq, 'N' );
         append( altSeq, post );
@@ -601,52 +593,42 @@ int variantCallRegion(VcfRecord & variant, VcfHeader & vcfH,
     }
     else if( componentDir == right_dir_forward )
     {
-        if (readRegion(altSeq, faiIAlt, idxAlt, altRegBeg, altRegEnd ) != 0 && options.verbose )
-            std::cout << "ERROR: Could not load sequence.\n";
+        readRegion(altSeq, faiIAlt, idxAlt, altRegBeg, altRegEnd );
         for( int bp = 0; bp < endNs; bp++ ) append( altSeq, 'N' );
         TSequence post;
-        if (readRegion(post, faiI, idx, beginPos, beginPos+options.regionWindowSize+length(ref) ) != 0 && options.verbose )
-            std::cout << "ERROR: Could not load sequence.\n";
+        readRegion(post, faiI, idx, beginPos, beginPos+options.regionWindowSize+length(ref) );
         append( altSeq, post );
         if( options.verbose ) std::cout << "AltSeq right_dir_forward " << altSeq << std::endl;
     }
     else if( componentDir == right_dir_reverse )
     {
         //    int seqLenAlt = sequenceLength( faiIAlt, idxAlt ); 
-        if (readRegion(altSeq, faiIAlt, idxAlt, altRegBeg, altRegEnd ) != 0 && options.verbose )
-            std::cout << "ERROR: Could not load sequence.\n";
+        readRegion(altSeq, faiIAlt, idxAlt, altRegBeg, altRegEnd );
         reverseComplement( altSeq );
         for( int bp = 0; bp < begNs; bp++ ) append( altSeq, 'N' );
         TSequence post;
-        if (readRegion(post, faiI, idx, beginPos, beginPos+options.regionWindowSize+length(ref) ) != 0 && options.verbose )
-            std::cout << "ERROR: Could not load sequence.\n";
+        readRegion(post, faiI, idx, beginPos, beginPos+options.regionWindowSize+length(ref) );
         append( altSeq, post );
         if( options.verbose ) std::cout << "AltSeq right_dir_reverse " << altSeq << std::endl;
     }
     else if( componentDir == both_dir_forward )
     {
-        if (readRegion(altSeq, faiI, idx, beginPos-options.regionWindowSize, beginPos ) != 0 && options.verbose )
-            std::cout << "ERROR: Could not load sequence.\n";
+        readRegion(altSeq, faiI, idx, beginPos-options.regionWindowSize, beginPos );
         TSequence post;
-        if (readRegion(post, faiIAlt, idxAlt, 0, 1e9 ) != 0 && options.verbose )
-            std::cout << "ERROR: Could not load sequence.\n";
+        readRegion(post, faiIAlt, idxAlt, 0, 1e9 );
         append( altSeq, post );
-        if (readRegion(post, faiI, idx, beginPos, beginPos+options.regionWindowSize+length( ref ) ) != 0 && options.verbose )
-            std::cout << "ERROR: Could not load sequence.\n";
+        readRegion(post, faiI, idx, beginPos, beginPos+options.regionWindowSize+length( ref ) );
         append( altSeq, post );
         if( options.verbose ) std::cout << "AltSeq both_dir_forward " << altSeq << std::endl;
     }
     else if( componentDir == both_dir_reverse )
     {
-        if (readRegion(altSeq, faiI, idx, beginPos-options.regionWindowSize, beginPos ) != 0 && options.verbose )
-            std::cout << "ERROR: Could not load sequence.\n";
+        readRegion(altSeq, faiI, idx, beginPos-options.regionWindowSize, beginPos );
         TSequence post;
-        if (readRegion(post, faiIAlt, idxAlt, 0, 1e9 ) != 0 && options.verbose)
-            std::cout << "ERROR: Could not load sequence.\n";
+        readRegion(post, faiIAlt, idxAlt, 0, 1e9 );
         reverseComplement( post );
         append( altSeq, post );
-        if (readRegion(post, faiI, idx, beginPos, beginPos+options.regionWindowSize+length( ref ) ) != 0 && options.verbose )
-            std::cout << "ERROR: Could not load sequence.\n";
+        readRegion(post, faiI, idx, beginPos, beginPos+options.regionWindowSize+length( ref ) );
         append( altSeq, post );
         if( options.verbose ) std::cout << "AltSeq both_dir_reverse " << altSeq << std::endl;
     }
@@ -655,10 +637,10 @@ int variantCallRegion(VcfRecord & variant, VcfHeader & vcfH,
     std::map< CharString, BamAlignmentRecord> bars2;
 
     // Need to get chromosome from VCF file
-    readBamRegion( hN, baiI, bamS, chrom, beginPos-options.regionWindowSize, beginPos+options.regionWindowSize, options.addReadGroup, options.verbose, bars1, bars2 );
+    readBamRegion( baiI, bamS, chrom, beginPos-options.regionWindowSize, beginPos+options.regionWindowSize, options.addReadGroup, options.verbose, bars1, bars2 );
 
     if( altRegEnd > altRegBeg )
-        readBamRegion( hNAlt, baiIAlt, bamSAlt, componentName, altRegBeg, altRegEnd, options.addReadGroup, options.verbose, bars1, bars2 );
+        readBamRegion( baiIAlt, bamSAlt, componentName, altRegBeg, altRegEnd, options.addReadGroup, options.verbose, bars1, bars2 );
     addBARsToVC( bars1, refSeq, altSeq, options, vC );
     addBARsToVC( bars2, refSeq, altSeq, options, vC );
 
@@ -667,9 +649,9 @@ int variantCallRegion(VcfRecord & variant, VcfHeader & vcfH,
 }
 
 
-int initializeBam(char* fileName, TBamIOContext & context, BamIndex<Bai> & bamIndex, Stream<Bgzf> & bamStream)
+int initializeBam(char* fileName, BamIndex<Bai> & bamIndex, BamFileIn & bamStream)
 {
-    if (!open(bamStream, fileName, "r"))
+    if (!open(bamStream, fileName))
     {
         std::cerr << "ERROR: Could not open " << fileName << " for reading.\n";
         return 1;
@@ -678,24 +660,26 @@ int initializeBam(char* fileName, TBamIOContext & context, BamIndex<Bai> & bamIn
     char baifileName[strlen(fileName) + 10];
     strcpy(baifileName, fileName);
     strcat(baifileName, ".bai");
-    if (read(bamIndex, baifileName) != 0)
+    if (!open(bamIndex, baifileName))
     {
         std::cerr << "ERROR: Could not read BAI index file " << fileName << "\n";
         return 1;
     }
 
     BamHeader header;
-    if (readRecord(header, context, bamStream, Bam()) != 0)
-    {
-        std::cerr << "ERROR: Could not read header from BAM file " << fileName << "\n";
-        return 1;
-    }
+    readHeader(header, bamStream);
     return 0;
 }
 
 void readBam(char* fileName, std::map<CharString, BamAlignmentRecord> & bars1, std::map<CharString, BamAlignmentRecord> & bars2)
 {
-    BamStream bamStreamIn(fileName);
+    BamFileIn bamStreamIn(fileName);
+
+    // Read the header and clear it since we don't need it.
+    BamHeader header;
+    readHeader(header, bamStreamIn);
+    clear(header);
+
     BamAlignmentRecord record;
     while (!atEnd(bamStreamIn))
     {

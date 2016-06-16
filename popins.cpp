@@ -4,7 +4,6 @@
 #include <string.h>
 
 #include "popins_clp.h"
-
 #include "popins_assemble.h"
 #include "popins_merge.h"
 #include "popins_contigmap.h"

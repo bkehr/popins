@@ -106,7 +106,7 @@ mergeLocations(String<Location> & locations, PlacingOptions & options)
 int
 loadLocations(String<LocationInfo> & locations, PlacingOptions & options)
 {
-	std::ostringstream msg;
+    std::ostringstream msg;
 
     if (length(locations) == 0)
     {
@@ -177,25 +177,14 @@ loadContigs(std::vector<std::pair<CharString, TSeq> > & contigs,
     }
 
     // Open fasta file.
-    SequenceStream stream(toCString(filename));
-    if (!isGood(stream))
-    {
-        std::cerr << "ERROR: Could not open " << filename << std::endl;
-        return 1;
-    }
+    SeqFileIn stream(toCString(filename));
 
     // Read records from file and append to contigs.
     while (!atEnd(stream) && contigSet.size() != 0)
     {
         CharString id;
         TSeq seq;
-
-        // read record
-        if (readRecord(id, seq, stream) != 0)
-        {
-            std::cerr << "ERROR: Could not read FASTA record from " << filename << std::endl;
-            return 1;
-        }
+        readRecord(id, seq, stream);
 
         unsigned i = 0;
         for (; i < length(id); ++i) if (id[i] == ' ') break;
@@ -252,7 +241,7 @@ int popins_place(int argc, char const ** argv)
             return 1;
 
         // Open the FAI file of the reference genome.
-        if (read(fai, toCString(options.referenceFile)) != 0)
+        if (!open(fai, toCString(options.referenceFile)))
         {
             std::cerr << "ERROR: Could not open FAI index for " << options.referenceFile << std::endl;
             return 1;
