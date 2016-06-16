@@ -1,7 +1,7 @@
 #ifndef POPINS_GENOTYPE_H_
 #define POPINS_GENOTYPE_H_
 
-#include "popins_clp.h"
+#include "../command_line_parsing.h"
 #include "variant_caller.h"
 
 using namespace seqan;

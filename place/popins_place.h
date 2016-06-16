@@ -8,11 +8,12 @@
 #include <seqan/vcf_io.h>
 #include <seqan/seq_io.h>
 
-#include "popins_location.h"
-#include "popins_location_info.h"
-#include "popins_place_ref_align.h"
-#include "popins_place_split_align.h"
-#include "popins_place_combine.h"
+#include "../command_line_parsing.h"
+#include "location.h"
+#include "location_info.h"
+#include "ref_align.h"
+#include "split_align.h"
+#include "combine.h"
 
 using namespace seqan;
 

@@ -7,9 +7,9 @@
 #include <seqan/sequence.h>
 #include <seqan/bam_io.h>
 
-#include "popins_clp.h"
-#include "popins_crop_unmapped.h"
-#include "popins_location.h"
+#include "../command_line_parsing.h"
+#include "../assemble/crop_unmapped.h"
+#include "../place/location.h"
 
 using namespace seqan;
 

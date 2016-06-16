@@ -3,7 +3,7 @@
 
 #include <seqan/bam_io.h>
 
-#include "popins_location.h"
+#include "location.h"
 #include <seqan/align_split.h>
 
 using namespace seqan;

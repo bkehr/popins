@@ -4,8 +4,8 @@
 #include <seqan/file.h>
 #include <seqan/sequence.h>
 
-#include "popins_clp.h"
-#include "popins_crop_unmapped.h"
+#include "../command_line_parsing.h"
+#include "crop_unmapped.h"
 
 #ifndef POPINS_ASSEMBLE_H_
 #define POPINS_ASSEMBLE_H_

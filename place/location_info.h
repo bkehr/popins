@@ -1,7 +1,7 @@
 #ifndef POPINS_LOCATION_INFO_H_
 #define POPINS_LOCATION_INFO_H_
 
-#include "popins_location.h"
+#include "location.h"
 
 using namespace seqan;
 

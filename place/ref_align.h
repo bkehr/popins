@@ -4,8 +4,8 @@
 
 #include <algorithm>
 #include <seqan/align.h>
-#include "popins_location.h"
-#include "popins_location_info.h"
+#include "location.h"
+#include "location_info.h"
 
 using namespace seqan;
 

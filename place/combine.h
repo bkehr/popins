@@ -3,8 +3,8 @@
 
 #include <vector>
 #include <seqan/seq_io.h>
-#include "popins_clp.h"
-#include "popins_location_info.h"
+#include "../command_line_parsing.h"
+#include "location_info.h"
 
 // ---------------------------------------------------------------------------------------
 // Struct PlacedLocation

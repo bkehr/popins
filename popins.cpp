@@ -3,12 +3,12 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "popins_clp.h"
-#include "popins_assemble.h"
-#include "popins_merge.h"
-#include "popins_contigmap.h"
-#include "popins_place.h"
-#include "popins_genotype.h"
+#include "command_line_parsing.h"
+#include "assemble/popins_assemble.h"
+#include "merge/popins_merge.h"
+#include "contigmap/popins_contigmap.h"
+#include "place/popins_place.h"
+#include "genotype/popins_genotype.h"
 
 // ==========================================================================
 

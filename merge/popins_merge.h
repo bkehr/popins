@@ -7,10 +7,10 @@
 #include "contig_id.h"
 #include "contig_structs.h"
 
-#include "popins_clp.h"
+#include "../command_line_parsing.h"
 
-#include "popins_merge_partition.h"
-#include "popins_merge_seqs.h"
+#include "partition.h"
+#include "merge_seqs.h"
 
 
 using namespace seqan;
