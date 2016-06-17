@@ -344,7 +344,8 @@ findOtherReads(BamFileOut & matesStream,
 
 template<typename TAdapterTag>
 int
-crop_unmapped(Triple<CharString> & fastqFiles,
+crop_unmapped(double & avgCov,
+        Triple<CharString> & fastqFiles,
         CharString & matesBam,
         CharString const & mappingBam,
         int humanSeqs,
@@ -364,6 +365,22 @@ crop_unmapped(Triple<CharString> & fastqFiles,
     readHeader(header, inStream);
     writeHeader(matesStream, header);
 
+    unsigned long genomeLength = 0;
+    for (unsigned i = 0; i < length(header); ++i)
+    {
+        if (header[i].type != BamHeaderRecordType::BAM_HEADER_REFERENCE)
+            continue;
+
+        for (unsigned j = 0; j < length(header[i].tags); ++j)
+        {
+            if (header[i].tags[j].i1 != "LN")
+                continue;
+
+            genomeLength += lexicalCast<unsigned>(header[i].tags[j].i2);
+            break;
+        }
+    }
+
     // Create maps for fastq records (first read in pair and second read in pair) and bam records without mate.
     TFastqMap firstReads, secondReads;
     TOtherMap otherReads;
@@ -381,6 +398,7 @@ crop_unmapped(Triple<CharString> & fastqFiles,
 
     // Iterate over the input file.
     BamAlignmentRecord record;
+    unsigned long alignedBaseCount = 0;
     while (!atEnd(inStream))
     {
         // Read the next read from input file.
@@ -389,6 +407,9 @@ crop_unmapped(Triple<CharString> & fastqFiles,
         // Check for flags that indicate 'uninteresting' bam records.
         if (hasFlagDuplicate(record) or hasFlagSecondary(record) or
                 hasFlagQCNoPass(record) or hasFlagSupplementary(record)) continue;
+
+        if (!hasFlagUnmapped(record))
+            alignedBaseCount += length(record.seq);
 
         // Check the read's unmapped flag.
         if (hasFlagUnmapped(record))
@@ -415,6 +436,8 @@ crop_unmapped(Triple<CharString> & fastqFiles,
     }
     close(inStream);
 
+    avgCov = (double)alignedBaseCount / (double)genomeLength;
+
     std::ostringstream msg;
     msg << "Map of low quality mates has " << otherReads.size() << " records.";
     printStatus(msg);
@@ -437,6 +460,19 @@ crop_unmapped(Triple<CharString> & fastqFiles,
     printStatus(msg);
 
     return 0;
+}
+
+
+template<typename TAdapterTag>
+int
+crop_unmapped(Triple<CharString> & fastqFiles,
+        CharString & matesBam,
+        CharString const & mappingBam,
+        int humanSeqs,
+        TAdapterTag tag)
+{
+    double cov;
+    return crop_unmapped(cov, fastqFiles, matesBam, mappingBam, humanSeqs, tag);
 }
 
 #endif // #ifndef NOVINS_CROP_UNMAPPED_H_

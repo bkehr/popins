@@ -5,6 +5,7 @@
 #include <seqan/sequence.h>
 
 #include "../command_line_parsing.h"
+#include "../sample_info.h"
 #include "crop_unmapped.h"
 
 #ifndef POPINS_ASSEMBLE_H_
@@ -484,6 +485,8 @@ int popins_assemble(int argc, char const ** argv)
         printStatus(msg);
     }
 
+    SampleInfo info = initSampleInfo(options.mappingFile, options.adapters);
+
     CharString matesBam = getFileName(options.workingDirectory, "mates.bam");
     CharString nonRefBamTemp = getFileName(options.workingDirectory, "non_ref_tmp.bam");
     CharString nonRefBam = getFileName(options.workingDirectory, "non_ref.bam");
@@ -504,19 +507,26 @@ int popins_assemble(int argc, char const ** argv)
         // Crop unmapped reads and reads with unreliable mappings from the input bam file.
         if (options.adapters == "HiSeqX")
         {
-            if (crop_unmapped(fastqFiles, matesBam, options.mappingFile, options.humanSeqs, HiSeqXAdapters()) != 0)
+            if (crop_unmapped(info.avg_cov, fastqFiles, matesBam, options.mappingFile, options.humanSeqs, HiSeqXAdapters()) != 0)
                 return 1;
         }
         else if (options.adapters == "HiSeq")
         {
-            if (crop_unmapped(fastqFiles, matesBam, options.mappingFile, options.humanSeqs, HiSeqAdapters()) != 0)
+            if (crop_unmapped(info.avg_cov, fastqFiles, matesBam, options.mappingFile, options.humanSeqs, HiSeqAdapters()) != 0)
                 return 1;
         }
         else
         {
-            if (crop_unmapped(fastqFiles, matesBam, options.mappingFile, options.humanSeqs, NoAdapters()) != 0)
+            if (crop_unmapped(info.avg_cov, fastqFiles, matesBam, options.mappingFile, options.humanSeqs, NoAdapters()) != 0)
                 return 1;
         }
+
+        CharString sampleInfoFile = getFileName(options.workingDirectory, "POPINS_SAMPLE_INFO");
+        writeSampleInfo(info, sampleInfoFile);
+
+        msg.str("");
+        msg << "Sample info written to \'" << sampleInfoFile << "\'.";
+        printStatus(msg);
 
         msg.str("");
         msg << "Sorting " << matesBam << " using " << SAMTOOLS;
