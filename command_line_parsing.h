@@ -255,28 +255,6 @@ struct PlacingOptions {
     {}
 };
 
-enum genotypingModelType { randomSequenceGenotyping, duplicationGenotyping };
-
-genotypingModelType
-genotypingModelEnum( CharString& gmString ){
-    if( gmString == "DUP" ){
-        return duplicationGenotyping;
-    }else{
-        return randomSequenceGenotyping;
-    }
-}
-
-void
-genotypingModelName( genotypingModelType gm, CharString& gmString ){
-    if( gm == duplicationGenotyping ){
-        gmString = CharString( "DUP" );
-
-    }else{
-        gmString = CharString( "RANDOM" );
-    }
-}
-
-
 struct GenotypingOptions {
     CharString referenceFile;
     CharString bamFile;
@@ -290,7 +268,7 @@ struct GenotypingOptions {
     int gapOpen;
     int gapExtend;
     int minAlignScore;
-    genotypingModelType genotypingModel;
+    CharString genotypingModel;
 
     int maxInsertSize;
     int bpQclip;
@@ -309,7 +287,7 @@ struct GenotypingOptions {
 
     GenotypingOptions() :
         sampleName("sample"), match(1), mismatch(-2), gapOpen(-4), gapExtend(-1), minAlignScore(55),
-        genotypingModel( randomSequenceGenotyping ), maxInsertSize( 500 ), bpQclip(0), minSeqLen(10),
+        genotypingModel("RANDOM"), maxInsertSize(500), bpQclip(0), minSeqLen(10),
         minReadProb(0.00001), maxBARcount(200), regionWindowSize(50), addReadGroup(false), verbose(false),
         callBoth(false), useReadCounts(false), fullOverlap(false)
     {}
@@ -623,6 +601,8 @@ setupParser(ArgumentParser & parser, GenotypingOptions & options)
     addOption(parser, ArgParseOption("f", "fulloverlap", "full overlap of read"));
     hideOption(parser, "f");
 
+    setValidValues(parser, "gm", "DUP RANDOM");
+
     // Defualt values.
     setDefaultValue(parser, "match", options.match);
     setDefaultValue(parser, "mismatch", options.mismatch);
@@ -635,9 +615,7 @@ setupParser(ArgumentParser & parser, GenotypingOptions & options)
     setDefaultValue(parser, "maxBARcount", options.maxBARcount);
     setDefaultValue(parser, "window", options.regionWindowSize);
     setDefaultValue(parser, "samplename", options.sampleName);
-    CharString gmName;
-    genotypingModelName( options.genotypingModel, gmName );
-    setDefaultValue(parser, "genotypingmodel", gmName );
+    setDefaultValue(parser, "genotypingmodel", options.genotypingModel);
 }
 
 // ==========================================================================
@@ -878,11 +856,8 @@ getOptionValues(GenotypingOptions & options, ArgumentParser & parser)
         getOptionValue(options.minSeqLen, parser, "minSeqLen");
     if (isSet(parser, "samplename"))
         getOptionValue(options.sampleName, parser, "samplename");
-    if (isSet(parser, "genotypingmodel")){
-        CharString gmString;
-        getOptionValue( gmString, parser, "genotypingmodel");
-        options.genotypingModel = genotypingModelEnum( gmString );
-    }
+    if (isSet(parser, "genotypingmodel"))
+        getOptionValue(options.genotypingModel, parser, "genotypingmodel");
     if(isSet(parser, "window"))
         getOptionValue( options.regionWindowSize, parser, "window");
     options.addReadGroup = isSet(parser, "addreadgroup");
