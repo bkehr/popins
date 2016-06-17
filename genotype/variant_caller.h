@@ -315,11 +315,11 @@ int addBARsToVC(std::map< CharString, BamAlignmentRecord>&  bars,  TSequence& re
                 pa = log( exp( asAlt )/div );
                 pr = log( exp( asRef )/div );
             }
-            if( options.genotypingModel == randomSequenceGenotyping ){
+            if( options.genotypingModel == "RANDOM" ){
                 vC[0] += pr;
                 vC[1] += -log( 2.0);
                 vC[2] += pa;
-            }else if( options.genotypingModel == duplicationGenotyping ){
+            }else if( options.genotypingModel == "DUP" ){
                 vC[0] += pr;
                 if( pr > pa )
                     vC[1] += log( 2.0/3.0 );
