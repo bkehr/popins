@@ -7,6 +7,7 @@
 #include <seqan/sequence.h>
 #include <seqan/bam_io.h>
 
+#include "../popins_utils.h"
 #include "../command_line_parsing.h"
 #include "../assemble/crop_unmapped.h"
 #include "../place/location.h"
@@ -131,31 +132,51 @@ int popins_contigmap(int argc, char const ** argv)
 {
     // Parse the command line to get option values.
     ContigMapOptions options;
-    if (parseCommandLine(options, argc, argv) != 0)
-        return 1;
+    ArgumentParser::ParseResult res = parseCommandLine(options, argc, argv);
+    if (res != ArgumentParser::PARSE_OK)
+        return res;
+
+    CharString workingDirectory = getFileName(options.prefix, options.sampleID);
 
     // Check for input files to exist.
-    CharString fastqFirst = getFileName(options.workingDirectory, "paired.1.fastq");
-    CharString fastqSecond = getFileName(options.workingDirectory, "paired.2.fastq");
-    CharString fastqSingle = getFileName(options.workingDirectory, "single.fastq");
-    CharString nonRefBam = getFileName(options.workingDirectory, "non_ref.bam");
-    CharString nonRefNew = getFileName(options.workingDirectory, "non_ref_new.bam");
-    CharString locationsFile = getFileName(options.workingDirectory, "locations.txt");
+    CharString fastqFirst = getFileName(workingDirectory, "paired.1.fastq");
+    CharString fastqSecond = getFileName(workingDirectory, "paired.2.fastq");
+    CharString fastqSingle = getFileName(workingDirectory, "single.fastq");
+    CharString nonRefBam = getFileName(workingDirectory, "non_ref.bam");
+    CharString nonRefNew = getFileName(workingDirectory, "non_ref_new.bam");
+    CharString locationsFile = getFileName(workingDirectory, "locations.txt");
 
     if (!exists(fastqFirst) || !exists(fastqSecond) || !exists(fastqSingle) || !exists(nonRefBam))
     {
         std::cerr << "ERROR: Could not find all input files ";
         std::cerr << fastqFirst << ", " << fastqSecond << ", " << fastqSingle << ", and " << nonRefBam << std::endl;
-        return 1;
+        return 7;
     }
 
     // Create names of temporary files.
-    CharString mappedSam = getFileName(options.workingDirectory, "contig_mapped_unsorted.sam");
-    CharString mappedBamUnsorted = getFileName(options.workingDirectory, "contig_mapped_unsorted.bam");
-    CharString mappedBam = getFileName(options.workingDirectory, "contig_mapped.bam");
-    CharString mergedBam = getFileName(options.workingDirectory, "merged.bam");
+    CharString mappedSam = getFileName(workingDirectory, "contig_mapped_unsorted.sam");
+    CharString mappedBamUnsorted = getFileName(workingDirectory, "contig_mapped_unsorted.bam");
+    CharString mappedBam = getFileName(workingDirectory, "contig_mapped.bam");
+    CharString mergedBam = getFileName(workingDirectory, "merged.bam");
 
     std::stringstream cmd;
+
+    CharString indexFile = options.contigFile;
+    indexFile += ".bwt";
+    if (!exists(indexFile))
+    {
+        std::ostringstream msg;
+        msg << "Indexing contigs int \'" << options.contigFile << "\'using " << BWA;
+        printStatus(msg);
+
+        cmd.str("");
+        cmd << BWA << " index " << options.contigFile;
+        if (system(cmd.str().c_str()) != 0)
+        {
+            std::cerr << "ERROR while indexing \'" << options.contigFile << "\' using " << BWA << std::endl;
+            return 7;
+        }
+    }
 
     std::ostringstream msg;
     msg << "Mapping reads to contigs using " << BWA;
@@ -163,25 +184,25 @@ int popins_contigmap(int argc, char const ** argv)
 
     // Remapping to contigs with bwa.
     cmd.str("");
-    if (options.allAlignment) cmd << BWA << " mem -a ";
+    if (!options.bestAlignment) cmd << BWA << " mem -a ";
     else cmd << BWA << " mem ";
     cmd << "-t " << options.threads << " " << options.contigFile << " " << fastqFirst << " " << fastqSecond << " > " << mappedSam;
     if (system(cmd.str().c_str()) != 0)
     {
         std::cerr << "ERROR while running bwa on " << fastqFirst << " and " << fastqSecond << std::endl;
-        return 1;
+        return 7;
     }
     //remove(toCString(fastqFirst));
     //remove(toCString(fastqSecond));
 
     cmd.str("");
-    if (options.allAlignment) cmd << BWA << " mem -a ";
+    if (!options.bestAlignment) cmd << BWA << " mem -a ";
     else cmd << BWA << " mem ";
     cmd << "-t " << options.threads << " " << options.contigFile << " " << fastqSingle << " | awk '$1 !~ /@/' >> " << mappedSam;
     if (system(cmd.str().c_str()) != 0)
     {
         std::cerr << "ERROR while running bwa on " << fastqSingle << std::endl;
-        return 1;
+        return 7;
     }
     //remove(toCString(fastqSingle));
 
@@ -190,7 +211,7 @@ int popins_contigmap(int argc, char const ** argv)
     // Fill in sequences in bwa output.
     if (fill_sequences(mappedBamUnsorted, mappedSam) != 0)
     {
-        return 1;
+        return 7;
     }
     remove(toCString(mappedSam));
 
@@ -204,13 +225,13 @@ int popins_contigmap(int argc, char const ** argv)
     if (system(cmd.str().c_str()) != 0)
     {
         std::cerr << "ERROR while sorting " << mappedBamUnsorted << " by read name using " << SAMTOOLS << std::endl;
-        return 1;
+        return 7;
     }
     remove(toCString(mappedBamUnsorted));
 
     // Merge non_ref.bam with contig_mapped and set the mates.
     if (merge_and_set_mate(mergedBam, nonRefBam, mappedBam) != 0)
-        return 1;
+        return 7;
 
     remove(toCString(mappedBam));
     //remove(toCString(nonRefBam));
@@ -225,7 +246,7 @@ int popins_contigmap(int argc, char const ** argv)
     if (system(cmd.str().c_str()) != 0)
     {
         std::cerr << "ERROR while sorting " << mergedBam << " by beginPos using " << SAMTOOLS << std::endl;
-        return 1;
+        return 7;
     }
     remove(toCString(mergedBam));
 
@@ -239,7 +260,7 @@ int popins_contigmap(int argc, char const ** argv)
     if (system(cmd.str().c_str()) != 0)
     {
         std::cerr << "ERROR while indexing " << nonRefNew << " using " << SAMTOOLS << std::endl;
-        return 1;
+        return 7;
     }
 
     msg.str("");
@@ -250,10 +271,10 @@ int popins_contigmap(int argc, char const ** argv)
     String<Location> locations;
     findLocations(locations, nonRefNew, options.maxInsertSize);
     scoreLocations(locations);
-    if (writeLocations(locationsFile, locations) != 0) return 1;
+    if (writeLocations(locationsFile, locations) != 0) return 7;
 
     // Remove the non_ref_new.bam file.
-    if (!options.keepNonRefNew)
+    if (options.deleteNonRefNew)
         remove(toCString(nonRefNew));
 
     return 0;

@@ -344,33 +344,36 @@ writeVcf(TStream & outStream, PlacedLocation & loc, FaiIndex & fai)
 
 template<typename TStream>
 bool
-popins_place_combine(TStream & vcfStream, PlacingOptions & options)
+popins_place_combine(TStream & vcfStream, CharString & prefix, CharString & referenceFile, CharString & outFile)
 {
     std::vector<PlacedLocation> locs;
 
     // Open the FAI file of the reference genome.
     FaiIndex fai;
-    if (!open(fai, toCString(options.referenceFile)))
+    if (!open(fai, toCString(referenceFile)))
     {
-        std::cerr << "ERROR: Could not open FAI index for " << options.referenceFile << std::endl;
+        std::cerr << "ERROR: Could not open FAI index for " << referenceFile << std::endl;
         return 1;
     }
 
+    CharString filename = "locations_placed.txt";
+    String<Pair<CharString> > locationsFiles = listFiles(prefix, filename);
+
     std::ostringstream msg;
-    msg << "Loading the placed locations from " << length(options.locationsFiles) << " locations files.";
+    msg << "Loading the placed locations from " << length(locationsFiles) << " locations files.";
     printStatus(msg);
 
     std::cerr << "0%   10   20   30   40   50   60   70   80   90   100%" << std::endl;
     std::cerr << "|----|----|----|----|----|----|----|----|----|----|" << std::endl;
     std::cerr << "*" << std::flush;
 
-    double fiftieth = length(options.locationsFiles) / 50.0;
+    double fiftieth = length(locationsFiles) / 50.0;
     unsigned progress = 0;
 
     // Read placed location files.
-    for (unsigned i = 0; i < length(options.locationsFiles); ++i)
+    for (unsigned i = 0; i < length(locationsFiles); ++i)
     {
-        if (loadPlacedLocations(locs, options.locationsFiles[i]) != 0)
+        if (loadPlacedLocations(locs, locationsFiles[i].i2) != 0)
             return 1;
 
         while (progress * fiftieth < i)
@@ -396,7 +399,7 @@ popins_place_combine(TStream & vcfStream, PlacingOptions & options)
     combineLocations(locs);
 
     msg.str("");
-    msg << "Writing " << locs.size() << " combined locations to output file '" << options.outFile << "'.";
+    msg << "Writing " << locs.size() << " combined locations to output file '" << outFile << "'.";
     printStatus(msg);
 
     // Choose the best position.

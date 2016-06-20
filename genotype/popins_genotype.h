@@ -1,6 +1,7 @@
 #ifndef POPINS_GENOTYPE_H_
 #define POPINS_GENOTYPE_H_
 
+#include "../popins_utils.h"
 #include "../command_line_parsing.h"
 #include "variant_caller.h"
 
@@ -54,17 +55,27 @@ popins_genotype(int argc, char const ** argv)
 {
     // Parse the command line to get option values.
     GenotypingOptions options;
-    if (parseCommandLine(options, argc, argv) != 0)
-        return 1;
+    ArgumentParser::ParseResult res = parseCommandLine(options, argc, argv);
+    if (res != ArgumentParser::PARSE_OK)
+        return res;
 
     printStatus("Opening input files.");
 
-    // Open the input VCF file and prepare output vcf stream.
+    CharString samplePath = getFileName(options.prefix, options.sampleID);
+
+   // Load the POPINS_SAMPLE_INFO file.
+   SampleInfo sampleInfo;
+   CharString sampleInfoFile = getFileName(samplePath, "POPINS_SAMPLE_INFO");
+   if (readSampleInfo(sampleInfo, sampleInfoFile) != 0)
+      return 1;
+
+    // Open the input VCF file and prepare output VCF stream.
     VcfFileIn vcfIn(toCString(options.vcfFile));
+    CharString outfile = getFileName(samplePath, "insertions.vcf");
     VcfFileOut vcfOut(vcfIn);
     open(vcfOut, std::cout, Vcf());
 
-    appendName(sampleNamesCache(context(vcfOut)), options.sampleName);
+    appendName(sampleNamesCache(context(vcfOut)), options.sampleID);
 
     VcfHeader header;
     readHeader(header, vcfIn);
@@ -93,35 +104,37 @@ popins_genotype(int argc, char const ** argv)
     {
         if (!build(faIndex, toCString(options.referenceFile)))
         {
-            std::cerr << "ERROR: Could not build the index of " << options.referenceFile << std::endl;
-            return 1;
+            std::cerr << "ERROR: Could not find nor build the index of " << options.referenceFile << std::endl;
+            return 7;
         }
     }
 
     // Open the bam file. (A bam file needs the bai index and the bam file stream.)
     BamIndex<Bai> bamIndex;
     BamFileIn bamStream;
-    if (initializeBam(toCString(options.bamFile), bamIndex, bamStream) != 0) return 1;
+    if (initializeBam(toCString(sampleInfo.bam_file), bamIndex, bamStream) != 0)
+       return 7;
 
     // Build an index of the insertion sequences' fasta file.
     FaiIndex faIndexAlt;
-    if (!open(faIndexAlt, toCString(options.altFastaFile)))
+    if (!open(faIndexAlt, toCString(options.supercontigFile)))
     {
-        if (!build(faIndexAlt, toCString(options.altFastaFile)))
+        if (!build(faIndexAlt, toCString(options.supercontigFile)))
         {
-            std::cerr << "ERROR: Could not build the index of " << options.altFastaFile << std::endl;
-            return 1;
+            std::cerr << "ERROR: Could not build the index of " << options.supercontigFile << std::endl;
+            return 7;
         }
     }
 
     // Open the bam file. (A bam file needs the bai index and the bam file stream.)
     BamIndex<Bai> bamIndexAlt;
     BamFileIn bamStreamAlt;
-    if (initializeBam(toCString(options.altBamFile), bamIndexAlt, bamStreamAlt))
-        return 1;
+    CharString altBamFile = getFileName(samplePath, "non_ref_new.bam");
+    if (initializeBam(toCString(altBamFile), bamIndexAlt, bamStreamAlt))
+        return 7;
 
     std::ostringstream msg;
-    msg << "Genotyping VCF records in \'" << options.vcfFile << "\' for " << options.sampleName << ".";
+    msg << "Genotyping VCF records in \'" << options.vcfFile << "\' for " << options.sampleID << ".";
     printStatus(msg);
 
     // Iterate over VCF file and call the variants.

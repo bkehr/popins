@@ -3,9 +3,92 @@
 
 #include<seqan/sequence.h>
 
-#include "contig_id.h"
-
 using namespace seqan;
+
+// ============================================================================
+// struct ContigId
+// ============================================================================
+
+struct ContigId
+{
+    CharString pn;
+    CharString contigId;
+    bool orientation;
+
+    ContigId()
+    {}
+
+    ContigId(CharString & p, CharString & c, bool o) :
+        pn(p), contigId(c), orientation(o)
+    {}
+};
+
+// --------------------------------------------------------------------------
+
+template<typename TLen>
+CharString
+formattedIndex(unsigned i, TLen max)
+{
+    unsigned digits = 0;
+    while (max) {
+        max /= 10;
+        digits++;
+    }
+
+    std::stringstream s;
+    s << std::setfill('0') << std::setw(digits) << i;
+
+    return s.str();
+}
+
+// --------------------------------------------------------------------------
+// Function operator<<                                               ContigId
+// --------------------------------------------------------------------------
+
+template<typename TStream>
+inline TStream &
+operator<<(TStream & stream, ContigId & id)
+{
+    stream << id.pn << "." << id.contigId;
+    if (!id.orientation) stream << "_rev";
+    return stream;
+}
+
+// --------------------------------------------------------------------------
+// Function operator!=                                               ContigId
+// --------------------------------------------------------------------------
+
+inline bool
+operator!=(ContigId const & left, ContigId const & right)
+{
+    return (left.pn != right.pn) ||
+            (left.contigId != right.contigId) ||
+            (left.orientation != right.orientation);
+}
+
+// --------------------------------------------------------------------------
+// Function operator<                                                ContigId
+// --------------------------------------------------------------------------
+
+inline bool
+operator<(ContigId const & left, ContigId const & right)
+{
+    return (left.pn < right.pn) ||
+            (left.pn == right.pn && left.contigId < right.contigId) ||
+            (left.pn == right.pn && left.contigId == right.contigId && left.orientation && !right.orientation);
+}
+
+// --------------------------------------------------------------------------
+// Function operator>                                                ContigId
+// --------------------------------------------------------------------------
+
+inline bool
+operator>(ContigId const & left, ContigId const & right)
+{
+    return (left.pn > right.pn) ||
+            (left.pn == right.pn && left.contigId > right.contigId) ||
+            (left.pn == right.pn && left.contigId == right.contigId && !left.orientation && right.orientation);
+}
 
 // ==========================================================================
 // struct Contig
@@ -48,122 +131,6 @@ clear(ContigComponent<TSeq> & c)
 {
     clear(c.contigs);
     clear(c.alignedPairs);
-}
-
-// ==========================================================================
-// struct ContigBatch
-// ==========================================================================
-
-struct ContigBatch
-{
-    // General info about the set of contigs
-    String<CharString> contigFiles;
-    String<unsigned> contigsPerFile;
-    unsigned contigsInTotal;
-
-    // Specific info for this batch of contigs
-    unsigned number;
-    unsigned batchesInTotal;
-    int size; // of all batches
-    int actualSize; // of this specific batch (last batch may be smaller than the other batches)
-    int offset; // start index of this batch
-
-    ContigBatch() :
-        number(0), batchesInTotal(1), size(-1), actualSize(-1), offset(-1)
-    {}
-
-    ContigBatch(String<CharString> & files, unsigned batches, unsigned batchIndex) :
-        contigFiles(files), number(batchIndex), batchesInTotal(batches), size(-1), actualSize(-1), offset(-1)
-    {}
-};
-
-// --------------------------------------------------------------------------
-
-int getSize(ContigBatch & batch)
-{
-    if (batch.size == -1)
-        batch.size = (batch.contigsInTotal + batch.batchesInTotal - 1) / batch.batchesInTotal;
-    return batch.size;
-}
-
-// --------------------------------------------------------------------------
-
-int indexOffset(ContigBatch & batch)
-{
-    if (batch.offset == -1)
-        batch.offset = getSize(batch) * batch.number;
-    return batch.offset;
-}
-
-// --------------------------------------------------------------------------
-
-unsigned globalIndexRC(unsigned i, ContigBatch & batch)
-{
-    if (i < batch.contigsInTotal)
-        return i += batch.contigsInTotal;
-    else
-        return i -= batch.contigsInTotal;
-}
-
-// --------------------------------------------------------------------------
-
-int batchSize(ContigBatch & batch)
-{
-    if (batch.actualSize == -1)
-    {
-        if (unsigned(indexOffset(batch) + getSize(batch)) < batch.contigsInTotal)
-            batch.actualSize = getSize(batch);
-        else
-            batch.actualSize = batch.contigsInTotal - indexOffset(batch);
-    }
-    return batch.actualSize;
-}
-
-// --------------------------------------------------------------------------
-
-int totalBatches(ContigBatch & batch)
-{
-    return batch.batchesInTotal;
-}
-
-// --------------------------------------------------------------------------
-// Function countContigs()
-// --------------------------------------------------------------------------
-
-bool countContigs(ContigBatch & batch)
-{
-    unsigned count = 0;
-
-    // Case A) Use counts specified by user.
-    for (unsigned i = 0; i < length(batch.contigsPerFile); ++i)
-        count += batch.contigsPerFile[i];
-
-    // Case B) Iterate over all files to count fasta records.
-    if (count == 0)
-    {
-        CharString id;
-        Dna5String contig;
-
-        unsigned prevCount = 0;
-        for (unsigned i = 0; i < length(batch.contigFiles); ++i)
-        {
-            // Open file.
-            SeqFileIn stream(toCString(batch.contigFiles[i]));
-
-            // Count records in file.
-            while (!atEnd(stream))
-            {
-                readRecord(id, contig, stream);
-                ++count;
-            }
-            appendValue(batch.contigsPerFile, count - prevCount); 
-            prevCount = count;
-        }
-    }
-
-    batch.contigsInTotal = count;
-
-    return 0;
 }
 
 // --------------------------------------------------------------------------

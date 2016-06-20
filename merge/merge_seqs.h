@@ -3,7 +3,6 @@
 
 #include <seqan/align.h>
 
-#include "contig_id.h"
 #include "contig_structs.h"
 
 using namespace seqan;
@@ -484,7 +483,7 @@ writeSkippedBranching(TStream & stream, StringSet<Contig<TSeq>, TSpec> & contigs
 
 template<typename TStream, typename TSeq>
 void
-writeSupercontigs(TStream & outputStream, String<TSeq> & mergedSeqs, unsigned numContigs, int batchIndex, unsigned pos)
+writeSupercontigs(TStream & outputStream, String<TSeq> & mergedSeqs, unsigned numContigs, unsigned pos)
 {
     typedef typename Size<TSeq>::Type TSize;
 
@@ -492,7 +491,7 @@ writeSupercontigs(TStream & outputStream, String<TSeq> & mergedSeqs, unsigned nu
     {
         for (TSize i = 0; i < length(mergedSeqs); ++i)
         {
-            outputStream << ">COMPONENT_" << batchIndex << "." << pos << "_" << char('a'+i)
+            outputStream << ">COMPONENT_" << pos << "_" << char('a'+i)
                                  << "_length_" << length(mergedSeqs[i])
                                  << "_size_" << numContigs << std::endl;
             outputStream << mergedSeqs[i] << std::endl;
@@ -502,7 +501,7 @@ writeSupercontigs(TStream & outputStream, String<TSeq> & mergedSeqs, unsigned nu
     {
         for (TSize i = 0; i < length(mergedSeqs); ++i)
         {
-            outputStream << ">COMPONENT_" << batchIndex << "." << pos << "_" << char('a'+i/26) << char('a'+i%26)
+            outputStream << ">COMPONENT_" << pos << "_" << char('a'+i/26) << char('a'+i%26)
                                  << "_length_" << length(mergedSeqs[i])
                                  << "_size_" << numContigs << std::endl;
             outputStream << mergedSeqs[i] << std::endl;
@@ -552,7 +551,7 @@ constructSupercontigs(std::map<TSize, ContigComponent<TSequence> > & components,
         // Sort the contigs for merging.
         getSeqsByAlignOrder(component, contigs);
 
-        if (options.verbose) std::cout << "COMPONENT_" << options.batchIndex << "." << pos << " size:" << length(component.contigs) << std::endl;
+        if (options.verbose) std::cout << "COMPONENT_" << pos << " size:" << length(component.contigs) << std::endl;
 
         // --- MERGE CONTIGS OF THE COMPONENT ---
         String<TSequence> mergedSeqs;
@@ -561,7 +560,7 @@ constructSupercontigs(std::map<TSize, ContigComponent<TSequence> > & components,
                 options.verbose))
         {
             if (options.verbose)
-                std::cout << "COMPONENT_" << options.batchIndex << "." << pos << " size:" << length(component.contigs) << " given up." << std::endl;
+                std::cout << "COMPONENT_" << pos << " size:" << length(component.contigs) << " given up." << std::endl;
             if (options.skippedFile != "")
                 writeSkippedBranching(options.skippedStream, component.contigs);
             ++numVeryBranching;
@@ -574,7 +573,7 @@ constructSupercontigs(std::map<TSize, ContigComponent<TSequence> > & components,
         if (length(mergedSeqs) > 1) ++numBranching;
 
         // Output the supercontig.
-        writeSupercontigs(options.outputStream, mergedSeqs, length(component.contigs), options.batchIndex, pos);
+        writeSupercontigs(options.outputStream, mergedSeqs, length(component.contigs), pos);
 
         clear(component);
         ++pos;

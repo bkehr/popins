@@ -947,7 +947,12 @@ addLocation(Location & prevLoc, String<Location> & locations, Location & loc, un
 // mergeLocationsBatch()
 // --------------------------------------------------------------------------
 
-int mergeLocationsBatch(std::fstream & stream, String<Location> & locations, String<CharString> locationsFiles, size_t offset, size_t batchSize, unsigned maxInsertSize)
+int mergeLocationsBatch(std::fstream & stream,
+      String<Location> & locations,
+      String<Pair<CharString> > & locationsFiles,
+      size_t offset,
+      size_t batchSize,
+      unsigned maxInsertSize)
 {
     Location forward, reverse;
     unsigned contigCount = 0;
@@ -963,17 +968,17 @@ int mergeLocationsBatch(std::fstream & stream, String<Location> & locations, Str
     resize(readerPtr, length(locationsFiles));
     for (unsigned i = offset; i < last; ++i)
     {
-        std::fstream * stream = new std::fstream(toCString(locationsFiles[i]), std::ios::in);
+        std::fstream * stream = new std::fstream(toCString(locationsFiles[i].i2), std::ios::in);
         if (!(*stream).good())
         {
-            std::cerr << "ERROR: Could not open locations file " << locationsFiles[i] << std::endl;
+            std::cerr << "ERROR: Could not open locations file " << locationsFiles[i].i2 << std::endl;
             return 1;
         }
         readerPtr[i] = stream;
 
         // Read the first location record and push it to min heap.
         Location loc;
-        if (readLocation(loc, *readerPtr[i], locationsFiles[i]) != 0) return 1;
+        if (readLocation(loc, *readerPtr[i], locationsFiles[i].i2) != 0) return 1;
         loc.fileIndex = i;
         heap.push(loc);
     }
@@ -1012,7 +1017,7 @@ int mergeLocationsBatch(std::fstream & stream, String<Location> & locations, Str
         heap.pop();
         unsigned i = loc.fileIndex;
         Location nextLoc;
-        int ret = readLocation(nextLoc, *readerPtr[i], locationsFiles[i]);
+        int ret = readLocation(nextLoc, *readerPtr[i], locationsFiles[i].i2);
         if (ret == 0)
         {
             nextLoc.fileIndex = i;
@@ -1051,9 +1056,9 @@ int mergeLocationsBatch(std::fstream & stream, String<Location> & locations, Str
 // ==========================================================================
 
 int
-mergeLocations(std::fstream & stream, String<Location> & locations, String<CharString> & locationsFiles, CharString & outFile, unsigned maxInsertSize)
+mergeLocations(std::fstream & stream, String<Location> & locations, String<Pair<CharString> > & locationsFiles, CharString & outFile, unsigned maxInsertSize)
 {
-    String<CharString> tmpFiles;
+    String<Pair<CharString> > tmpFiles;
     unsigned batchSize = 500;
 
     if (length(locationsFiles) > batchSize*batchSize)
@@ -1078,7 +1083,7 @@ mergeLocations(std::fstream & stream, String<Location> & locations, String<CharS
         std::stringstream tmpName;
         tmpName << outFile << "." << (offset/batchSize)+1;
         CharString tmp = tmpName.str();
-        appendValue(tmpFiles, tmp);
+        appendValue(tmpFiles, Pair<CharString>("", tmp));
 
         // Open output file.
         std::fstream tmpStream(toCString(tmp), std::ios::out);
@@ -1095,8 +1100,10 @@ mergeLocations(std::fstream & stream, String<Location> & locations, String<CharS
     printStatus("Merging temporary location files.");
 
     // Merge and remove the temporary files.
-    if (mergeLocationsBatch(stream, locations, tmpFiles, 0, length(tmpFiles), maxInsertSize) != 0) return 1;
-    for (unsigned i = 0; i < length(tmpFiles); ++i) remove(toCString(tmpFiles[i]));
+    if (mergeLocationsBatch(stream, locations, tmpFiles, 0, length(tmpFiles), maxInsertSize) != 0)
+       return 1;
+    for (unsigned i = 0; i < length(tmpFiles); ++i)
+       remove(toCString(tmpFiles[i].i2));
 
     return 0;
 }

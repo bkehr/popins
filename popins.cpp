@@ -68,12 +68,16 @@ int main(int argc, char const ** argv)
         return 1;
     }
 
+    if (ret == 7)
+       return 1;
+
     if (ret == 0)
     {
         std::ostringstream msg;
         msg << "popins " << command << " finished in " << (std::time(0) - start_time) << " seconds.";
         printStatus(msg);
     }
-    return ret;
+
+    return 0;
 }
 

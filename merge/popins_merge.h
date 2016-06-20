@@ -4,9 +4,8 @@
 #include <sstream>
 #include <iomanip>
 
-#include "contig_id.h"
 #include "contig_structs.h"
-
+#include "../popins_utils.h"
 #include "../command_line_parsing.h"
 
 #include "partition.h"
@@ -16,225 +15,88 @@
 using namespace seqan;
 
 // --------------------------------------------------------------------------
+// Function calculateEntropy()
+// --------------------------------------------------------------------------
+
+template<typename TSeq>
+double
+averageEntropy(TSeq & seq)
+{
+    typedef typename Size<TSeq>::Type TSize;
+
+    // Count dinucleotide occurrences
+    String<TSize> diCounts;
+    resize(diCounts, 16, 0);
+    int counted = 0;
+    for (TSize i = 0; i < length(seq)-1; ++i)
+    {
+        if (seq[i] != 'N' && seq[i+1] != 'N')
+        {
+            diCounts[ordValue(seq[i]) + 4*ordValue(seq[i+1])] += 1;
+            counted += 1;
+        }
+    }
+
+    // Calculate entropy for dinucleotide counts
+    double entropy = 0;
+    typename Iterator<String<TSize> >::Type countEnd = end(diCounts);
+    for (typename Iterator<String<TSize> >::Type count = begin(diCounts); count != countEnd; ++count)
+    {
+        if (*count == 0) continue;
+        double p = double(*count) / counted;
+        entropy -= p * log(p) / log(2);
+    }
+
+    return entropy / 4;
+}
+
+// --------------------------------------------------------------------------
 // Function readContigFile()
 // --------------------------------------------------------------------------
 
-template<typename TSize, typename TSeq>
+template<typename TSeq>
 bool
-readContigFile(std::map<TSize, Contig<TSeq> > & contigs,
+readContigFile(String<Contig<TSeq> > & contigs,
         CharString & filename,
-        int min,
-        int max,
-        CharString & index)
+        CharString & sampleId,
+      MergingOptions & options)
 {
-    // open fasta file
+    // Open the FASTA file.
     SeqFileIn stream(toCString(filename));
 
     unsigned numContigsBefore = length(contigs);
 
-    // read records from fasta file
-    int numContigs = 0;
-    unsigned basepairs = 0;
+    // Read the records from FASTA file.
+    unsigned basepairs = 0, numFiltered = 0;
     while (!atEnd(stream))
     {
-        CharString id;
+        CharString contigName;
         TSeq seq;
+        readRecord(contigName, seq, stream);
+        ContigId contigId(sampleId, contigName, true);
 
-        // read record
-        readRecord(id, seq, stream);
+        // Entropy calculation
+        double entropy = averageEntropy(seq);
 
-        if (numContigs >= min && numContigs < max)
+        if (entropy >= options.minEntropy)
         {
-            // append contig and contigId
-            ContigId contigId(index, id, true);
-            contigs[length(contigs)] = Contig<TSeq>(seq, contigId);
-            basepairs += length(seq);
+           // Append contig and contigId.
+           appendValue(contigs, Contig<TSeq>(seq, contigId));
+           basepairs += length(seq);
         }
-
-        ++numContigs;
-    }
-
-    std::ostringstream msg;
-    msg << "Loaded " << filename << ": " << basepairs << " bp in " << (length(contigs) - numContigsBefore) << " contigs.";
-    printStatus(msg);
-
-    return 0;
-}
-
-// --------------------------------------------------------------------------
-// Function readContigs()
-// --------------------------------------------------------------------------
-
-template<typename TSize, typename TSeq>
-bool
-readContigs(std::map<TSize, Contig<TSeq> > & contigs,
-        ContigBatch & batch)
-{
-    printStatus("Reading contig files");
-
-    // open and read the files containing contigs of one individual one by one
-    for (unsigned i = 0; i < length(batch.contigFiles); ++i)
-    {
-        unsigned contigsBefore = length(contigs);
-        CharString index = formattedIndex(i, length(batch.contigFiles)); // get an identifier for the file
-        if (readContigFile(contigs, batch.contigFiles[i], 0, maxValue<int>(), index) != 0) return 1;
-        appendValue(batch.contigsPerFile, length(contigs) - contigsBefore);
-    }
-
-    batch.contigsInTotal = length(contigs);
-
-    std::ostringstream msg;
-    msg << "Total number of contigs: " << batch.contigsInTotal;
-    printStatus(msg);
-
-    return 0;
-}
-
-// --------------------------------------------------------------------------
-
-template<typename TSize, typename TSeq>
-bool
-readContigSubset(std::map<TSize, Contig<TSeq> > & contigs,
-        ContigBatch & batch)
-{
-    unsigned batchOffset = indexOffset(batch);
-    unsigned batchEnd = std::min(batchOffset + getSize(batch), batch.contigsInTotal);
-
-    std::ostringstream msg;
-    msg << "Reading batch " << batch.number << "/" << totalBatches(batch) << " of " << batch.contigsInTotal << " contigs from contig files";
-    printStatus(msg);
-
-    // open and read the files containing contigs of one individual one by one
-
-    unsigned contigCount = 0;
-    unsigned i = 0;
-
-    for (; contigCount + batch.contigsPerFile[i] <= batchOffset; ++i)
-    {
-        SEQAN_ASSERT_LT(i, length(batch.contigFiles));
-        contigCount += batch.contigsPerFile[i];
-    }
-
-    for (; contigCount < batchEnd; ++i)
-    {
-        SEQAN_ASSERT_LT(i, length(batch.contigFiles));
-
-        int fileMin = std::max((int)batchOffset - contigCount, 0u);
-        int fileMax = std::min(contigCount + batch.contigsPerFile[i], batchEnd) - contigCount;
-
-        CharString index = formattedIndex(i, length(batch.contigFiles)); // get an identifier for the file
-        if (readContigFile(contigs, batch.contigFiles[i], fileMin, fileMax, index) != 0) return 1;
-
-        contigCount += batch.contigsPerFile[i];
-    }
-
-    msg.str("");
-    msg << "Number of contigs loaded: " << length(contigs);
-    printStatus(msg);
-
-    return 0;
-}
-
-// --------------------------------------------------------------------------
-
-void
-insertIndex(std::set<unsigned> & indices, unsigned index, int totalContigs)
-{
-    if (index >= (unsigned)totalContigs) index -= totalContigs;
-    if (indices.count(index) == 0) indices.insert(index);
-}
-
-// --------------------------------------------------------------------------
-
-template<typename TSize, typename TSeq>
-bool
-readContigs(std::map<TSize, Contig<TSeq> > & contigs,
-        std::map<TSize, ContigComponent<TSeq> > & components,
-        ContigBatch & batch)
-{
-    typedef std::map<TSize, ContigComponent<TSeq> > TComponents;
-    typedef typename std::set<Pair<TSize> >::iterator TPairsIter;
-    typedef typename std::set<unsigned>::iterator TListIter;
-
-    std::ostringstream msg;
-    msg << "Reading contigs for a batch of " << length(components) << " components";
-    printStatus(msg);
-
-    // Get a sorted list of all contig indices.
-    std::set<unsigned> indices;
-    for (typename TComponents::iterator it = components.begin(); it != components.end(); ++it)
-    {
-        insertIndex(indices, it->first, batch.contigsInTotal);
-        TPairsIter pairsEnd = it->second.alignedPairs.end();
-        for (TPairsIter pairsIt = it->second.alignedPairs.begin(); pairsIt != pairsEnd; ++pairsIt)
+        else if (options.skippedFile != "")
         {
-            insertIndex(indices, (*pairsIt).i1, batch.contigsInTotal);
-            insertIndex(indices, (*pairsIt).i2, batch.contigsInTotal);
+           // Output contig as skipped.
+            options.skippedStream << ">" << contigId << " entropy: " << entropy << std::endl;
+            options.skippedStream << seq << std::endl;
+            ++numFiltered;
         }
     }
 
-    msg.str("");
-    msg << "  ... " << indices.size() << " contigs";
-    printStatus(msg);
-
-    // Read the contigs with these indices.
-
-    int fileIndex = 0;
-    int firstIndexInCurrFile = 0;
-    SeqFileIn stream(toCString(batch.contigFiles[fileIndex]));
-
-    unsigned index = firstIndexInCurrFile;
-    CharString sample = formattedIndex(fileIndex, length(batch.contigFiles));
-
-    TListIter itEnd = indices.end();
-    for (TListIter it = indices.begin(); it != itEnd; ++it)
-    {
-        // Open next file.
-        if (firstIndexInCurrFile + batch.contigsPerFile[fileIndex] <= *it)
-        {
-            do
-            {
-                firstIndexInCurrFile += batch.contigsPerFile[fileIndex];
-                ++fileIndex;
-            }
-            while (firstIndexInCurrFile + batch.contigsPerFile[fileIndex] <= *it);
-
-            open(stream, toCString(batch.contigFiles[fileIndex]));
-            index = firstIndexInCurrFile;
-            sample = formattedIndex(fileIndex, length(batch.contigFiles));
-
-            msg.str("");
-            msg << "Opened " << batch.contigFiles[fileIndex];
-            printStatus(msg);
-        }
-
-        Contig<TSeq> contig;
-        contig.id.pn = sample;
-        contig.id.orientation = true;
-
-        // Advance file to *it
-        while (index <= *it)
-        {
-            readRecord(contig.id.contigId, contig.seq, stream);
-            ++index;
-        }
-
-        Contig<TSeq> contigRev;
-        contigRev.id.pn = sample;
-        contigRev.id.orientation = false;
-        contigRev.id.contigId = contig.id.contigId;
-        contigRev.seq = contig.seq;
-        reverseComplement(contigRev.seq);
-
-        // Add contig and its reverse complement to map.
-        contigs[*it] = contig;
-        contigs[globalIndexRC(*it, batch)] = contigRev;
-    }
-
-    SEQAN_ASSERT_EQ(length(contigs), indices.size());
-
-    msg.str("");
-    msg << "Number of contigs loaded: " << length(contigs);
+    std::ostringstream msg;
+    msg << "Loaded " << filename << ": " << basepairs << " bp in " << (length(contigs) - numContigsBefore) << " contigs";
+    if (numFiltered > 0)
+        msg << " (additional " << numFiltered << " contigs failed the entropy filter)";
     printStatus(msg);
 
     return 0;
@@ -244,40 +106,18 @@ readContigs(std::map<TSize, Contig<TSeq> > & contigs,
 // Function readInputFiles()
 // --------------------------------------------------------------------------
 
-template<typename TSize, typename TSeq>
+template<typename TSeq>
 bool
-readInputFiles(std::map<TSize, Contig<TSeq> > & contigs,
-        std::map<TSize, ContigComponent<TSeq> > & components,
-        std::set<int> & skipped,
-        ContigBatch & batch,
-        MergingOptions & options)
+readInputFiles(String<Contig<TSeq> > & contigs, MergingOptions & options)
 {
-    if (length(options.componentFiles) == 0) // -c option is not set
-    {
-        if (batch.batchesInTotal == 1) // -i and -b options are not set -> read all contigs
-        {
-            if (readContigs(contigs, batch) != 0) return 1;
-        }
-        else                     // -i and -b options are set -> read subset of contigs
-        {               
-            if (countContigs(batch)) return 1;
-            if (readContigSubset(contigs, batch) != 0) return 1;
-        }
-    }
-    else // -c option is set
-    {
-        if (batch.batchesInTotal == 1) // -i and -b options are not set -> read all contigs
-        {
-            if (readContigs(contigs, batch) != 0) return 1;
-            if (readAndMergeComponents(components, skipped, options.componentFiles, batch) != 0) return 1;  // --> popins_merge_partition.h
-        }
-        else                      // -i and -b options are set -> read contigs for this batch of components
-        {
-            if (countContigs(batch)) return 1;
-            if (readAndMergeComponents(components, skipped, options.componentFiles, batch) != 0) return 1;  // --> popins_merge_partition.h
-            if (readContigs(contigs, components, batch) != 0) return 1; // TODO: Exclude singletons of lowEntropy.
-        }
-    }
+   // List all files <prefix>/*/contigs.fa
+   CharString filename = "contigs.fa";
+   String<Pair<CharString> > contigFiles = listFiles(options.prefix, filename);
+
+   // Read the contig files.
+   for (unsigned i = 0; i < length(contigFiles); ++i)
+      if (readContigFile(contigs, contigFiles[i].i2, contigFiles[i].i1, options) != 0)
+         return 1;
 
     return 0;
 }
@@ -286,46 +126,22 @@ readInputFiles(std::map<TSize, Contig<TSeq> > & contigs,
 // Function addReverseComplementContigs()
 // --------------------------------------------------------------------------
 
-template<typename TSize, typename TSeq>
+template<typename TSeq>
 void
-addReverseComplementContigs(std::map<TSize, Contig<TSeq> > & contigs, ContigBatch & batch)
+addReverseComplementContigs(String<Contig<TSeq> > & contigs)
 {
-    typedef typename std::map<TSize, Contig<TSeq> >::iterator TIter;
+    unsigned fwdContigCount = length(contigs);
 
-    typedef Pair<TSize, Contig<TSeq> > TPair;
-    String<TPair> revContigs;
-    TIter itEnd = contigs.end();
-    for (TIter it = contigs.begin(); it != itEnd; ++it)
+    for (unsigned i = 0; i < fwdContigCount; ++i)
     {
-
-        TSeq revSeq = (it->second).seq;
+        TSeq revSeq = contigs[i].seq;
         reverseComplement(revSeq);
 
-        SEQAN_ASSERT((it->second).id.orientation);
-        ContigId revId = (it->second).id;
+        SEQAN_ASSERT(contigs[i].id.orientation);
+        ContigId revId = contigs[i].id;
         revId.orientation = false;
 
-        appendValue(revContigs, TPair(globalIndexRC(it->first, batch), Contig<TSeq>(revSeq, revId)));
-    }
-
-    for (unsigned i = 0; i < length(revContigs); ++i)
-        contigs[revContigs[i].i1] = revContigs[i].i2;
-}
-
-// --------------------------------------------------------------------------
-// Function writeSkipped()
-// --------------------------------------------------------------------------
-
-template<typename TStream, typename TSize, typename TSeq>
-void
-writeSkipped(TStream & stream, std::map<TSize, Contig<TSeq> > & contigs, std::set<int> skipped)
-{
-    typename std::set<int>::iterator itEnd = skipped.end();
-    for (typename std::set<int>::iterator it = skipped.begin(); it != itEnd; ++it)
-    {
-        if (!contigs[*it].id.orientation) continue;
-        stream << ">" << contigs[*it].id << " " << "(large component)" << std::endl;
-        stream << contigs[*it].seq << std::endl;
+        appendValue(contigs, Contig<TSeq>(revSeq, revId));
     }
 }
 
@@ -340,11 +156,12 @@ int popins_merge(int argc, char const ** argv)
 
     // Parse the command line to get option values.
     MergingOptions options;
-    if (parseCommandLine(options, argc, argv) != 0)
-        return 1;
+    ArgumentParser::ParseResult res = parseCommandLine(options, argc, argv);
+    if (res != ArgumentParser::PARSE_OK)
+        return res;
 
     // Containers for contigs, contig ids, and components.
-    std::map<TSize, Contig<TSequence> > contigs;
+    String<Contig<TSequence> > contigs;
     std::map<TSize, ContigComponent<TSequence> > components;
     std::set<int> skipped;
 
@@ -353,7 +170,7 @@ int popins_merge(int argc, char const ** argv)
     if (!options.outputStream.is_open())
     {
         std::cerr << "ERROR: Could not open output file " << options.outputFile << std::endl;
-        return 1;
+        return 7;
     }
     if (options.skippedFile != "")
     {
@@ -361,50 +178,27 @@ int popins_merge(int argc, char const ** argv)
         if (!options.skippedStream.is_open())
         {
             std::cerr << "ERROR: Could not open output file for skipped contigs " << options.skippedFile << std::endl;
-            return 1;
+            return 7;
         }
     }
 
-    // Reading of input files (files of contigs, and files of components if -c option is set).
-    ContigBatch batch(options.contigFiles, options.batches, options.batchIndex);
-    if (readFileNames(batch.contigFiles, batch.contigsPerFile) != 0) return 1;
-    if (readInputFiles(contigs, components, skipped, batch, options) != 0) return 1;
-    if (filterByEntropy(contigs, options) != 0) return 1;
-    addReverseComplementContigs(contigs, batch);
+    // Read and filter the contigs and add reverse complements.
+    if (readInputFiles(contigs, options) != 0)
+       return 7;
+    addReverseComplementContigs(contigs);
 
-    // Initialize Union-Find data structure for partitioning.
+    // PARTITIONING into components      --> partition.h
     UnionFind<int> uf;
-    resize(uf, 2 * batch.contigsInTotal);
+    resize(uf, 2 * length(contigs));
     std::set<Pair<TSize> > alignedPairs;
+    if (partitionContigs(uf, alignedPairs, contigs, options) != 0)
+        return 7;
 
-    // PARTITIONING into components (if -c option is not set)                               --> popins_merge_partition.h
-    if (length(options.componentFiles) == 0)
-    {
-        if (partitionContigs(uf, alignedPairs, contigs, batch, options) != 0) 
-            return 1;
+    unionFindToComponents(components, uf, alignedPairs, length(contigs)/2);
+    addSingletons(components, contigs, uf);
 
-        // Write aligned pairs or convert union find data structure into set of components.
-        if (options.batches != 1)
-            writeAlignedPairs(options.outputStream, alignedPairs);
-        else
-        {
-            skipped = unionFindToComponents(components, uf, alignedPairs, batch);
-            addSingletons(components, contigs, skipped, uf, batch.contigsInTotal);
-        }
-    }
-
-    // Write contigs that were skipped because they form too large components.
-    if (options.skippedFile != "")
-        writeSkipped(options.skippedStream, contigs, skipped);
-
-    // SUPERCONTIG CONSTRUCTION (if -c option is set OR -i and -b options are not set)           --> popins_merge_seqs.h
-    if (length(options.componentFiles) != 0 || options.batches == 1)
-    {
-        if (length(contigs) != 0)
-            constructSupercontigs(components, contigs, options);
-        else
-            constructSupercontigs(components, contigs, options);
-    }
+    // SUPERCONTIG CONSTRUCTION           --> merge_seqs.h
+    constructSupercontigs(components, contigs, options);
 
     return 0;
 }

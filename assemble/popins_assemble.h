@@ -4,8 +4,8 @@
 #include <seqan/file.h>
 #include <seqan/sequence.h>
 
+#include "../popins_utils.h"
 #include "../command_line_parsing.h"
-#include "../sample_info.h"
 #include "crop_unmapped.h"
 
 #ifndef POPINS_ASSEMBLE_H_
@@ -27,6 +27,32 @@ removeAssemblyDirectory(CharString & path)
     removeFile(path, "Sequences");
     removeFile(path, "stats.txt");
     remove(toCString(path));
+}
+
+bool
+retrieveSampleID(CharString & sampleID, CharString & mappingBam)
+{
+    BamFileIn inStream(toCString(mappingBam));
+
+    BamHeader header;
+    readHeader(header, inStream);
+
+    for (unsigned i = 0; i < length(header); ++i)
+    {
+        if (header[i].type != BamHeaderRecordType::BAM_HEADER_READ_GROUP)
+            continue;
+
+        for (unsigned j = 0; j < length(header[i].tags); ++j)
+        {
+            if (header[i].tags[j].i1 != "SM")
+                continue;
+
+            sampleID = header[i].tags[j].i2;
+            return 0;
+        }
+    }
+    std::cerr << "ERROR: Could not find sample ID in BAM file header." << std::endl;
+    return 1;
 }
 
 // ==========================================================================
@@ -221,13 +247,13 @@ readRecordAndCorrectRIds(BamAlignmentRecord & record,
 
 inline void
 mergeHeaders(BamHeader & header,
-		FormattedFileContext<BamFileOut, Owner<> >::Type & context,
+        FormattedFileContext<BamFileOut, Owner<> >::Type & context,
         BamFileIn & stream1,
         BamFileIn & stream2)
 {
-	StringSet<CharString> contigNames;
+    StringSet<CharString> contigNames;
     NameStoreCache<StringSet<CharString> > nameStoreCache;
-	String<int32_t> contigLengths;
+    String<int32_t> contigLengths;
 
     // Read and append the two headers. Remove duplicate entries.
     readHeader(header, stream1);
@@ -267,8 +293,8 @@ mergeHeaders(BamHeader & header,
 int
 compare_qName(CharString & nameA, CharString & nameB)
 {
-	const char * _a = toCString(nameA);
-	const char * _b = toCString(nameB);
+    const char * _a = toCString(nameA);
+    const char * _b = toCString(nameB);
     const unsigned char *a = (const unsigned char*)_a, *b = (const unsigned char*)_b;
     const unsigned char *pa = a, *pb = b;
     while (*pa && *pb) {
@@ -469,31 +495,36 @@ velvet_assembly(Triple<CharString> & filteredFiles, Triple<CharString> & filtere
 
 int popins_assemble(int argc, char const ** argv)
 {
-    bool ret = 0;
     std::ostringstream msg;
 
     // Parse the command line to get option values.
     AssemblyOptions options;
-    if (parseCommandLine(options, argc, argv) != 0)
-        return 1;
+    ArgumentParser::ParseResult res = parseCommandLine(options, argc, argv);
+    if (res != ArgumentParser::PARSE_OK)
+        return res;
+
+    // Retrieve the sample ID from the first read group listed in BAM file header.
+    if (options.sampleID == "" && retrieveSampleID(options.sampleID, options.mappingFile) == 1)
+        return 7;
 
     // Create working directory if it does not exist.
-    if (mkdir(toCString(options.workingDirectory), 0755) == 0)
+    CharString workingDirectory = getFileName(options.prefix, options.sampleID);
+    if (mkdir(toCString(workingDirectory), 0755) == 0)
     {
         msg.str("");
-        msg << "Working directory created at " << options.workingDirectory;
+        msg << "Working directory created at " << workingDirectory;
         printStatus(msg);
     }
 
-    SampleInfo info = initSampleInfo(options.mappingFile, options.adapters);
+    SampleInfo info = initSampleInfo(options.mappingFile, options.sampleID, options.adapters);
 
-    CharString matesBam = getFileName(options.workingDirectory, "mates.bam");
-    CharString nonRefBamTemp = getFileName(options.workingDirectory, "non_ref_tmp.bam");
-    CharString nonRefBam = getFileName(options.workingDirectory, "non_ref.bam");
+    CharString matesBam = getFileName(workingDirectory, "mates.bam");
+    CharString nonRefBamTemp = getFileName(workingDirectory, "non_ref_tmp.bam");
+    CharString nonRefBam = getFileName(workingDirectory, "non_ref.bam");
 
-    CharString fastqFirst = getFileName(options.workingDirectory, "paired.1.fastq");
-    CharString fastqSecond = getFileName(options.workingDirectory, "paired.2.fastq");
-    CharString fastqSingle = getFileName(options.workingDirectory, "single.fastq");
+    CharString fastqFirst = getFileName(workingDirectory, "paired.1.fastq");
+    CharString fastqSecond = getFileName(workingDirectory, "paired.2.fastq");
+    CharString fastqSingle = getFileName(workingDirectory, "single.fastq");
     Triple<CharString> fastqFiles = Triple<CharString>(fastqFirst, fastqSecond, fastqSingle);
 
     // check if files already exits
@@ -508,20 +539,20 @@ int popins_assemble(int argc, char const ** argv)
         if (options.adapters == "HiSeqX")
         {
             if (crop_unmapped(info.avg_cov, fastqFiles, matesBam, options.mappingFile, options.humanSeqs, HiSeqXAdapters()) != 0)
-                return 1;
+                return 7;
         }
         else if (options.adapters == "HiSeq")
         {
             if (crop_unmapped(info.avg_cov, fastqFiles, matesBam, options.mappingFile, options.humanSeqs, HiSeqAdapters()) != 0)
-                return 1;
+                return 7;
         }
         else
         {
             if (crop_unmapped(info.avg_cov, fastqFiles, matesBam, options.mappingFile, options.humanSeqs, NoAdapters()) != 0)
-                return 1;
+                return 7;
         }
 
-        CharString sampleInfoFile = getFileName(options.workingDirectory, "POPINS_SAMPLE_INFO");
+        CharString sampleInfoFile = getFileName(workingDirectory, "POPINS_SAMPLE_INFO");
         writeSampleInfo(info, sampleInfoFile);
 
         msg.str("");
@@ -541,7 +572,7 @@ int popins_assemble(int argc, char const ** argv)
         if (system(cmd.str().c_str()) != 0)
         {
             std::cerr << "ERROR while sorting " << matesBam << std::endl;
-            return 1;
+            return 7;
         }
 
         remove(toCString(matesBam));
@@ -553,14 +584,14 @@ int popins_assemble(int argc, char const ** argv)
             fastqFiles = Triple<CharString>(fastqFirst, fastqSecond, fastqSingle);
 
             // Align with bwa, update fastq files of unaligned reads, and sort remaining bam records by read name.
-            CharString remappedBam = getFileName(options.workingDirectory, "remapped.bam");
+            CharString remappedBam = getFileName(workingDirectory, "remapped.bam");
             CharString prefix = "";
-            if (remapping(fastqFilesTemp, fastqFiles, options.referenceFile, options.workingDirectory,
+            if (remapping(fastqFilesTemp, fastqFiles, options.referenceFile, workingDirectory,
                     options.humanSeqs, options.threads, options.memory, prefix) != 0)
-                return 1;
+                return 7;
 
             // Set the mate's location and merge non_ref.bam and remapped.bam into a single file.
-            if (merge_and_set_mate(nonRefBam, nonRefBamTemp, remappedBam) != 0) return 1;
+            if (merge_and_set_mate(nonRefBam, nonRefBamTemp, remappedBam) != 0) return 7;
             remove(toCString(remappedBam));
             remove(toCString(nonRefBamTemp));
         }
@@ -570,26 +601,26 @@ int popins_assemble(int argc, char const ** argv)
         printStatus("Found files, skipping cropping step.");
     }
 
-    CharString firstFiltered = getFileName(options.workingDirectory, "filtered.paired.1.fastq");
-    CharString secondFiltered = getFileName(options.workingDirectory, "filtered.paired.2.fastq");
-    CharString singleFiltered = getFileName(options.workingDirectory, "filtered.single.fastq");
+    CharString firstFiltered = getFileName(workingDirectory, "filtered.paired.1.fastq");
+    CharString secondFiltered = getFileName(workingDirectory, "filtered.paired.2.fastq");
+    CharString singleFiltered = getFileName(workingDirectory, "filtered.single.fastq");
     Triple<CharString> filteredFiles(firstFiltered, secondFiltered, singleFiltered);
 
     // Quality filtering/trimming with sickle.
-    if (sickle_filtering(filteredFiles, fastqFiles, options.workingDirectory) != 0)
-        return 1;
+    if (sickle_filtering(filteredFiles, fastqFiles, workingDirectory) != 0)
+        return 7;
 
     // MP handling
-    CharString matesMPBam = getFileName(options.workingDirectory, "MP.mates.bam");
-    CharString nonRefBamMPTemp = getFileName(options.workingDirectory, "MP.non_ref_tmp.bam");
-    CharString nonRefMPBam = getFileName(options.workingDirectory, "MP.non_ref.bam");
+    CharString matesMPBam = getFileName(workingDirectory, "MP.mates.bam");
+    CharString nonRefBamMPTemp = getFileName(workingDirectory, "MP.non_ref_tmp.bam");
+    CharString nonRefMPBam = getFileName(workingDirectory, "MP.non_ref.bam");
 
-    CharString fastqMPFirst = getFileName(options.workingDirectory, "MP.paired.1.fastq");
-    CharString fastqMPSecond = getFileName(options.workingDirectory, "MP.paired.2.fastq");
-    CharString fastqMPSingle = getFileName(options.workingDirectory, "MP.single.fastq");
+    CharString fastqMPFirst = getFileName(workingDirectory, "MP.paired.1.fastq");
+    CharString fastqMPSecond = getFileName(workingDirectory, "MP.paired.2.fastq");
+    CharString fastqMPSingle = getFileName(workingDirectory, "MP.single.fastq");
     Triple<CharString> fastqMPFiles = Triple<CharString>(fastqMPFirst, fastqMPSecond, fastqMPSingle);
 
-    if (options.matepair)
+    if (options.matepairFile != "")
     {
         // check if MP files already exits
         std::fstream MPstream(toCString(fastqMPFirst));
@@ -603,17 +634,17 @@ int popins_assemble(int argc, char const ** argv)
             if (options.adapters == "HiSeqX")
             {
                 if (crop_unmapped(fastqMPFiles, matesMPBam, options.matepairFile, options.humanSeqs, HiSeqXAdapters()) != 0)
-                    return 1;
+                    return 7;
             }
             else if (options.adapters == "HiSeq")
             {
                 if (crop_unmapped(fastqMPFiles, matesMPBam, options.matepairFile, options.humanSeqs, HiSeqAdapters()) != 0)
-                    return 1;
+                    return 7;
             }
             else
             {
                 if (crop_unmapped(fastqMPFiles, matesMPBam, options.matepairFile, options.humanSeqs, NoAdapters()) != 0)
-                    return 1;
+                    return 7;
             }
 
             msg.str("");
@@ -629,7 +660,7 @@ int popins_assemble(int argc, char const ** argv)
             if (system(cmd.str().c_str()) != 0)
             {
                 std::cerr << "ERROR while sorting " << matesMPBam << std::endl;
-                return 1;
+                return 7;
             }
 
             remove(toCString(matesMPBam));
@@ -641,14 +672,15 @@ int popins_assemble(int argc, char const ** argv)
                 fastqMPFiles = Triple<CharString>(fastqMPFirst, fastqMPSecond, fastqMPSingle);
 
                 // Align with bwa, update fastq files of unaligned reads, and sort remaining bam records by read name.
-                CharString remappedMPBam = getFileName(options.workingDirectory, "MP.remapped.bam");
+                CharString remappedMPBam = getFileName(workingDirectory, "MP.remapped.bam");
                 CharString prefix = "MP.";
-                if (remapping(fastqMPFilesTemp, fastqMPFiles, options.referenceFile, options.workingDirectory,
+                if (remapping(fastqMPFilesTemp, fastqMPFiles, options.referenceFile, workingDirectory,
                         options.humanSeqs, options.threads, options.memory, prefix) != 0)
-                    return 1;
+                    return 7;
 
                 // Set the mate's location and merge non_ref.bam and remapped.bam into a single file.
-                if (merge_and_set_mate(nonRefMPBam, nonRefBamMPTemp, remappedMPBam) != 0) return 1;
+                if (merge_and_set_mate(nonRefMPBam, nonRefBamMPTemp, remappedMPBam) != 0)
+                    return 7;
                 remove(toCString(remappedMPBam));
                 remove(toCString(nonRefBamMPTemp));
             }
@@ -660,27 +692,28 @@ int popins_assemble(int argc, char const ** argv)
     }
 
 
-    CharString firstMPFiltered = getFileName(options.workingDirectory, "MP.filtered.paired.1.fastq");
-    CharString secondMPFiltered = getFileName(options.workingDirectory, "MP.filtered.paired.2.fastq");
-    CharString singleMPFiltered = getFileName(options.workingDirectory, "MP.filtered.single.fastq");
+    CharString firstMPFiltered = getFileName(workingDirectory, "MP.filtered.paired.1.fastq");
+    CharString secondMPFiltered = getFileName(workingDirectory, "MP.filtered.paired.2.fastq");
+    CharString singleMPFiltered = getFileName(workingDirectory, "MP.filtered.single.fastq");
 
     Triple<CharString> filteredMPFiles(firstMPFiltered, secondMPFiltered, singleMPFiltered);
 
-    if (options.matepair)
+    if (options.matepairFile != "")
     {
-        if (sickle_filtering(filteredMPFiles,fastqMPFiles, options.workingDirectory) != 0)
-            return 1;
+        if (sickle_filtering(filteredMPFiles,fastqMPFiles, workingDirectory) != 0)
+            return 7;
     }
 
     // Assembly with velvet.
-    CharString assemblyDirectory = getFileName(options.workingDirectory, "assembly");
-    if (velvet_assembly(filteredFiles, filteredMPFiles, assemblyDirectory, options.kmerLength, options.matepair) != 0) return 1;
+    CharString assemblyDirectory = getFileName(workingDirectory, "assembly");
+    if (velvet_assembly(filteredFiles, filteredMPFiles, assemblyDirectory, options.kmerLength, options.matepairFile == "") != 0)
+        return 7;
 
     remove(toCString(firstFiltered));
     remove(toCString(secondFiltered));
     remove(toCString(singleFiltered));
 
-    if (options.matepair)
+    if (options.matepairFile == "")
     {
         remove(toCString(firstMPFiltered));
         remove(toCString(secondMPFiltered));
@@ -689,7 +722,7 @@ int popins_assemble(int argc, char const ** argv)
 
     // Copy contigs file to workingDirectory and remove assembly directory.
     CharString contigFileAssembly = getFileName(assemblyDirectory, "contigs.fa");
-    CharString contigFile = getFileName(options.workingDirectory, "contigs.fa");
+    CharString contigFile = getFileName(workingDirectory, "contigs.fa");
     std::ifstream src(toCString(contigFileAssembly), std::ios::binary);
     std::ofstream dst(toCString(contigFile), std::ios::binary);
     dst << src.rdbuf();
@@ -697,7 +730,7 @@ int popins_assemble(int argc, char const ** argv)
     dst.close();
     removeAssemblyDirectory(assemblyDirectory);
 
-    return ret;
+    return res;
 }
 
 #endif // #ifndef POPINS_ASSEMBLE_H_
