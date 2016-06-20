@@ -326,8 +326,8 @@ setupParser(ArgumentParser & parser, ContigMapOptions & options)
     // Define usage line and long description.
     addUsageLine(parser, "[\\fIOPTIONS\\fP] \\fISAMPLE ID\\fP");
     addDescription(parser, "Aligns the reads with low-quality alignments of a sample to the set of supercontigs using "
-            "BWA-MEM. Merges the BWA output file with the sample's non_ref.bam file and sets the information about "
-          "read mates in all BAM records.");
+            "BWA-MEM. Merges the BWA output file with the sample's non_ref.bam file into a non_ref_new.bam file where "
+    		"information about read mates is set.");
 
     addArgument(parser, ArgParseArgument(ArgParseArgument::STRING, "SAMPLE_ID"));
 
@@ -368,23 +368,21 @@ setupParser(ArgumentParser & parser, PlacingOptions & options)
     addUsageLine(parser, "[\\fIOPTIONS\\fP]");
     addUsageLine(parser, "[\\fIOPTIONS\\fP] \\fISAMPLE ID\\fP");
 
-    addDescription(parser, "Places (super-)contigs into the reference genome and writes the result to a VCF file. "
-            "The placing consists of four steps that all need to be run. If no merged locations file exists, the first "
-          "two steps are executed. If a sample ID is specified, the third step is executed for this sample. If no sample "
-          "ID is specified and the merged locations file exists, the last step is executed. See --fullHelp for running "
-          "a specific or all steps.");
-    addDescription(parser, "Step 1: The contig locations in the sample directories (option --prefix) are merged into "
-          "one file of locations (option --locations).");
-    addDescription(parser, "Step 2: Prefixes/suffixes of contigs (option --contigs) are aligned to the merged locations "
-          "(option --locations) on the reference genome (option --reference) and VCF records (option --insertions) "
-          "are written if the alignment is successful. Locations of contigs that do not align to the reference genome "
-          "are written to additional output files \\fIlocations_unplaced.txt\\fP in the sample directories (option --prefix)."
-          "Further, groups of contigs that can be placed at the same position and whose prefixes/suffixes align to each "
-          "other are written to another output file (option --groups). Only a single VCF record is written per group.");
+    addDescription(parser, "Identifies insertion positions of the (super-)contigs in the reference genome and writes them "
+    		"to a VCF file. The placing consists of four steps and only the third step needs to be run per sample. If no "
+    		"merged locations file exists, the first two steps are executed. If a sample ID is specified, the third step "
+    		"is executed for this sample. If no sample ID is specified and the merged locations file exists, the last step "
+    		"is executed. See --fullHelp for running a specific or all steps.");
+    addDescription(parser, "Step 1: The contig locations in the sample directories are merged into one file of locations.");
+    addDescription(parser, "Step 2: Prefixes/suffixes of contigs are aligned to the merged locations on the reference "
+    		"genome and VCF records are written if the alignment is successful. Locations of contigs that do not align to "
+    		"the reference genome are written to additional output files \\fIlocations_unplaced.txt\\fP in the sample "
+    		"directories. Further, groups of contigs that can be placed at the same position and whose prefixes/suffixes "
+    		"align to each other are written to another output file; only a single VCF record is written per group.");
     addDescription(parser, "Step 3: All locations in a sample's \\fIlocations_unplaced.txt\\fP are split-read aligned "
-            "and the results are written to a file \\fIlocations_placed.txt\\fP in the sample directory (option --prefix).");
+            "and the results are written to a file \\fIlocations_placed.txt\\fP in the sample directory.");
     addDescription(parser, "Step 4: The results from split-read alignment (the \\fIlocations_placed.txt\\fP files) of all "
-            "samples (option --prefix) are combined and appended to the VCF output file (option --insertions).");
+            "samples are combined and appended to the VCF output file.");
 
     addArgument(parser, ArgParseArgument(ArgParseArgument::INPUT_FILE, "SAMPLE_ID", true));
 
@@ -444,11 +442,11 @@ setupParser(ArgumentParser & parser, GenotypingOptions & options)
     setDate(parser, VERSION_DATE);
 
     addUsageLine(parser, "[\\fIOPTIONS\\fP] \\fISAMPLE ID\\fP");
-    addDescription(parser, "Computes genotype likelihoods for a sample for all insertions given in the input vcf file "
-          "(option --insertions) by aligning all reads, which are mapped to the reference genome around the insertion "
-          "breakpoint or to the contig, to the reference and to the alternative insertion sequence. VCF records with "
-          "the genotype likelihoods in GT:PL format for the individual are written to a file \\fIinsertions.vcf\\fP "
-          "in the sample directory.");
+    addDescription(parser, "Computes genotype likelihoods for a sample for all insertions given in the input VCF file "
+    		"by aligning all reads, which are mapped to the reference genome around the insertion breakpoint or to the "
+    		"contig, to the reference and to the alternative insertion sequence. VCF records with the genotype "
+    		"likelihoods in GT:PL format for the individual are written to a file \\fIinsertions.vcf\\fP in the sample "
+            "directory.");
 
     addArgument(parser, ArgParseArgument(ArgParseArgument::STRING, "SAMPLE_ID"));
 

@@ -1,13 +1,13 @@
 popins
 ======
 
-Population-scale detection of novel sequence insertions.
+Population-scale detection of novel-sequence insertions.
 
 
 Prerequisites
 -------------
 
-* SeqAn core library, version 1.4.2 (https://github.com/seqan/seqan)
+* SeqAn core library, version 2.1.0 (https://github.com/seqan/seqan)
 * bwa (https://github.com/lh3/bwa)
 * velvet (https://github.com/dzerbino/velvet)
 * samtools (https://github.com/samtools/samtools)
@@ -20,14 +20,13 @@ PopIns was tested with bwa 0.7.10-r789, velvet 1.2.10, samtools 1.3, and sickle 
 Installation
 ------------
 
-1. Download the SeqAn library. You do *not* need to follow the SeqAn install instructions.
+1. Download the SeqAn library, version 2.1.0.. You do *not* need to follow the SeqAn install instructions.
    You only need the directory .../include/seqan of the SeqAn core library with all its content.
-   Look for the header file vcf_io.h and folder vcf_io/. If it is not present, copy it from extras/include/seqan into your seqan directory.
 2. Install all other prerequisites (bwa, velvet, samtools, and sickle).
    Compile velvet with a larger maximum k-mer length than the default if desired, e.g. MAXKMERLENGTH=63.
    A maximum k-mer length of 47 or higher is necessary for default parameters of PopIns (velvet's default is 31).
-3. Set the path to the SeqAn core library by editing the file popins.config.
-   Also set the paths to bwa, velveth/velvetg, samtools, and sickle if they are not in your PATH variable.
+3. Set the path to the SeqAn core library by editing the file popins.config or add a symbolic link in the popins directory 'ln -s /path/to/seqan'.
+   Also set the paths to bwa, velveth/velvetg, samtools, and sickle in the file popins.config if they are not in your PATH variable.
 4. Run 'make' in the popins directory.
 
 If everything is setup correctly, this will create the binary 'popins'.
@@ -40,66 +39,115 @@ PopIns consists of five commands: assemble, merge, contigmap, place, and genotyp
 For a short description of each command and an overview of arguments and options, run
 
     ./popins <COMMAND> --help
+    
+The only input needed is a set of BAM files (PopIns was only tested on BAM files created with BWA-MEM) and the reference genome.
+By default, the reference genome is assumed to be present in the current directory and named `genome.fa`, but a different file path can be specified in those commands that need it.
 
-When analyzing multiple samples simultaneously, the assemble, contigmap, and genotype commands need to be run for each sample separately, whereas the merge and place commands need to be run only once with input from all samples.
-PopIns creates and uses a working directory for each sample, which should be specified with the -d option of the assemble and contigmap commands.
+When analyzing multiple samples simultaneously, the assemble, contigmap, and genotype commands as well as a substep of the place command need to be run for each sample separately, whereas the merge command and the remaining steps of the place commands need to be run only once for all samples together.
+
+PopIns creates and uses a working directory for each sample, which is named by the sample ID (retrived from BAM file header or specify).
+By default, the sample directories are created in the current directory. Use the --prefix option if you want them to reside in another location.
+
+Once all steps have been run, each sample directory contains the following files:
+- `POPINS_SAMPLE_INFO`: Meta information of the sample, e.g. the path to the original BAM file.
+- `contigs.fa`: Contigs assembled from the reads without high-quality alignment to the reference genome.
+- `insertions.vcf`: **Genotype likelihoods of the sample (GT:PL) for all predicted insertions.**
+- `locations.txt`: Candidate insertion locations for the supercontigs based on reads from only this sample.
+- `locations_placed.txt`: Split-read alignment results for this sample.
+- `locations_unplaced.txt`: Split-read alignment input for this sample.
+- `non_ref.bam`: Mates of the reads without high-quality alignments.
+- `non_ref_new.bam`: Contig-aligned reads and their mates from `non_ref.bam`.
+- `non_ref_new.bam.bai`: BAM index for `non_ref_new.bam`. 
+- `paired.1.fastq`: First reads of those read pairs where both reads have no high-quality alignment to the reference genome.
+- `paired.2.fastq`: Second reads of those read pairs where both reads have no high-quality alignment to the reference genome.
+- `single.fastq`:  Reads without high-quality alignment to the reference genome but whose mates align with high-quality.
+
+In addition to sample-specific files, a number of output files are written (by default in the current directory):
+- `insertions.vcf`: Insertion positions without genotype likelihoods of the samples.
+- `locations.txt`: Candidate insertion locations for the supercontigs.
+- `groups.txt`: Groups of similar contigs for which only a single VCF record is written. For information purposes only.
+- `skipped_contigs.fa`: Contigs that are ignored during contig merging. Optional and for information purposes only.
+- `supercontigs.fa`: Contigs assembled from unaligned reads and merged from all samples.
+
 
 ### The assemble command
 
     ./popins assemble [OPTIONS] <BAM FILE>
 
-The assemble command finds the unmapped reads in a bam files and assembles them using velvet.
-If a reference fasta file is specified, the unmapped reads will be remapped to this reference before assembly using bwa-mem.
-Only reads that remain unmapped in the remapping step are further processed, i.e. they are quality filtered using sickle and passed to assembly with velvet.
+The assemble command finds reads without high-quality alignment in the input BAM file, quality filters them using SICKLE and assembles them into contigs using VELVET.
+If a reference fasta file is specified, the reads are first remapped to this reference using BwA-MEM and only reads that remain without high-quality alignment after remapping are quality-filtered and assembled.
 
 
 ### The merge command
 
-    ./popins merge [OPTIONS] <FA FILE 1> ... <FA FILE N>
+    ./popins merge [OPTIONS]
 
-The merge command merges all sequences given in the fasta files into a single set of supercontigs.
-The algorithm first partitions the sequences into sets of similar sequences using the SWIFT filtering approach, and then aligns each set of contigs into a graph of supercontigs.
+The merge command merges the contigs in `<prefix>/*/contigs.fa` into a single set of supercontigs.
+The input contigs are first partitioned into sets of similar sequences using the SWIFT filtering algorithm, and then each set of sequences is aligned into a graph of supercontigs.
 
 
 ### The contigmap command
 
-    ./popins contigmap [OPTIONS] <FA FILE>
+    ./popins contigmap [OPTIONS] <SAMPLE ID>
 
-The contigmap command aligns the unmapped reads found in fastq files in the working directory to a set of contigs specified in the fasta file using bwa-mem.
-Subsequently, it merges the bwa output file with the file non_ref.bam in the working directory and completes the read mate's information in all bam records.
-Finally, it determines approximate insertion locations for contigs with anchoring read pairs.
+The contigmap command aligns the reads with low-quality alignments of a sample to the set of supercontigs using BWA-MEM.
+The BWA output file is merged with the sample's `non_ref.bam` file into a `non_ref_new.bam` file where information about read mates is set.
 
 
 ### The place command
 
-    ./popins place [OPTIONS] <LOCATION FILE> <OUTPUT FILE>
+    ./popins place [OPTIONS]
+    ./popins place [OPTIONS] <SAMPLE ID>
 
-The place command identifies the positions of (super-)contigs in the reference genome and writes them to a VCF file.
-VCF records reference contigs and contig positions in the (super-)contigs file.
+The place command identifies insertion positions of the (super-)contigs in the reference genome and writes them to a VCF file.
+The placing consists of four steps.
+Only the third step needs to be run per sample.
 
-The place command consists of four steps that can be run in one program call or in separate calls.
+Step 1: The contig locations in the sample directories are merged into one file of locations.
 
-To run all four steps together, the options -l, -b, -c, and -r need to be specified and the <OUTPUT FILE>'s ending needs to be 'vcf'. The <LOCATION FILE> has to list the location files for all samples.
+Step 2: Prefixes/suffixes of contigs are aligned to the merged locations on the reference genome and VCF records are written if the alignment is successful.
+Locations of contigs that do not align to the reference genome are written to additional output files `locations_unplaced.txt` in the sample directories.
 
-When running the steps separately, the specified parameters determine which step is being run:
+Step 3: All locations in a sample's `locations_unplaced.txt` are split-read aligned and the results are written to a file `locations_placed.txt` in the sample directory.
 
-1. First the contig locations determined for all samples (files listed in <LOCATION FILE>) need to be merged into one set of locations (written to <OUTPUT FILE>).
-2. Then, prefixes/suffixes of all contigs (specify with -c option) are aligned to these locations (specify as <LOCATION FILE>) in the reference genome (specify with -r option) and VCF records are written to <OUTPUF FILE> if the alignment is successful.
-   The <OUTPUT FILE>'s ending has to be 'vcf'.
-3. Next, contigs (specify -c option) that do not align to the reference genome (specify -r option) are passed on to split-read alignment.
-   This step is run by sample.
-   The sample's original BAM file needs to be specified.
-   The program arguments, the <LOCATION FILE> and <OUTPUT FILE>, need to be the sample's locs\_unplaced.txt file and a locs\_placed.txt file.
-4. Finally, the results from split-read alignment (the locs_placed.txt files) of all samples (input files listed in <LOCATION FILE>) are being combined and appended the <OUTPUF FILE> (file ending has to be 'vcf').
+Step 4: The results from split-read alignment (the `locations_placed.txt` files) of all samples are combined and appended to the VCF output file.
 
 
 ### The genotype command
 
-    ./popins genotype [OPTIONS] <FA FILE> <BAM FILE> <FA FILE ALT> <BAM FILE ALT> <VCF FILE>
+    ./popins genotype [OPTIONS] <SAMPLE ID>
 
-The genotype command takes as input a fasta file of the reference genome, a bam file of a single individual, the fasta file with the supercontigs, the bam file of contig mapped and unmapped reads (<WD>/non_ref.bam), and the VCF file with all predicted insertion positions.
-It computes genotype likelihoods by aligning all reads from each insertion location and contig to the reference and to the alternative insertion sequence.
-It outputs VCF records with the genotype likelihoods in GT:PL format for the individual to std::out.
+The genotype command computes genotype likelihoods for a sample for all insertions given in the input VCF file by aligning all reads, which are mapped to the reference genome around the insertion breakpoint or to the contig, to the reference and to the alternative insertion sequence.
+VCF records with the genotype likelihoods in GT:PL format for the individual are written to a file `insertions.vcf` in the sample directory.
+
+
+Example
+-------
+
+    mkdir example
+    cd example/
+    ln -s /path/to/hg38.fa genome.fa
+    
+    ./popins assemble --sample sample1 /path/to/first_sample.bam
+    ./popins assemble --sample sample2 /path/to/second_sample.bam
+    ./popins assemble --sample sample3 /path/to/third_sample.bam
+    
+    ./popins merge
+    
+    ./popins contigmap sample1
+    ./popins contigmap sample2
+    ./popins contigmap sample3
+    
+    ./popins place           // locations.txt does not exist --> runs substeps 1 and 2
+    ./popins place sample1
+    ./popins place sample2
+    ./popins place sample3
+    ./popins place           // locations.txt now exists --> runs substeps 4
+    
+    ./popins genotype sample1
+    ./popins genotype sample2
+    ./popins genotype sample3
+    
 
 
 References
