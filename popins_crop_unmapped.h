@@ -407,7 +407,7 @@ crop_unmapped(Triple<CharString> & fastqFiles,
             openFastq(fastqSingleStream, fastqFiles.i3) != 0) return 1;
 
     // Retrieve the adapter sequences with up to one error and create indices.
-    TStringSet universal = complementUniversalOneError(tag);
+    TStringSet universal = reverseUniversalOneError(tag);
     TStringSet truSeqs = reverseTruSeqsOneError(tag);
     Index<TStringSet> indexUniversal(universal);
     Index<TStringSet> indexTruSeqs(truSeqs);
