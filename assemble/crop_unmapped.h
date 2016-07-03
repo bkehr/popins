@@ -200,7 +200,7 @@ appendFastqRecord(SeqFileOut & firstStream,
         }
     }
     else // hasFlagLast(record)
-            {
+    {
         if (firstReads.count(record.qName) != 0)
         {
             Pair<CharString> first = firstReads[record.qName];
@@ -214,7 +214,7 @@ appendFastqRecord(SeqFileOut & firstStream,
             secondReads[record.qName] = Pair<CharString>(seq, qual);
             return 0;
         }
-            }
+    }
 }
 
 // --------------------------------------------------------------------------
@@ -317,13 +317,19 @@ findOtherReads(BamFileOut & matesStream,
         }
 
         // Skip reads not in list.
-        while (!atEnd(inStream) && record.rID == it->first.i1 &&
-                (record.beginPos < it->first.i2 || (record.beginPos == it->first.i2 && record.qName != it->second.i1)))
+        bool last = false;
+        while (record.rID == it->first.i1 && (record.beginPos < it->first.i2 || (record.beginPos == it->first.i2 && record.qName != it->second.i1)))
+        {
+            if (atEnd(inStream))
+            {
+                last = true;
+                break;
+            }
             readRecord(record, inStream);
+        }
 
         // Output record if it matches qName, rID, and beginPos.
-        if (!atEnd(inStream) &&
-                record.qName == it->second.i1 && record.rID == it->first.i1 && record.beginPos == it->first.i2)
+        if (!last && record.qName == it->second.i1 && record.rID == it->first.i1 && record.beginPos == it->first.i2)
         {
             // Check if both ends are low-quality mapped and, hence, are already in fastq files.
             if (otherReads.count(Pair<TPos>(record.rNextId, record.pNext)) == 0)
@@ -391,7 +397,7 @@ crop_unmapped(double & avgCov,
     SeqFileOut fastqSingleStream(toCString(fastqFiles.i3));
 
     // Retrieve the adapter sequences with up to one error and create indices.
-    TStringSet universal = complementUniversalOneError(tag);
+    TStringSet universal = reverseUniversalOneError(tag);
     TStringSet truSeqs = reverseTruSeqsOneError(tag);
     Index<TStringSet> indexUniversal(universal);
     Index<TStringSet> indexTruSeqs(truSeqs);

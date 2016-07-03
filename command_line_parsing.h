@@ -216,7 +216,7 @@ setupParser(ArgumentParser & parser, AssemblyOptions & options)
     setDate(parser, VERSION_DATE);
 
     // Define usage line and long description.
-    addUsageLine(parser, "[\\fIOPTIONS\\fP] \\fIBAM FILE\\fP");
+    addUsageLine(parser, "[\\fIOPTIONS\\fP] \\fIBAM_FILE\\fP");
     addDescription(parser, "Finds reads without high-quality alignment in the \\fIBAM FILE\\fP, quality filters them "
           "using SICKLE and assembles them into contigs using VELVET. If the option \'--reference \\fIFASTA FILE\\fP\' "
           "is set, the reads are first remapped to this reference using BwA-MEM and only reads that remain without "
@@ -324,7 +324,7 @@ setupParser(ArgumentParser & parser, ContigMapOptions & options)
     setDate(parser, VERSION_DATE);
 
     // Define usage line and long description.
-    addUsageLine(parser, "[\\fIOPTIONS\\fP] \\fISAMPLE ID\\fP");
+    addUsageLine(parser, "[\\fIOPTIONS\\fP] \\fISAMPLE_ID\\fP");
     addDescription(parser, "Aligns the reads with low-quality alignments of a sample to the set of supercontigs using "
             "BWA-MEM. Merges the BWA output file with the sample's non_ref.bam file into a non_ref_new.bam file where "
     		"information about read mates is set.");
@@ -361,12 +361,12 @@ setupParser(ArgumentParser & parser, ContigMapOptions & options)
 void
 setupParser(ArgumentParser & parser, PlacingOptions & options)
 {
-    setShortDescription(parser, "Finding positions of contigs in reference genome.");
+    setShortDescription(parser, "Identification of contig positions in reference genome.");
     setVersion(parser, VERSION);
     setDate(parser, VERSION_DATE);
 
     addUsageLine(parser, "[\\fIOPTIONS\\fP]");
-    addUsageLine(parser, "[\\fIOPTIONS\\fP] \\fISAMPLE ID\\fP");
+    addUsageLine(parser, "[\\fIOPTIONS\\fP] -s \\fISAMPLE_ID\\fP");
 
     addDescription(parser, "Identifies insertion positions of the (super-)contigs in the reference genome and writes them "
     		"to a VCF file. The placing consists of four steps and only the third step needs to be run per sample. If no "
@@ -384,11 +384,10 @@ setupParser(ArgumentParser & parser, PlacingOptions & options)
     addDescription(parser, "Step 4: The results from split-read alignment (the \\fIlocations_placed.txt\\fP files) of all "
             "samples are combined and appended to the VCF output file.");
 
-    addArgument(parser, ArgParseArgument(ArgParseArgument::INPUT_FILE, "SAMPLE_ID", true));
-
     // Setup the options.
     addSection(parser, "Input/output options");
     addOption(parser, ArgParseOption("p", "prefix", "Path to the sample directories.", ArgParseArgument::STRING, "PATH"));
+    addOption(parser, ArgParseOption("s", "sample", "The sample ID (when running step 3).", ArgParseArgument::STRING, "SAMPLE_ID"));
     addOption(parser, ArgParseOption("l", "locations", "Name of merged locations file.", ArgParseArgument::OUTPUT_FILE, "FILE"));
     addOption(parser, ArgParseOption("i", "insertions", "Name of VCF output file.", ArgParseArgument::OUTPUT_FILE, "VCF_FILE"));
     addOption(parser, ArgParseOption("c", "contigs", "Name of supercontigs file.", ArgParseArgument::INPUT_FILE, "FASTA_FILE"));
@@ -405,7 +404,7 @@ setupParser(ArgumentParser & parser, PlacingOptions & options)
     addSection(parser, "Algorithm options");
     addOption(parser, ArgParseOption("", "minScore", "Minimal anchoring score for a location.", ArgParseArgument::DOUBLE, "FLOAT"));
     addOption(parser, ArgParseOption("", "minReads", "Minimal number of anchoring read pairs for a location.", ArgParseArgument::INTEGER, "INT"));
-    addOption(parser, ArgParseOption("", "maxInsertSize", "The maximal expected insert size of the read pairs.", ArgParseArgument::INTEGER, "INT"));
+    addOption(parser, ArgParseOption("", "maxInsertSize", "The maximum expected insert size of the read pairs.", ArgParseArgument::INTEGER, "INT"));
     addOption(parser, ArgParseOption("", "readLength", "The length of the reads.", ArgParseArgument::INTEGER, "INT"));
     addOption(parser, ArgParseOption("", "groupDist", "Minimal distance between groups of locations.", ArgParseArgument::INTEGER, "INT"));
 
@@ -437,11 +436,11 @@ setupParser(ArgumentParser & parser, PlacingOptions & options)
 void
 setupParser(ArgumentParser & parser, GenotypingOptions & options)
 {
-    setShortDescription(parser, "Genotyping an individual for the insertions.");
+    setShortDescription(parser, "Genotyping a sample for insertions.");
     setVersion(parser, VERSION);
     setDate(parser, VERSION_DATE);
 
-    addUsageLine(parser, "[\\fIOPTIONS\\fP] \\fISAMPLE ID\\fP");
+    addUsageLine(parser, "[\\fIOPTIONS\\fP] \\fISAMPLE_ID\\fP");
     addDescription(parser, "Computes genotype likelihoods for a sample for all insertions given in the input VCF file "
     		"by aligning all reads, which are mapped to the reference genome around the insertion breakpoint or to the "
     		"contig, to the reference and to the alternative insertion sequence. VCF records with the genotype "
@@ -599,16 +598,10 @@ getOptionValues(ContigMapOptions & options, ArgumentParser & parser)
 void
 getOptionValues(PlacingOptions & options, ArgumentParser & parser)
 {
-   unsigned args = getArgumentValueCount(parser, 0);
-
-   if (args > 1)
-      SEQAN_THROW(ParseError("Too many arguments!"));
-
-   if (args == 1)
-      getArgumentValue(options.sampleID, parser, 0);
-
     if (isSet(parser, "prefix"))
         getOptionValue(options.prefix, parser, "prefix");
+    if (isSet(parser, "sample"))
+       getOptionValue(options.sampleID, parser, "sample");
     if (isSet(parser, "locations"))
         getOptionValue(options.locationsFile, parser, "locations");
     if (isSet(parser, "contigs"))

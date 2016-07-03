@@ -706,7 +706,7 @@ int popins_assemble(int argc, char const ** argv)
 
     // Assembly with velvet.
     CharString assemblyDirectory = getFileName(workingDirectory, "assembly");
-    if (velvet_assembly(filteredFiles, filteredMPFiles, assemblyDirectory, options.kmerLength, options.matepairFile == "") != 0)
+    if (velvet_assembly(filteredFiles, filteredMPFiles, assemblyDirectory, options.kmerLength, options.matepairFile != "") != 0)
         return 7;
 
     remove(toCString(firstFiltered));

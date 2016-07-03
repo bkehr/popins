@@ -198,14 +198,16 @@ alignRead(std::pair<unsigned, unsigned> & insPos, Dna5String readSeq, TContigSeq
     setSource(refRowRight, ref);
 
     Score<int, Simple> scoringScheme(1, -3, -4, -5);
-    AlignConfig<false, true, true, false> config;
-    Pair<int, int> splitScore = splitAlignment(readRowLeft, contigRowLeft, readRowRight, refRowRight, scoringScheme, config);
+    AlignConfig<false, true, true, true> config;
+    auto splitScore = _splitAlignmentImpl(readRowLeft, contigRowLeft, readRowRight, refRowRight, scoringScheme, config);
+    auto splitScoreLeft = std::get<0>(splitScore);
+    auto splitScoreRight = std::get<1>(splitScore);
 
-    //    std::cout << "\nSplit score = " << splitScore.i1 + splitScore.i2 << " (" << splitScore.i1 << " + " << splitScore.i2 << ")" << std::endl;
+    //    std::cout << "\nSplit score = " << splitScoreLeft + splitScoreRight << " (" << splitScoreLeft << " + " << splitScoreRight << ")" << std::endl;
     //    std::cout << readRowLeft << "\n" << contigRowLeft << "\n\n" << readRowRight << "\n" << refRowRight << std::endl;
 
     int minOverhang = 0.1 * length(readSeq);
-    if (splitScore.i1 < minOverhang || splitScore.i2 < minOverhang || splitScore.i1 + splitScore.i2 < length(readSeq) * 0.5)
+    if (splitScoreLeft < minOverhang || splitScoreRight < minOverhang || splitScoreLeft + splitScoreRight < length(readSeq) * 0.5)
         return 1;
 
     //    // Split position on the read.
@@ -231,10 +233,11 @@ splitAlignReads(std::map<std::pair<unsigned, unsigned>, unsigned> & insPos,
         TContigSeq & contigPrefix,
         TRefSeq & ref,
         Location & loc,
-        PlacingOptions & options)
+      double avgCov,
+      unsigned readLength)
 {
     // Set the coverage threshold for this BAM file for this location to 3 times the average coverage.
-    unsigned covThresh = 3 * options.bamAvgCov * (loc.chrEnd - loc.chrStart) / options.readLength;
+    unsigned covThresh = 3 * avgCov * (loc.chrEnd - loc.chrStart) / readLength;
 
     // Find the rID in BAM file for the location's chromosome.
     int rID = 0;
@@ -255,11 +258,11 @@ splitAlignReads(std::map<std::pair<unsigned, unsigned>, unsigned> & insPos,
         readRecord(record, bamStream);
 
         // Skip records before the region's start.
-        if (record.rID == rID && record.beginPos < loc.chrStart)
+        if (record.rID == rID && record.beginPos < (int32_t)loc.chrStart)
             continue;
 
         // Check if read's alignment position is still within the location.
-        if (record.rID != rID || record.beginPos > loc.chrEnd)
+        if (record.rID != rID || record.beginPos > (int32_t)loc.chrEnd)
             return 0;
 
         // Check for too high coverage.
@@ -301,7 +304,8 @@ loadContigAndSplitAlign(std::map<std::pair<unsigned, unsigned>, unsigned> & insP
         TRefSeq & ref,
         Dna5String & contig,
         Location & loc,
-        PlacingOptions & options)
+      double avgCov,
+      unsigned readLength)
 {
     typedef Infix<Dna5String>::Type TInfix;
     typedef ModifiedString<TInfix, ModComplementDna5> TComplementInfix;
@@ -313,14 +317,14 @@ loadContigAndSplitAlign(std::map<std::pair<unsigned, unsigned>, unsigned> & insP
     {
         unsigned suffixBegPos = length(contig) - _min(preSufLen, length(contig));
         TInfix contigSuffix = infix(contig, suffixBegPos, length(contig));
-        return splitAlignReads(insPos, bamStream, bai, contigSuffix, ref, loc, options);
+        return splitAlignReads(insPos, bamStream, bai, contigSuffix, ref, loc, avgCov, readLength);
     }
     else
     {
         unsigned prefixEndPos = _min(preSufLen, length(contig));
         TInfix pref = infix(contig, 0, prefixEndPos);
         TRcInfix contigPrefix(pref);
-        return splitAlignReads(insPos, bamStream, bai, contigPrefix, ref, loc, options);
+        return splitAlignReads(insPos, bamStream, bai, contigPrefix, ref, loc, avgCov, readLength);
     }
 
 }
@@ -380,16 +384,19 @@ writeLocPos(TStream & outStream,
 // =======================================================================================
 
 bool
-popins_place_split_read_align(String<LocationInfo> & locs,
-        std::vector<std::pair<CharString, Dna5String> > & contigs,
-        FaiIndex & fai,
-        PlacingOptions & options)
+popins_place_split_read_align(CharString & outFile,
+      String<LocationInfo> & locs,
+      std::vector<std::pair<CharString, Dna5String> > & contigs,
+      FaiIndex & fai,
+      SampleInfo & info,
+      unsigned maxInsertSize,
+      unsigned readLength)
 {
     typedef typename Iterator<String<LocationInfo> >::Type TIter;
     typedef std::pair<CharString, Dna5String> TPair;
 
     // Open the BAM file.
-    BamFileIn bamStream(toCString(options.bamFile));
+    BamFileIn bamStream(toCString(info.bam_file));
 
     // Read the header and clear it since we don't need it.
     BamHeader header;
@@ -398,7 +405,7 @@ popins_place_split_read_align(String<LocationInfo> & locs,
 
     // Load the BAI file.
     BamIndex<Bai> bai;
-    CharString baiFile = options.bamFile;
+    CharString baiFile = info.bam_file;
     baiFile += ".bai";
     if (!open(bai, toCString(baiFile)))
     {
@@ -407,16 +414,19 @@ popins_place_split_read_align(String<LocationInfo> & locs,
     }
 
     // Open the output file.
-    std::fstream outStream(toCString(options.outFile), std::ios::out);
+    std::fstream outStream(toCString(outFile), std::ios::out);
     if (!outStream.good())
     {
-        std::cerr << "ERROR: Could not open output file " << options.outFile << " for writing." << std::endl;
+        std::cerr << "ERROR: Could not open output file " << outFile << " for writing." << std::endl;
         return 1;
     }
 
+    std::ostringstream msg;
+    msg << "Split-read alignment for sample " << info.sample_id;
+    printStatus(msg);
+
     std::cerr << "0%   10   20   30   40   50   60   70   80   90   100%" << std::endl;
     std::cerr << "|----|----|----|----|----|----|----|----|----|----|" << std::endl;
-    std::cerr << "*" << std::flush;
 
     double fiftieth = length(locs) / 50.0;
     unsigned progress = 0;
@@ -434,28 +444,28 @@ popins_place_split_read_align(String<LocationInfo> & locs,
 
         if ((*it).loc.chrOri)
         {
-            (*it).loc.chrEnd += options.maxInsertSize;
+            (*it).loc.chrEnd += maxInsertSize;
 
             // Load the genomic region and reverse complement it.
             Dna5String r = loadInterval(fai, (*it).loc.chr, (*it).loc.chrStart, (*it).loc.chrEnd);
             ModifiedString<ModifiedString<Dna5String, ModComplementDna5>, ModReverse> ref(r);
 
             // Load the contig prefix/suffix and split align.
-            highCov = loadContigAndSplitAlign(insPos, bamStream, bai, ref, contigIt->second, (*it).loc, options);
+            highCov = loadContigAndSplitAlign(insPos, bamStream, bai, ref, contigIt->second, (*it).loc, info.avg_cov, readLength);
 
-            (*it).loc.chrEnd -= options.maxInsertSize;
+            (*it).loc.chrEnd -= maxInsertSize;
         }
         else
         {
-            (*it).loc.chrStart -= options.maxInsertSize;
+            (*it).loc.chrStart -= maxInsertSize;
 
             // Load the genomic region and keep it in forward orientation.
             Dna5String ref = loadInterval(fai, (*it).loc.chr, (*it).loc.chrStart, (*it).loc.chrEnd);
 
             // Load the contig prefix/suffix and split align.
-            highCov = loadContigAndSplitAlign(insPos, bamStream, bai, ref, contigIt->second, (*it).loc, options);
+            highCov = loadContigAndSplitAlign(insPos, bamStream, bai, ref, contigIt->second, (*it).loc, info.avg_cov, readLength);
 
-            (*it).loc.chrStart += options.maxInsertSize;
+            (*it).loc.chrStart += maxInsertSize;
         }
 
         writeLocPos(outStream, (*it).loc, insPos, highCov);

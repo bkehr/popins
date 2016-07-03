@@ -60,20 +60,20 @@ readSampleInfo(SampleInfo & info, CharString & filename)
     std::string field, value;
     while (stream >> field >> value)
     {
-        if (field.compare("SAMPLE_ID") != 0)
+        if (field.compare("SAMPLE_ID") == 0)
             info.sample_id = value;
-        else if (field.compare("BAM_FILE") != 0)
+        else if (field.compare("BAM_FILE") == 0)
             info.bam_file = value;
-        else if (field.compare("AVG_COV") != 0)
+        else if (field.compare("AVG_COV") == 0)
             info.avg_cov = lexicalCast<double>(value);
-        else if (field.compare("READ_LEN") != 0)
+        else if (field.compare("READ_LEN") == 0)
             lexicalCast<unsigned>(info.read_len, value);
-        else if (field.compare("ADAPTER_TYPE") != 0)
+        else if (field.compare("ADAPTER_TYPE") == 0)
             info.adapter_type = value;
         else
             std::cerr << "WARNING: Ignoring field \'" << field << "\' in sample info file \'" << filename << "\'." << std::endl;
     }
-    
+
     return 0;
 }
 
@@ -148,6 +148,11 @@ listFiles(CharString & prefix, CharString & filename)
         if (entry->d_type == DT_DIR)
         {
            CharString sampleID = entry->d_name;
+           if (sampleID == "." || sampleID == "..")
+           {
+               entry = readdir(dir);
+               continue;
+           }
            std::stringstream path;
            path << prefix << "/" << sampleID << "/" << filename;
            CharString pathStr = path.str();
@@ -178,7 +183,15 @@ listSubdirectories(CharString & prefix)
    while (entry != NULL)
    {
       if (entry->d_type == DT_DIR)
-         appendValue(subdirs, entry->d_name);
+      {
+          CharString sampleID = entry->d_name;
+          if (sampleID == "." || sampleID == "..")
+          {
+              entry = readdir(dir);
+              continue;
+          }
+         appendValue(subdirs, sampleID);
+      }
       entry = readdir(dir);
    }
 

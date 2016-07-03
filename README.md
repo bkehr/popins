@@ -7,7 +7,7 @@ Population-scale detection of novel-sequence insertions.
 Prerequisites
 -------------
 
-* SeqAn core library, version 2.1.0 (https://github.com/seqan/seqan)
+* SeqAn core library, version 2.1.1 (https://github.com/seqan/seqan)
 * bwa (https://github.com/lh3/bwa)
 * velvet (https://github.com/dzerbino/velvet)
 * samtools (https://github.com/samtools/samtools)
@@ -75,7 +75,7 @@ In addition to sample-specific files, a number of output files are written (by d
     ./popins assemble [OPTIONS] <BAM FILE>
 
 The assemble command finds reads without high-quality alignment in the input BAM file, quality filters them using SICKLE and assembles them into contigs using VELVET.
-If a reference fasta file is specified, the reads are first remapped to this reference using BwA-MEM and only reads that remain without high-quality alignment after remapping are quality-filtered and assembled.
+If a reference fasta file is specified, the reads are first remapped to this reference using BWA-MEM and only reads that remain without high-quality alignment after remapping are quality-filtered and assembled.
 
 
 ### The merge command
@@ -97,11 +97,10 @@ The BWA output file is merged with the sample's `non_ref.bam` file into a `non_r
 ### The place command
 
     ./popins place [OPTIONS]
-    ./popins place [OPTIONS] <SAMPLE ID>
 
 The place command identifies insertion positions of the (super-)contigs in the reference genome and writes them to a VCF file.
 The placing consists of four steps.
-Only the third step needs to be run per sample.
+Only the third step needs to be run per sample unsing the option `--sample <SAMPLE ID>`.
 
 Step 1: The contig locations in the sample directories are merged into one file of locations.
 
@@ -124,8 +123,7 @@ VCF records with the genotype likelihoods in GT:PL format for the individual are
 Example
 -------
 
-    mkdir example
-    cd example/
+    mkdir popins_example && cd popins_example/
     ln -s /path/to/hg38.fa genome.fa
     
     ./popins assemble --sample sample1 /path/to/first_sample.bam
@@ -138,11 +136,11 @@ Example
     ./popins contigmap sample2
     ./popins contigmap sample3
     
-    ./popins place           // locations.txt does not exist --> runs substeps 1 and 2
-    ./popins place sample1
-    ./popins place sample2
-    ./popins place sample3
-    ./popins place           // locations.txt now exists --> runs substeps 4
+    ./popins place              # locations.txt does not exist --> runs substeps 1 and 2
+    ./popins place -s sample1   # a sample ID is given --> runs substep 3
+    ./popins place -s sample2
+    ./popins place -s sample3
+    ./popins place              # locations.txt now exists --> runs substeps 4
     
     ./popins genotype sample1
     ./popins genotype sample2
@@ -153,9 +151,9 @@ Example
 References
 ----------
 
-Kehr B., Melsted P., Halldórsson B. V. (2015).
+Kehr B., Melsted P., Halldórsson B. V. (2016).
 PopIns: population-scale detection of novel sequence insertions.
-Bioinformatics, btv273.
+[Bioinformatics, 32(7):961-967.](http://bioinformatics.oxfordjournals.org/content/32/7/961.abstract)
 
 Kehr B., Melsted P., Jónasdóttir A., Jónasdóttir A., Sigurðsson A., Gylfason A., Guðbjartsson D., Halldórsson B. V., Stefánsson K. (2014).
 Detecting novel sequence insertions in 3000 individuals from short read sequencing data. (Abstract/Program #38).

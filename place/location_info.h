@@ -162,7 +162,6 @@ writeVcf(TStream & outStream, LocationInfo & loc, unsigned groupSize, FaiIndex &
 
     if (loc.insPos == -1)
         outStream << ";RPL";
-    outStream << "\t" << ".";
     outStream << std::endl;
 }
 

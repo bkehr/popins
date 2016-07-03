@@ -296,15 +296,14 @@ writeGroup(TStream & outStream, String<LocationInfo> & group, bool isInsertion)
 // ---------------------------------------------------------------------------------------
 
 bool
-writeSplitAlignList(CharString path, std::vector<int> & list, std::vector<Pair<CharString, bool> > & exclude, String<LocationInfo> & locations, PlacingOptions & options)
+writeSplitAlignList(CharString & filename, std::vector<int> & list, std::vector<Pair<CharString, bool> > & exclude, String<LocationInfo> & locations, PlacingOptions & options)
 {
     typedef std::vector<int>::iterator TIter;
 
-    path += "/locations_unplaced.txt";
-    std::fstream outStream(toCString(path), std::ios::out);
+    std::fstream outStream(toCString(filename), std::ios::out);
     if (!outStream.good())
     {
-        std::cerr << "ERROR: Could not open locations file " << path << " for writing." << std::endl;
+        std::cerr << "ERROR: Could not open locations file " << filename << " for writing." << std::endl;
         return 1;
     }
 
@@ -390,7 +389,7 @@ setInsPos(LocationInfo & a, LocationInfo & b,
         return;
     }
 
-    unsigned bPos = b.insPos;
+    int bPos = b.insPos;
     if (!a.loc.chrOri)
         bPos = length(contigB) - b.insPos;
 
@@ -450,7 +449,7 @@ contigEndsAlign(LocationInfo & a, LocationInfo & b, std::vector<std::pair<CharSt
     if (b.insPos != -1)
     {
         if (b.loc.chrOri)
-            preSufLen = _max(preSufLen, b.insPos + 50);
+            preSufLen = _max((int)preSufLen, b.insPos + 50);
         else
             preSufLen = _max(preSufLen, length(itB->second) - b.insPos + 50);
     }
@@ -1120,7 +1119,9 @@ popins_place_ref_align(TStream & vcfStream,
     // Write splitAlignLists to output files.
     for (unsigned i = 0; i < splitAlignLists.pns.size(); ++i)
     {
-        if (writeSplitAlignList(splitAlignLists.pns[i], splitAlignLists.lists[i], exclude, locations, options) != 0)
+        CharString filename = getFileName(options.prefix, splitAlignLists.pns[i]);
+        filename += "/locations_unplaced.txt";
+        if (writeSplitAlignList(filename, splitAlignLists.lists[i], exclude, locations, options) != 0)
             return 1;
     }
 

@@ -57,7 +57,7 @@ partitionContigs(UnionFind<int> & uf,
     printStatus("- Indexing contigs");
 
     TSize numComparisons = 0;
-    unsigned fwdContigCount = length(contigs)/2;
+    int fwdContigCount = length(contigs)/2;
 
     // initialization of SWIFT pattern (q-gram index)
     TStringSet seqs;
@@ -79,7 +79,7 @@ partitionContigs(UnionFind<int> & uf,
     std::cerr << "0%   10   20   30   40   50   60   70   80   90   100%" << std::endl;
     std::cerr << "|----|----|----|----|----|----|----|----|----|----|" << std::endl;
 
-    unsigned fiftieth = std::max(fwdContigCount / 50, 1u);
+    unsigned fiftieth = std::max(fwdContigCount / 50, 1);
 
     // Iterate over the forward contigs.
     for (int a = 0; a < fwdContigCount; ++a)
@@ -94,7 +94,7 @@ partitionContigs(UnionFind<int> & uf,
         while (find(swiftFinder, swiftPattern, options.errorRate, options.minimalLength))
         {
             // get index of pattern sequence
-            unsigned b = swiftPattern.curSeqNo;
+            int b = swiftPattern.curSeqNo;
 
             // align contigs only of different individuals
             if (contigs[a].id.pn == contigs[b].id.pn) continue;
@@ -121,8 +121,8 @@ partitionContigs(UnionFind<int> & uf,
             joinSets(uf, findSet(uf, a), findSet(uf, b));
 
             // join sets for reverse complements of the contigs
-            unsigned a1 = a < fwdContigCount ? a + fwdContigCount : a - fwdContigCount;
-            unsigned b1 = b < fwdContigCount ? b + fwdContigCount : b - fwdContigCount;
+            int a1 = a < fwdContigCount ? a + fwdContigCount : a - fwdContigCount;
+            int b1 = b < fwdContigCount ? b + fwdContigCount : b - fwdContigCount;
             joinSets(uf, findSet(uf, a1), findSet(uf, b1));
 
             // stop aligning this contig if it is already in a component with more than 100 other contigs
@@ -185,7 +185,7 @@ addSingletons(std::map<TSize, ContigComponent<TSeq> > & components,
         UnionFind<int> & uf)
 {
     unsigned numSingletons = 0;
-    for (int i = 0; i < length(contigs)/2; ++i)
+    for (int i = 0; i < (int)length(contigs)/2; ++i)
     {
         if (components.count(i) == 0 && i == findSet(uf, i))
         {

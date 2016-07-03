@@ -117,7 +117,7 @@ initVcf(TStream & vcfStream, PlacingOptions & options, FaiIndex & fai)
     vcfStream << "##FORMAT=<ID=PL,Number=G,Type=Integer,Description=\"PHRED-scaled genotype likelihoods\">" << std::endl;
 
     vcfStream << "#CHROM" << "\t" << "POS" << "\t" << "ID" << "\t" << "REF" << "\t" << "ALT";
-    vcfStream << "\t" << "QUAL" << "\t" << "FILTER" << "\t" << "INFO" << "\t" << "FORMAT" << std::endl;
+    vcfStream << "\t" << "QUAL" << "\t" << "FILTER" << "\t" << "INFO" << std::endl;
 
     return 0;
 }
@@ -130,7 +130,7 @@ int
 mergeLocations(String<Location> & locations, PlacingOptions & options)
 {
     // Open output file.
-    std::fstream stream(toCString(options.outFile), std::ios::out);
+    std::fstream stream(toCString(options.locationsFile), std::ios::out);
     if (!stream.good())
     {
         std::cerr << "ERROR: Could not open locations file " << options.locationsFile << " for writing." << std::endl;
@@ -150,6 +150,8 @@ mergeLocations(String<Location> & locations, PlacingOptions & options)
     if (mergeLocations(stream, locations, locationsFiles, options.locationsFile, options.maxInsertSize) != 0)
         return 1;
 
+    close(stream);
+
     return 0;
 }
 
@@ -158,14 +160,14 @@ mergeLocations(String<Location> & locations, PlacingOptions & options)
 // =======================================================================================
 
 int
-loadLocations(String<LocationInfo> & locations, CharString filename, double minLocScore, unsigned minAnchorReads, unsigned maxInsertSize)
+loadLocations(String<LocationInfo> & locations, CharString & sampleID, CharString & filename, double minLocScore, unsigned minAnchorReads, unsigned maxInsertSize)
 {
     std::ostringstream msg;
     msg << "Reading locations from " << filename;
     printStatus(msg);
 
     LocationsFilter filter(minAnchorReads, minLocScore, 3*maxInsertSize);
-    if (readLocations(locations, filename, filter) != 0)
+    if (readLocations(locations, sampleID, filename, filter) != 0)
         return 1;
 
     msg.str("");
@@ -235,16 +237,16 @@ loadContigs(std::vector<std::pair<CharString, TSeq> > & contigs,
 bool
 loadInputAndSplitReadAlign(CharString & samplePath, PlacingOptions & options, FaiIndex & fai)
 {
-   // Load the POPINS_SAMPLE_INFO file.
-   SampleInfo sampleInfo;
-   CharString sampleInfoFile = getFileName(samplePath, "POPINS_SAMPLE_INFO");
-   if (readSampleInfo(sampleInfo, sampleInfoFile) != 0)
-      return 1;
+    // Load the POPINS_SAMPLE_INFO file.
+    SampleInfo sampleInfo;
+    CharString sampleInfoFile = getFileName(samplePath, "POPINS_SAMPLE_INFO");
+    if (readSampleInfo(sampleInfo, sampleInfoFile) != 0)
+        return 1;
 
     // Load the locations.
     String<LocationInfo> locs;
     CharString locationsFile = getFileName(samplePath, "locations_unplaced.txt");
-    if (loadLocations(locs, locationsFile, options.minLocScore, 0u, options.maxInsertSize) != 0)
+    if (loadLocations(locs, sampleInfo.sample_id, locationsFile, options.minLocScore, 0u, options.maxInsertSize) != 0)
         return 1;
 
    // Load the contig file.
@@ -293,7 +295,7 @@ int popins_place(int argc, char const ** argv)
 
         // Load the locations.
         String<LocationInfo> locs;
-        if (loadLocations(locs, options.locationsFile, options.minLocScore, options.minAnchorReads, options.maxInsertSize) != 0)
+        if (loadLocations(locs, options.sampleID, options.locationsFile, options.minLocScore, options.minAnchorReads, options.maxInsertSize) != 0)
             return 7;
 
         // Load the contig file.

@@ -664,7 +664,7 @@ scoreLocations(String<Location> & locations)
 // --------------------------------------------------------------------------
 
 bool
-readLocation(Location & loc, std::stringstream & stream, CharString & locationsFile)
+readLocation(Location & loc, std::stringstream & stream, CharString & sampleID, CharString & locationsFile)
 {
     std::string refPos;
     stream >> refPos;
@@ -724,7 +724,7 @@ readLocation(Location & loc, std::stringstream & stream, CharString & locationsF
 
     if (stream.eof())
     {
-        CharString sampleName = locationsFile; // TODO: Replace by an actual sample ID.
+        CharString sampleName = sampleID;
         if (suffix(sampleName, length(sampleName) - 14) == "/locations.txt")
             sampleName = prefix(sampleName, length(sampleName) - 14);
         if (loc.bestSamples.count(sampleName) != 0)
@@ -762,7 +762,7 @@ readLocation(Location & loc, std::stringstream & stream, CharString & locationsF
 }
 
 int
-readLocation(Location & loc, std::fstream & infile, CharString & locationsFile)
+readLocation(Location & loc, std::fstream & infile, CharString & sampleID, CharString & locationsFile)
 {
     std::string line;
     if (!std::getline(infile, line))
@@ -771,7 +771,7 @@ readLocation(Location & loc, std::fstream & infile, CharString & locationsFile)
     std::stringstream stream;
     stream.str(line);
 
-    return readLocation(loc, stream, locationsFile);
+    return readLocation(loc, stream, sampleID, locationsFile);
 }
 
 // ==========================================================================
@@ -790,7 +790,7 @@ appendLocation(String<Location> & locs, Location & loc)
 
 template<typename TLoc>
 int
-readLocations(String<TLoc> & locations, CharString & locationsFile, LocationsFilter & filterParams)
+readLocations(String<TLoc> & locations, CharString & sampleID, CharString & locationsFile, LocationsFilter & filterParams)
 {
     std::fstream stream(toCString(locationsFile), std::ios::in);
     if (!stream.good())
@@ -807,7 +807,7 @@ readLocations(String<TLoc> & locations, CharString & locationsFile, LocationsFil
         std::stringstream ss;
         ss.str(line);
 
-        if (readLocation(loc, ss, locationsFile) != 0)
+        if (readLocation(loc, ss, sampleID, locationsFile) != 0)
             return 1;
 
         if (passesFilter(loc, filterParams))
@@ -818,7 +818,7 @@ readLocations(String<TLoc> & locations, CharString & locationsFile, LocationsFil
 
 template<typename TLoc>
 int
-readLocations(String<TLoc> & locations, CharString & locationsFile, Triple<CharString, unsigned, unsigned> & interval, LocationsFilter & filterParams)
+readLocations(String<TLoc> & locations, CharString & sampleID, CharString & locationsFile, Triple<CharString, unsigned, unsigned> & interval, LocationsFilter & filterParams)
 {
     std::fstream stream(toCString(locationsFile), std::ios::in);
     if (!stream.good())
@@ -835,7 +835,7 @@ readLocations(String<TLoc> & locations, CharString & locationsFile, Triple<CharS
         std::stringstream ss;
         ss.str(line);
 
-        if (readLocation(loc, ss, locationsFile) != 0)
+        if (readLocation(loc, ss, sampleID, locationsFile) != 0)
             return 1;
 
         if (passesFilter(loc, filterParams) && loc.chr == interval.i1 && loc.chrStart >= interval.i2 && loc.chrStart < interval.i3)
@@ -968,17 +968,17 @@ int mergeLocationsBatch(std::fstream & stream,
     resize(readerPtr, length(locationsFiles));
     for (unsigned i = offset; i < last; ++i)
     {
-        std::fstream * stream = new std::fstream(toCString(locationsFiles[i].i2), std::ios::in);
-        if (!(*stream).good())
+        std::fstream * instream = new std::fstream(toCString(locationsFiles[i].i2), std::ios::in);
+        if (!(*instream).good())
         {
             std::cerr << "ERROR: Could not open locations file " << locationsFiles[i].i2 << std::endl;
             return 1;
         }
-        readerPtr[i] = stream;
+        readerPtr[i] = instream;
 
         // Read the first location record and push it to min heap.
         Location loc;
-        if (readLocation(loc, *readerPtr[i], locationsFiles[i].i2) != 0) return 1;
+        if (readLocation(loc, *readerPtr[i], locationsFiles[i].i1, locationsFiles[i].i2) != 0) return 1;
         loc.fileIndex = i;
         heap.push(loc);
     }
@@ -1017,7 +1017,7 @@ int mergeLocationsBatch(std::fstream & stream,
         heap.pop();
         unsigned i = loc.fileIndex;
         Location nextLoc;
-        int ret = readLocation(nextLoc, *readerPtr[i], locationsFiles[i].i2);
+        int ret = readLocation(nextLoc, *readerPtr[i], locationsFiles[i].i1, locationsFiles[i].i2);
         if (ret == 0)
         {
             nextLoc.fileIndex = i;
