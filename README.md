@@ -7,7 +7,6 @@ Population-scale detection of novel-sequence insertions.
 Prerequisites
 -------------
 
-* SeqAn core library, version 2.1.1 (https://github.com/seqan/seqan)
 * bwa (https://github.com/lh3/bwa)
 * velvet (https://github.com/dzerbino/velvet)
 * samtools (https://github.com/samtools/samtools)
@@ -20,14 +19,11 @@ PopIns was tested with bwa 0.7.10-r789, velvet 1.2.10, samtools 1.3, and sickle 
 Installation
 ------------
 
-1. Download the SeqAn library, version 2.1.0.. You do *not* need to follow the SeqAn install instructions.
-   You only need the directory .../include/seqan of the SeqAn core library with all its content.
-2. Install all other prerequisites (bwa, velvet, samtools, and sickle).
+1. Install all prerequisites (bwa, velvet, samtools, and sickle).
    Compile velvet with a larger maximum k-mer length than the default if desired, e.g. MAXKMERLENGTH=63.
    A maximum k-mer length of 47 or higher is necessary for default parameters of PopIns (velvet's default is 31).
-3. Set the path to the SeqAn core library by editing the file popins.config or add a symbolic link in the popins directory 'ln -s /path/to/seqan'.
-   Also set the paths to bwa, velveth/velvetg, samtools, and sickle in the file popins.config if they are not in your PATH variable.
-4. Run 'make' in the popins directory.
+2. Set the paths to bwa, velveth, velvetg, samtools, and sickle in the file popins.config if they are not in your PATH variable.
+3. Run 'make' in the popins directory.
 
 If everything is setup correctly, this will create the binary 'popins'.
 

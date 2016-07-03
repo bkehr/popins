@@ -2,7 +2,7 @@
 
 -include popins.config
 
-CXX=g++ -std=c++11
+CXX=g++ -std=c++14
 CC=$(CXX)
 
 TOOLS=-DSAMTOOLS=\"$(SAMTOOLS)\" -DBWA=\"$(BWA)\" -DSICKLE=\"$(SICKLE)\" -DVELVETH=\"$(VELVETH)\" -DVELVETG=\"$(VELVETG)\"
