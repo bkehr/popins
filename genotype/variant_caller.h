@@ -224,6 +224,9 @@ int readBamRegion(BamIndex< Bai>& baiI, BamFileIn& bamS,
         CharString& chrom, int beg, int end, bool addReadGroup, bool verbose,
         std::map< CharString, BamAlignmentRecord>& bars1, std::map< CharString, BamAlignmentRecord>& bars2 )
 {
+	if (atEnd(bamS))
+		return 0;
+
     //Possible shift by 1 in position
     if( verbose ) std::cout << "reading Bam region " << chrom << " " << beg << " " << end << std::endl;
 

@@ -328,13 +328,10 @@ isComponentOrNode(CharString & name)
     typedef Position<CharString>::Type TPos;
 
     TPos i = 0;
-    while (i < length(name) && isdigit(name[i]))
-    {
+    while (i < length(name) - 3 && infix(name, i, i+4) != "NODE" && infix(name, i, i+4) != "COMP")
         ++i;
-        if (i < length(name) && name[i] == '.') ++i;
-    }
 
-    if (i < length(name)-4 && (infix(name, i, i+4) == "NODE" || infix(name, i, i+4) == "COMP"))
+    if (i < length(name) - 3)
         return true;
 
     return false;
@@ -441,7 +438,7 @@ isGoodQuality(BamAlignmentRecord & record, Pair<CigarElement<>::TCount> & interv
     if (avgQuality(record.qual, interval) <= 20)
         return false;
 
-    if (alignmentScore(record) < 0.8 * (interval.i2 - interval.i1))
+    if (alignmentScore(record) < 0.7 * (interval.i2 - interval.i1))
         return false;
 
     return true;
@@ -467,7 +464,7 @@ distanceToContigEnd(BamAlignmentRecord & record,
 
 // ==========================================================================
 
-inline int
+inline bool
 readAnchoringRecord(AnchoringRecord & record,
         std::map<Triple<CharString, CharString, unsigned>, unsigned> & goodReads,
         BamFileIn & stream)
@@ -487,7 +484,7 @@ readAnchoringRecord(AnchoringRecord & record,
         CharString rName = getContigName(r, stream);
         bool isContig = isComponentOrNode(rName);
 
-        if (!isContig && r.mapQ == 0)
+        if (!isContig && r.mapQ < 20)
             continue;
 
         if (isContig && distanceToContigEnd(r, interval, stream) > 500)
@@ -522,7 +519,7 @@ readAnchoringRecord(AnchoringRecord & record,
             return 0;
         }
     }
-    return 2;
+    return 1;
 }
 
 // ==========================================================================
@@ -589,7 +586,7 @@ findLocations(String<Location> & locations, CharString & nonRefFile, unsigned ma
     while (!atEnd(inStream))
     {
         if (readAnchoringRecord(record, goodReads, inStream) == 1)
-            return 1;
+            break;
 
         if (record.chrOri)
         {
@@ -962,7 +959,6 @@ int mergeLocationsBatch(std::fstream & stream,
 
     unsigned last = std::min(offset+batchSize, length(locationsFiles));
 
-
     // Open files and store String of reader pointers.
     String<std::fstream *> readerPtr;
     resize(readerPtr, length(locationsFiles));
@@ -978,9 +974,12 @@ int mergeLocationsBatch(std::fstream & stream,
 
         // Read the first location record and push it to min heap.
         Location loc;
-        if (readLocation(loc, *readerPtr[i], locationsFiles[i].i1, locationsFiles[i].i2) != 0) return 1;
+        int ret = readLocation(loc, *readerPtr[i], locationsFiles[i].i1, locationsFiles[i].i2);
         loc.fileIndex = i;
-        heap.push(loc);
+        if (ret == 1)
+            return 1;
+        else if (ret == 0)
+            heap.push(loc);
     }
 
     // Iterate over all files simultaneously using the min heap.
@@ -1068,7 +1067,7 @@ mergeLocations(std::fstream & stream, String<Location> & locations, String<Pair<
     }
     else if (length(locationsFiles) <= batchSize)
     {
-        mergeLocationsBatch(stream, locations, locationsFiles, 0, batchSize, maxInsertSize);
+        if (mergeLocationsBatch(stream, locations, locationsFiles, 0, batchSize, maxInsertSize) != 0) return 1;
         return 0;
     }
 

@@ -297,10 +297,10 @@ writeGroup(TStream & outStream, String<LocationInfo> & group, bool isInsertion)
 
 bool
 writeSplitAlignList(CharString & filename,
-		std::vector<int> & list,
-		std::vector<Pair<CharString, bool> > & exclude,
-		String<LocationInfo> & locations,
-		PlacingOptions<RefAlign> & options)
+        std::vector<int> & list,
+        std::vector<Pair<CharString, bool> > & exclude,
+        String<LocationInfo> & locations,
+        PlacingOptions<RefAlign> & options)
 {
     typedef std::vector<int>::iterator TIter;
 
@@ -323,10 +323,17 @@ writeSplitAlignList(CharString & filename,
             loc = otherEnd(locations[-(*it) - 1].loc, options.readLength, options.maxInsertSize);
 
         Pair<CharString, bool> c(loc.contig, loc.contigOri);
-        std::vector<Pair<CharString, bool> >::iterator cIt = lower_bound(exclude.begin(), exclude.end(), c);
-
-        if (cIt != exclude.end() && ((*cIt).i1 != c.i1 || (*cIt).i2 != c.i2))
+        if (exclude.size() == 0)
+        {
             writeLoc(outStream, loc);
+        }
+        else
+        {
+            std::vector<Pair<CharString, bool> >::iterator cIt = lower_bound(exclude.begin(), exclude.end(), c);
+
+            if (cIt != exclude.end() && ((*cIt).i1 != c.i1 || (*cIt).i2 != c.i2))
+                writeLoc(outStream, loc);
+        }
 
         ++it;
     }
