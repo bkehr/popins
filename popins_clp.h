@@ -51,7 +51,7 @@ readFileNames(String<CharString> & files, CharString const & filenameFile)
 // ==========================================================================
 
 template <typename TValue>
-bool readFileNames(String<CharString> & files, String<TValue> & values)
+bool readFileNamesAndValues(String<CharString> & files, String<TValue> & values)
 {
     if (length(files) > 1) return 0;
 
@@ -487,8 +487,6 @@ setupParser(ArgumentParser & parser, PlacingOptions & options)
     addOption(parser, ArgParseOption("ml", "locations", "Name of file with approximate insertion locations merged from all individuals. Computed if not exists.", ArgParseArgument::INPUTFILE, "LOCATIONFILE"));
     addOption(parser, ArgParseOption("m", "minScore", "Minimal score of a location to be passed to split mapping.", ArgParseArgument::DOUBLE, "FLOAT"));
     addOption(parser, ArgParseOption("b", "bamFiles", "File listing original, full bam files of individuals, one per line. Specify to determine exact insertion positions from split reads.", ArgParseArgument::INPUTFILE, "FILE"));
-    //addOption(parser, ArgParseOption("s", "batchSize", "Number of locations per batch. Specify to split computation into smaller batches. Requires locations file to exist, and specification of bam files, and batch number.", ArgParseArgument::INTEGER, "INT"));
-    //addOption(parser, ArgParseOption("i", "batchIndex", "Number of batch. Specify to split computation into smaller batches. Requires locations file to exist, and specification of bam files and batch size.", ArgParseArgument::INTEGER, "INT"));
     addOption(parser, ArgParseOption("i", "interval", "Genomic interval. Specify to split split alignment into smaller batches. Requires locations file to exist, and specification of bam files.", ArgParseArgument::STRING, "CHR:BEG-END"));
 
     addOption(parser, ArgParseOption("r", "readLength", "The length of the reads.", ArgParseArgument::INTEGER, "INT"));
@@ -715,18 +713,14 @@ getOptionValues(PlacingOptions & options, ArgumentParser & parser)
     {
         CharString locationsFilesFile;
         getOptionValue(locationsFilesFile, parser, "locationsFiles");
+        
         if (readFileNames(options.locationsFiles, locationsFilesFile) != 0)
             return 1;
     }
     
     if (isSet(parser, "locations"))
         getOptionValue(options.locationsFile, parser, "locations");
-    if (!exists(options.locationsFile) && (isSet(parser, "batchIndex") || isSet(parser, "batchSize")))
-    {
-        std::cerr << "ERROR: Locations file " << options.locationsFile << " does not exist."
-                  <<       " Please compute locations before splitting exact positioning into batches." << std::endl;
-        return 1;
-    }
+
     if (isSet(parser, "minScore"))
         getOptionValue(options.minLocScore, parser, "minScore");
 
@@ -734,7 +728,7 @@ getOptionValues(PlacingOptions & options, ArgumentParser & parser)
     {
         resize(options.bamFiles, 1);
         getOptionValue(options.bamFiles[0], parser, "bamFiles");
-        if (readFileNames(options.bamFiles, options.bamAvgCov) != 0)
+        if (readFileNamesAndValues(options.bamFiles, options.bamAvgCov) != 0)
             return 1;
     }
     if (!isSet(parser, "bamFiles") && isSet(parser, "interval"))
