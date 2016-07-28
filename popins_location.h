@@ -615,6 +615,26 @@ readLocations(String<Location> & locations, CharString & locationsFile, Triple<C
     return 0;
 }
 
+int
+readLocations(String<Location> & locations, CharString & locationsFile)
+{
+    std::fstream stream(toCString(locationsFile), std::ios::in);
+    if (!stream.good())
+    {
+        std::cerr << "ERROR: Could not open locations file " << locationsFile << std::endl;
+        return 1;
+    }
+    RecordReader<std::fstream, SinglePass<> > reader(stream);
+
+    for (unsigned line = 0; !atEnd(reader); ++line)
+    {
+        Location loc;
+        if (readLocation(loc, reader, locationsFile) != 0) return 1;
+        appendValue(locations, loc);
+    }
+    return 0;
+}
+
 // ==========================================================================
 // Function writeLocations()
 // ==========================================================================
@@ -1010,30 +1030,37 @@ loadLocations(String<Location> & locations, PlacingOptions & options)
         return 1;
     }
     
-    // Read the locations file.
-    if (length(locations) == 0)
+    if (options.interval.i1 != "")
     {
         if (options.verbose) std::cerr << "[" << time(0) << "] " << "Reading locations in " << options.interval.i1 << ":" << options.interval.i2 << "-" << options.interval.i3
                                                                  << " from " << options.locationsFile << std::endl;
         if (readLocations(locations, options.locationsFile, options.interval) != 0) return -1;
-        if (options.verbose) std::cerr << "[" << time(0) << "] " << length(locations) << " locations loaded." << std::endl;
     }
     else
     {
-        if (options.verbose) std::cerr << "[" << time(0) << "] " << "Sorting locations." << std::endl;
-        LocationPosLess less;
-        std::stable_sort(begin(locations, Standard()), end(locations, Standard()), less);
+        if (options.verbose) std::cerr << "[" << time(0) << "] " << "Reading locations from " << options.locationsFile << std::endl;
+        if (readLocations(locations, options.locationsFile) != 0) return -1;
     }
+    if (options.verbose) std::cerr << "[" << time(0) << "] " << length(locations) << " locations loaded." << std::endl;
 
-    // Discard locations with score below options.minLocScore or OTHER or longer than 2*maxInsertSize // TODO: move this to reading function!
-    unsigned i = 0;
+    // Discard locations with score below options.minLocScore or OTHER or longer than 2*maxInsertSize
+    // TODO: move this to reading function!
+    String<Location> locs;
+    unsigned i = 0, k=0;
+    resize(locs, length(locations));
     while (i < length(locations))
     {
-        if (locations[i].score < options.minLocScore || locations[i].chr == "OTHER" ||
-            locations[i].chrEnd - locations[i].chrStart > 2*options.maxInsertSize)
-            replace(locations, i, i+1, String<Location>());
-        else ++i;
+        if (locations[i].score >= options.minLocScore && locations[i].chr != "OTHER" &&
+            locations[i].chrEnd - locations[i].chrStart <= 2*options.maxInsertSize)
+        {
+            locs[k] = locations[i];
+            ++k;
+        }
+        ++i;
     }
+    resize(locs, k);
+    locations = locs;
+    clear(locs);
 
     if (length(locations) == 0)
     {
@@ -1044,6 +1071,10 @@ loadLocations(String<Location> & locations, PlacingOptions & options)
     if (options.verbose)
         std::cerr << "[" << time(0) << "] " << "Keeping " << length(locations) << " locations with score >= "
                   << options.minLocScore << " and shorter than " << (2*options.maxInsertSize) << std::endl;
+
+    if (options.verbose) std::cerr << "[" << time(0) << "] " << "Sorting locations." << std::endl;
+    LocationPosLess less;
+    std::stable_sort(begin(locations, Standard()), end(locations, Standard()), less);
 
     return 0;
 }
