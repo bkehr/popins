@@ -75,6 +75,14 @@ struct ContigMapOptions {
     {}
 };
 
+struct RefAlign_;
+typedef Tag<RefAlign_> RefAlign;
+struct SplitAlign_;
+typedef Tag<SplitAlign_> SplitAlign;
+struct SplitCombine_;
+typedef Tag<SplitCombine_> SplitCombine;
+
+template<typename TTag>
 struct PlacingOptions {
     CharString prefix;
     CharString sampleID;
@@ -85,12 +93,6 @@ struct PlacingOptions {
     CharString supercontigFile;
     CharString referenceFile;
 
-    bool all;
-    bool merge;
-    bool refAlign;
-    bool splitAlign;
-    bool combine;
-
     double minLocScore;
     unsigned minAnchorReads;
     unsigned readLength;
@@ -99,7 +101,7 @@ struct PlacingOptions {
 
     PlacingOptions() :
         prefix("."), sampleID(""), outFile("insertions.vcf"), locationsFile("locations.txt"), groupsFile("groups.txt"),
-      supercontigFile("supercontigs.fa"), referenceFile("genome.fa"),
+        supercontigFile("supercontigs.fa"), referenceFile("genome.fa"),
         minLocScore(0.3), minAnchorReads(2), readLength(100), maxInsertSize(800), groupDist(100)
     {}
 };
@@ -176,14 +178,21 @@ setHiddenOptions(ArgumentParser & parser, bool hide, ContigMapOptions &)
 }
 
 void
-setHiddenOptions(ArgumentParser & parser, bool hide, PlacingOptions &)
+setHiddenOptions(ArgumentParser & parser, bool hide, PlacingOptions<RefAlign> &)
 {
    hideOption(parser, "groupDist", hide);
-   hideOption(parser, "all", hide);
-   hideOption(parser, "merge", hide);
-   hideOption(parser, "splitAlign", hide);
-   hideOption(parser, "refAlign", hide);
-   hideOption(parser, "combine", hide);
+}
+
+void
+setHiddenOptions(ArgumentParser & /*parser*/, bool /*hide*/, PlacingOptions<SplitAlign> &)
+{
+	// Nothing to be done.
+}
+
+void
+setHiddenOptions(ArgumentParser & /*parser*/, bool /*hide*/, PlacingOptions<SplitCombine> &)
+{
+	// Nothing to be done.
 }
 
 void
@@ -359,47 +368,30 @@ setupParser(ArgumentParser & parser, ContigMapOptions & options)
 }
 
 void
-setupParser(ArgumentParser & parser, PlacingOptions & options)
+setupParser(ArgumentParser & parser, PlacingOptions<RefAlign> & options)
 {
-    setShortDescription(parser, "Identification of contig positions in reference genome.");
+    setShortDescription(parser, "Contig placing by alignment of contig ends to reference genome.");
     setVersion(parser, VERSION);
     setDate(parser, VERSION_DATE);
 
     addUsageLine(parser, "[\\fIOPTIONS\\fP]");
-    addUsageLine(parser, "[\\fIOPTIONS\\fP] -s \\fISAMPLE_ID\\fP");
 
-    addDescription(parser, "Identifies insertion positions of the (super-)contigs in the reference genome and writes them "
-    		"to a VCF file. The placing consists of four steps and only the third step needs to be run per sample. If no "
-    		"merged locations file exists, the first two steps are executed. If a sample ID is specified, the third step "
-    		"is executed for this sample. If no sample ID is specified and the merged locations file exists, the last step "
-    		"is executed. See --fullHelp for running a specific or all steps.");
-    addDescription(parser, "Step 1: The contig locations in the sample directories are merged into one file of locations.");
-    addDescription(parser, "Step 2: Prefixes/suffixes of contigs are aligned to the merged locations on the reference "
-    		"genome and VCF records are written if the alignment is successful. Locations of contigs that do not align to "
-    		"the reference genome are written to additional output files \\fIlocations_unplaced.txt\\fP in the sample "
-    		"directories. Further, groups of contigs that can be placed at the same position and whose prefixes/suffixes "
-    		"align to each other are written to another output file; only a single VCF record is written per group.");
-    addDescription(parser, "Step 3: All locations in a sample's \\fIlocations_unplaced.txt\\fP are split-read aligned "
-            "and the results are written to a file \\fIlocations_placed.txt\\fP in the sample directory.");
-    addDescription(parser, "Step 4: The results from split-read alignment (the \\fIlocations_placed.txt\\fP files) of all "
-            "samples are combined and appended to the VCF output file.");
+    addDescription(parser, "This is step 1/3 of contig placing. The contig locations in the sample directories are "
+    		"merged into one file of locations. Next, prefixes/suffixes of contigs are aligned to the merged locations "
+    		"on the reference genome and VCF records are written if the alignment is successful. Locations of contigs "
+    		"that do not align to the reference genome are written to additional output files \\fIlocations_unplaced.txt\\fP "
+    		"in the sample directories. Further, groups of contigs that can be placed at the same position and whose "
+    		"prefixes/suffixes align to each other are written to another output file; only a single VCF record is "
+    		"written per group.");
 
     // Setup the options.
     addSection(parser, "Input/output options");
     addOption(parser, ArgParseOption("p", "prefix", "Path to the sample directories.", ArgParseArgument::STRING, "PATH"));
-    addOption(parser, ArgParseOption("s", "sample", "The sample ID (when running step 3).", ArgParseArgument::STRING, "SAMPLE_ID"));
     addOption(parser, ArgParseOption("l", "locations", "Name of merged locations file.", ArgParseArgument::OUTPUT_FILE, "FILE"));
     addOption(parser, ArgParseOption("i", "insertions", "Name of VCF output file.", ArgParseArgument::OUTPUT_FILE, "VCF_FILE"));
     addOption(parser, ArgParseOption("c", "contigs", "Name of supercontigs file.", ArgParseArgument::INPUT_FILE, "FASTA_FILE"));
     addOption(parser, ArgParseOption("r", "reference", "Name of reference genome file.", ArgParseArgument::INPUT_FILE, "FASTA_FILE"));
     addOption(parser, ArgParseOption("g", "groups", "Name of file containing groups of contigs that can be placed at the same position and whose prefixes/suffixes align.", ArgParseArgument::OUTPUT_FILE, "FILE"));
-
-    addSection(parser, "Options to explicitly select placing steps:");
-    addOption(parser, ArgParseOption("", "all", "Execute all steps."));
-    addOption(parser, ArgParseOption("", "merge", "Execute the merging step."));
-    addOption(parser, ArgParseOption("", "refAlign", "Execute the reference alignment step."));
-    addOption(parser, ArgParseOption("", "splitAlign", "Execute the split alignment step."));
-    addOption(parser, ArgParseOption("", "combine", "Execute the combine step."));
 
     addSection(parser, "Algorithm options");
     addOption(parser, ArgParseOption("", "minScore", "Minimal anchoring score for a location.", ArgParseArgument::DOUBLE, "FLOAT"));
@@ -428,6 +420,78 @@ setupParser(ArgumentParser & parser, PlacingOptions & options)
     setDefaultValue(parser, "groupDist", options.groupDist);
     setDefaultValue(parser, "readLength", options.readLength);
     setDefaultValue(parser, "maxInsertSize", options.maxInsertSize);
+
+    // Hide some options from default help.
+    setHiddenOptions(parser, true, options);
+}
+
+void
+setupParser(ArgumentParser & parser, PlacingOptions<SplitAlign> & options)
+{
+    setShortDescription(parser, "Contig placing by split-read alignment.");
+    setVersion(parser, VERSION);
+    setDate(parser, VERSION_DATE);
+
+    addUsageLine(parser, "[\\fIOPTIONS\\fP] \\fISAMPLE_ID\\fP");
+
+    addDescription(parser, "This is step 2/3 of contig placing. All locations in a sample's "
+    		"\\fIlocations_unplaced.txt\\fP are split-read aligned and the results are written to a file "
+    		"\\fIlocations_placed.txt\\fP in the sample directory.");
+
+    addArgument(parser, ArgParseArgument(ArgParseArgument::STRING, "SAMPLE_ID"));
+
+    // Setup the options.
+    addSection(parser, "Input/output options");
+    addOption(parser, ArgParseOption("p", "prefix", "Path to the sample directories.", ArgParseArgument::STRING, "PATH"));
+    addOption(parser, ArgParseOption("c", "contigs", "Name of supercontigs file.", ArgParseArgument::INPUT_FILE, "FASTA_FILE"));
+    addOption(parser, ArgParseOption("r", "reference", "Name of reference genome file.", ArgParseArgument::INPUT_FILE, "FASTA_FILE"));
+
+    addSection(parser, "Algorithm options");
+    addOption(parser, ArgParseOption("", "maxInsertSize", "The maximum expected insert size of the read pairs.", ArgParseArgument::INTEGER, "INT"));
+    addOption(parser, ArgParseOption("", "readLength", "The length of the reads.", ArgParseArgument::INTEGER, "INT"));
+
+    // Set valid values.
+    setValidValues(parser, "contigs", "fa fna fasta");
+    setValidValues(parser, "reference", "fa fna fasta");
+
+    // Set default values.
+    setDefaultValue(parser, "prefix", "\'.\'");
+    setDefaultValue(parser, "contigs", options.supercontigFile);
+    setDefaultValue(parser, "reference", options.referenceFile);
+
+    setDefaultValue(parser, "readLength", options.readLength);
+    setDefaultValue(parser, "maxInsertSize", options.maxInsertSize);
+
+    // Hide some options from default help.
+    setHiddenOptions(parser, true, options);
+}
+
+void
+setupParser(ArgumentParser & parser, PlacingOptions<SplitCombine> & options)
+{
+    setShortDescription(parser, "Combining breakpoint positions from split-read alignment.");
+    setVersion(parser, VERSION);
+    setDate(parser, VERSION_DATE);
+
+    addUsageLine(parser, "[\\fIOPTIONS\\fP]");
+
+    addDescription(parser, "This is step 3/3 of contig placing. The results from split-read alignment (the "
+    		"\\fIlocations_placed.txt\\fP files) of all samples are combined and appended to the VCF output file.");
+
+    // Setup the options.
+    addSection(parser, "Input/output options");
+    addOption(parser, ArgParseOption("p", "prefix", "Path to the sample directories.", ArgParseArgument::STRING, "PATH"));
+    addOption(parser, ArgParseOption("i", "insertions", "Name of VCF output file.", ArgParseArgument::OUTPUT_FILE, "VCF_FILE"));
+    addOption(parser, ArgParseOption("r", "reference", "Name of reference genome file.", ArgParseArgument::INPUT_FILE, "FASTA_FILE"));
+
+    // Set valid values.
+    setValidValues(parser, "reference", "fa fna fasta");
+    setValidValues(parser, "insertions", "vcf");
+
+    // Set default values.
+    setDefaultValue(parser, "prefix", "\'.\'");
+    setDefaultValue(parser, "insertions", options.outFile);
+    setDefaultValue(parser, "reference", options.referenceFile);
 
     // Hide some options from default help.
     setHiddenOptions(parser, true, options);
@@ -596,12 +660,10 @@ getOptionValues(ContigMapOptions & options, ArgumentParser & parser)
 }
 
 void
-getOptionValues(PlacingOptions & options, ArgumentParser & parser)
+getOptionValues(PlacingOptions<RefAlign> & options, ArgumentParser & parser)
 {
     if (isSet(parser, "prefix"))
         getOptionValue(options.prefix, parser, "prefix");
-    if (isSet(parser, "sample"))
-       getOptionValue(options.sampleID, parser, "sample");
     if (isSet(parser, "locations"))
         getOptionValue(options.locationsFile, parser, "locations");
     if (isSet(parser, "contigs"))
@@ -623,18 +685,37 @@ getOptionValues(PlacingOptions & options, ArgumentParser & parser)
         getOptionValue(options.minAnchorReads, parser, "minReads");
     if (isSet(parser, "groupDist"))
         getOptionValue(options.groupDist, parser, "groupDist");
+}
 
-    options.all = isSet(parser, "all");
-    options.merge = isSet(parser, "merge");
-    options.refAlign = isSet(parser, "refAlign");
-    options.splitAlign = isSet(parser, "splitAlign");
-    options.combine = isSet(parser, "combine");
+void
+getOptionValues(PlacingOptions<SplitAlign> & options, ArgumentParser & parser)
+{
+    getArgumentValue(options.sampleID, parser, 0);
 
-    if ((options.all && (options.merge || options.refAlign || options.splitAlign || options.combine)) ||
-          (options.merge && (options.refAlign || options.splitAlign || options.combine)) ||
-         (options.refAlign && (options.splitAlign || options.combine)) ||
-         (options.splitAlign && options.combine))
-       SEQAN_THROW(ParseError("Too many steps. Only one of --all, --merge, --refAlign, --splitAlign, and --combine allowed."));
+    if (isSet(parser, "prefix"))
+        getOptionValue(options.prefix, parser, "prefix");
+    if (isSet(parser, "contigs"))
+        getOptionValue(options.supercontigFile, parser, "contigs");
+    if (isSet(parser, "insertions"))
+        getOptionValue(options.outFile, parser, "insertions");
+    if (isSet(parser, "reference"))
+        getOptionValue(options.referenceFile, parser, "reference");
+
+    if (isSet(parser, "maxInsertSize"))
+        getOptionValue(options.maxInsertSize, parser, "maxInsertSize");
+    if (isSet(parser, "readLength"))
+        getOptionValue(options.readLength, parser, "readLength");
+}
+
+void
+getOptionValues(PlacingOptions<SplitCombine> & options, ArgumentParser & parser)
+{
+    if (isSet(parser, "prefix"))
+        getOptionValue(options.prefix, parser, "prefix");
+    if (isSet(parser, "insertions"))
+        getOptionValue(options.outFile, parser, "insertions");
+    if (isSet(parser, "reference"))
+        getOptionValue(options.referenceFile, parser, "reference");
 }
 
 void

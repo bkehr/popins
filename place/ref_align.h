@@ -296,7 +296,11 @@ writeGroup(TStream & outStream, String<LocationInfo> & group, bool isInsertion)
 // ---------------------------------------------------------------------------------------
 
 bool
-writeSplitAlignList(CharString & filename, std::vector<int> & list, std::vector<Pair<CharString, bool> > & exclude, String<LocationInfo> & locations, PlacingOptions & options)
+writeSplitAlignList(CharString & filename,
+		std::vector<int> & list,
+		std::vector<Pair<CharString, bool> > & exclude,
+		String<LocationInfo> & locations,
+		PlacingOptions<RefAlign> & options)
 {
     typedef std::vector<int>::iterator TIter;
 
@@ -576,7 +580,7 @@ bool
 alignsToRef(LocationInfo & loc,
         std::vector<std::pair<CharString, Dna5String> > & contigs,
         FaiIndex & fai,
-        PlacingOptions & options)
+        PlacingOptions<RefAlign> & options)
 {
     unsigned dist = 10;            // TODO: Make this a program parameter.
     unsigned preSufLen = 100;    // TODO: Make this a program parameter.
@@ -764,7 +768,7 @@ processOtherEnd(TStream & vcfStream,
         LocationInfo & loc,
         std::vector<std::pair<CharString, Dna5String> > & contigs,
         FaiIndex & fai,
-        PlacingOptions & options)
+        PlacingOptions<RefAlign> & options)
 {
     if (loc.otherEnd == false && loc.insPos != -1)
     {
@@ -803,7 +807,7 @@ findRefAlignedGroups(String<String<LocationInfo> > & refAlignedGroups,
         String<LocationInfo> & locations,
         std::vector<std::pair<CharString, Dna5String> > & contigs,
         FaiIndex & fai,
-        PlacingOptions & options)
+        PlacingOptions<RefAlign> & options)
 {
     Iterator<String<LocationInfo> >::Type it = begin(locations);
     Iterator<String<LocationInfo> >::Type itEnd = end(locations);
@@ -851,7 +855,7 @@ processRefAlignedGroups(TStream1 & vcfStream,
         SampleLists & splitAlignLists,
         std::vector<std::pair<CharString, Dna5String> > & contigs,
         FaiIndex & fai,
-        PlacingOptions & options)
+        PlacingOptions<RefAlign> & options)
 {
     typename Iterator<String<String<LocationInfo> > >::Type it = begin(groups);
     typename Iterator<String<String<LocationInfo> > >::Type itEnd = end(groups);
@@ -943,7 +947,7 @@ processUnalignedGroups(TStream1 & vcfStream,
         SampleLists & splitAlignLists,
         std::vector<std::pair<CharString, Dna5String> > & contigs,
         FaiIndex & fai,
-        PlacingOptions & options)
+        PlacingOptions<RefAlign> & options)
 {
     typename Iterator<String<String<LocationInfo> > >::Type it = begin(groups);
     typename Iterator<String<String<LocationInfo> > >::Type itEnd = end(groups);
@@ -970,7 +974,7 @@ processOverlappingLocs(TStream1 & vcfStream,
         String<LocationInfo> & locations,
         std::vector<std::pair<CharString, Dna5String> > & contigs,
         FaiIndex & fai,
-        PlacingOptions & options)
+        PlacingOptions<RefAlign> & options)
 {
     String<String<LocationInfo> > refAlignedGroups;
     String<String<LocationInfo> > unalignedGroups;
@@ -1017,7 +1021,7 @@ popins_place_ref_align(TStream & vcfStream,
         String<LocationInfo> & locations,
         std::vector<std::pair<CharString, Dna5String> > & contigs,
         FaiIndex & fai,
-        PlacingOptions & options)
+        PlacingOptions<RefAlign> & options)
 {
     printStatus("Aligning contigs to reference");
 

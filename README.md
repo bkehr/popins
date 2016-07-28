@@ -7,6 +7,8 @@ Population-scale detection of novel-sequence insertions.
 Prerequisites
 -------------
 
+* GCC version >= 4.9 (supports C++14)
+* Seqan core library, version 2.2.0 (https://github.com/seqan/seqan)
 * bwa (https://github.com/lh3/bwa)
 * velvet (https://github.com/dzerbino/velvet)
 * samtools (https://github.com/samtools/samtools)
@@ -19,11 +21,13 @@ PopIns was tested with bwa 0.7.10-r789, velvet 1.2.10, samtools 1.3, and sickle 
 Installation
 ------------
 
-1. Install all prerequisites (bwa, velvet, samtools, and sickle).
+1. Download the SeqAn library. You do not need to follow the SeqAn install instructions. You only need the directory .../include/seqan with all its content (the SeqAn core library).
+2. If you decide to save the seqan directory not in the popins directory, make a symbolic link to the seqan directory in the popins directory, i.e. type 'ln -s /path/to/seqan seqan' in the popins directory.
+3. Install all prerequisites (bwa, velvet, samtools, and sickle).
    Compile velvet with a larger maximum k-mer length than the default if desired, e.g. MAXKMERLENGTH=63.
    A maximum k-mer length of 47 or higher is necessary for default parameters of PopIns (velvet's default is 31).
-2. Set the paths to bwa, velveth, velvetg, samtools, and sickle in the file popins.config if they are not in your PATH variable.
-3. Run 'make' in the popins directory.
+4. Set the paths to bwa, velveth, velvetg, samtools, and sickle in the file popins.config if they are not in your PATH variable.
+5. Run 'make' in the popins directory.
 
 If everything is setup correctly, this will create the binary 'popins'.
 
@@ -31,17 +35,17 @@ If everything is setup correctly, this will create the binary 'popins'.
 Usage
 -----
 
-PopIns consists of five commands: assemble, merge, contigmap, place, and genotype.
+PopIns consists of seven commands: assemble, merge, contigmap, place-refalign, place-splitalign, place-finish, and genotype.
 For a short description of each command and an overview of arguments and options, run
 
     ./popins <COMMAND> --help
     
-The only input needed is a set of BAM files (PopIns was only tested on BAM files created with BWA-MEM) and the reference genome.
-By default, the reference genome is assumed to be present in the current directory and named `genome.fa`, but a different file path can be specified in those commands that need it.
+The only input needed is a set of BAM files and the reference genome. Additionally, a sequence collection can be specified to filter out contamination.
+By default, the reference genome is assumed to be present in the current directory and named `genome.fa`, but a different file path can be specified via the options of the place and genotype commands.
 
-When analyzing multiple samples simultaneously, the assemble, contigmap, and genotype commands as well as a substep of the place command need to be run for each sample separately, whereas the merge command and the remaining steps of the place commands need to be run only once for all samples together.
+When analyzing multiple samples simultaneously, the assemble, contigmap, place-splitalign and genotype commands need to be run for each sample separately, whereas the merge and place commands need to be run only once for all samples together.
 
-PopIns creates and uses a working directory for each sample, which is named by the sample ID (retrived from BAM file header or specify).
+PopIns creates and uses a working directory for each sample, which is named by the sample ID (retrieved from BAM file header or user specified).
 By default, the sample directories are created in the current directory. Use the --prefix option if you want them to reside in another location.
 
 Once all steps have been run, each sample directory contains the following files:
@@ -90,22 +94,26 @@ The contigmap command aligns the reads with low-quality alignments of a sample t
 The BWA output file is merged with the sample's `non_ref.bam` file into a `non_ref_new.bam` file where information about read mates is set.
 
 
-### The place command
+### The place-refalign command
 
-    ./popins place [OPTIONS]
+    ./popins place-refalign [OPTIONS]
 
-The place command identifies insertion positions of the (super-)contigs in the reference genome and writes them to a VCF file.
-The placing consists of four steps.
-Only the third step needs to be run per sample unsing the option `--sample <SAMPLE ID>`.
+This is the first of three place-* commands, which together identify insertion positions of the (super-)contigs in the reference genome and write them to a VCF file.
+The place-refalign command merges contig locations in the sample directories into one file of locations and aligns prefixes/suffixes of contigs to the merged locations on the reference genome. VCF records are written if the alignment is successful. Locations of contigs that do not align to the reference genome are written to additional output files `locations_unplaced.txt` in the sample directories.
 
-Step 1: The contig locations in the sample directories are merged into one file of locations.
 
-Step 2: Prefixes/suffixes of contigs are aligned to the merged locations on the reference genome and VCF records are written if the alignment is successful.
-Locations of contigs that do not align to the reference genome are written to additional output files `locations_unplaced.txt` in the sample directories.
+### The place-splitalign command
 
-Step 3: All locations in a sample's `locations_unplaced.txt` are split-read aligned and the results are written to a file `locations_placed.txt` in the sample directory.
+    ./popins place-splitalign [OPTIONS] <SAMPLE_ID>
 
-Step 4: The results from split-read alignment (the `locations_placed.txt` files) of all samples are combined and appended to the VCF output file.
+This is the second of the three place-* commands. The place-splitalign command split-read aligns all locations in a sample's `locations_unplaced.txt` and writes the results to a file `locations_placed.txt` in the sample directory.
+
+
+### The place-finish command
+
+    ./popins place-finish [OPTIONS]
+    
+This is the third of the three place-* commands. The place-finish command combines the results from split-read alignment (the `locations_placed.txt` files) of all samples and appends them to the VCF output file.
 
 
 ### The genotype command
@@ -132,11 +140,11 @@ Example
     ./popins contigmap sample2
     ./popins contigmap sample3
     
-    ./popins place              # locations.txt does not exist --> runs substeps 1 and 2
-    ./popins place -s sample1   # a sample ID is given --> runs substep 3
-    ./popins place -s sample2
-    ./popins place -s sample3
-    ./popins place              # locations.txt now exists --> runs substeps 4
+    ./popins place-refalign
+    ./popins place-splitalign sample1
+    ./popins place-splitalign sample2
+    ./popins place-splitalign sample3
+    ./popins place-finish
     
     ./popins genotype sample1
     ./popins genotype sample2

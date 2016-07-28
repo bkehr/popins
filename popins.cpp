@@ -21,11 +21,13 @@ void printHelp(char const * name)
     std::cerr << "    \033[1m" << name << " COMMAND\033[0m [\033[4mOPTIONS\033[0m]" << std::endl;
     std::cerr << std::endl;
     std::cerr << "\033[1mCOMMAND\033[0m" << std::endl;
-    std::cerr << "    \033[1massemble\033[0m   Crop unmapped reads from a bam file and assemble them." << std::endl;
-    std::cerr << "    \033[1mmerge\033[0m      Merge contigs from assemblies of unmapped reads into supercontigs." << std::endl;
-    std::cerr << "    \033[1mcontigmap\033[0m  Map unmapped reads to (super-)contigs." << std::endl;
-    std::cerr << "    \033[1mplace\033[0m      Find position of (super-)contigs in the reference genome." << std::endl;
-    std::cerr << "    \033[1mgenotype\033[0m   Genotype insertions for an individual." << std::endl;
+    std::cerr << "    \033[1massemble\033[0m          Crop unmapped reads from a bam file and assemble them." << std::endl;
+    std::cerr << "    \033[1mmerge\033[0m             Merge contigs from assemblies of unmapped reads into supercontigs." << std::endl;
+    std::cerr << "    \033[1mcontigmap\033[0m         Map unmapped reads to (super-)contigs." << std::endl;
+    std::cerr << "    \033[1mplace-refalign\033[0m    Find position of (super-)contigs by aligning contig ends to the reference genome." << std::endl;
+    std::cerr << "    \033[1mplace-splitalign\033[0m  Find position of (super-)contigs by split-read alignment (per sample)." << std::endl;
+    std::cerr << "    \033[1mplace-finish\033[0m      Combine position found by split-read alignment from all samples." << std::endl;
+    std::cerr << "    \033[1mgenotype\033[0m          Determine genotypes of all insertions in a sample." << std::endl;
     std::cerr << std::endl;
     std::cerr << "\033[1mVERSION\033[0m" << std::endl;
     std::cerr << "    " << VERSION << ", Date: " << VERSION_DATE << std::endl;
@@ -54,7 +56,9 @@ int main(int argc, char const ** argv)
     if (strcmp(command,"assemble") == 0) ret = popins_assemble(argc, argv);
     else if (strcmp(command,"merge") == 0) ret = popins_merge(argc, argv);
     else if (strcmp(command,"contigmap") == 0) ret = popins_contigmap(argc, argv);
-    else if (strcmp(command,"place") == 0) ret = popins_place(argc, argv);
+    else if (strcmp(command,"place-refalign") == 0) ret = popins_place_refalign(argc, argv);
+    else if (strcmp(command,"place-splitalign") == 0) ret = popins_place_splitalign(argc, argv);
+    else if (strcmp(command,"place-finish") == 0) ret = popins_place_finish(argc, argv);
     else if (strcmp(command,"genotype") == 0) ret = popins_genotype(argc, argv);
     else if (strcmp(command, "--help") == 0 || strcmp(command, "-h") == 0)
     {

@@ -19,51 +19,6 @@
 using namespace seqan;
 
 // ==========================================================================
-// Function selectPlacingSteps
-// ==========================================================================
-
-void
-selectPlacingSteps(PlacingOptions & options)
-{
-    // User specified --all option.
-    if (options.all)
-    {
-       options.merge = true;
-       options.refAlign = true;
-       options.splitAlign = true;
-       options.combine = true;
-       printStatus("Executing all placing steps.");
-       return;
-    }
-
-    // Step was not explicitly specified.
-    if (!(options.all || options.merge || options.refAlign || options.splitAlign || options.combine))
-    {
-       if (!exists(options.locationsFile))
-       {
-          options.merge = true;
-          options.refAlign = true;
-           printStatus("Executing the merging and reference alignment steps.");
-          return;
-       }
-       else if (options.sampleID != "")
-       {
-          options.splitAlign = true;
-          std::ostringstream msg;
-          msg << "Executing the splitAlignment step for \'" << options.sampleID << "\'.";
-          printStatus(msg);
-          return;
-       }
-       else
-       {
-          options.combine = true;
-          printStatus("Executing the combine step.");
-          return;
-       }
-    }
-}
-
-// ==========================================================================
 // Functions openVcf(), initVcf()
 // ==========================================================================
 
@@ -81,9 +36,9 @@ openVcf(TStream & vcfStream, CharString & filename)
     return 0;
 }
 
-template<typename TStream>
+template<typename TStream, typename TTag>
 bool
-initVcf(TStream & vcfStream, PlacingOptions & options, FaiIndex & fai)
+initVcf(TStream & vcfStream, PlacingOptions<TTag> & options, FaiIndex & fai)
 {
     vcfStream.open(toCString(options.outFile), std::ios_base::out);
     if (!vcfStream.is_open())
@@ -126,8 +81,9 @@ initVcf(TStream & vcfStream, PlacingOptions & options, FaiIndex & fai)
 // Function mergeLocations()
 // =======================================================================================
 
+template<typename TTag>
 int
-mergeLocations(String<Location> & locations, PlacingOptions & options)
+mergeLocations(String<Location> & locations, PlacingOptions<TTag> & options)
 {
     // Open output file.
     std::fstream stream(toCString(options.locationsFile), std::ios::out);
@@ -235,7 +191,7 @@ loadContigs(std::vector<std::pair<CharString, TSeq> > & contigs,
 }
 
 bool
-loadInputAndSplitReadAlign(CharString & samplePath, PlacingOptions & options, FaiIndex & fai)
+loadInputAndSplitReadAlign(CharString & samplePath, PlacingOptions<SplitAlign> & options, FaiIndex & fai)
 {
     // Load the POPINS_SAMPLE_INFO file.
     SampleInfo sampleInfo;
@@ -246,7 +202,7 @@ loadInputAndSplitReadAlign(CharString & samplePath, PlacingOptions & options, Fa
     // Load the locations.
     String<LocationInfo> locs;
     CharString locationsFile = getFileName(samplePath, "locations_unplaced.txt");
-    if (loadLocations(locs, sampleInfo.sample_id, locationsFile, options.minLocScore, 0u, options.maxInsertSize) != 0)
+    if (loadLocations(locs, sampleInfo.sample_id, locationsFile, 0.0, 0u, options.maxInsertSize) != 0)
         return 1;
 
    // Load the contig file.
@@ -262,102 +218,117 @@ loadInputAndSplitReadAlign(CharString & samplePath, PlacingOptions & options, Fa
 }
 
 // ==========================================================================
-// Function popins_place()
+// Function popins_place_refalign()
 // ==========================================================================
 
-int popins_place(int argc, char const ** argv)
+int popins_place_refalign(int argc, char const ** argv)
 {
     // Parse the command line to get option values.
-    PlacingOptions options;
+    PlacingOptions<RefAlign> options;
     ArgumentParser::ParseResult res = parseCommandLine(options, argc, argv);
     if (res != ArgumentParser::PARSE_OK)
         return res;
 
-    selectPlacingSteps(options);
-
-    // Step 1: MERGE THE LOCATIONS FROM ALL INDIVIDUALS
-    if (options.merge)
+    // Placing step 1: MERGE THE LOCATIONS FROM ALL INDIVIDUALS
+    if (!exists(options.locationsFile))
     {
-        String<Location> locs;
-        mergeLocations(locs, options);
+    	String<Location> locs;
+    	mergeLocations(locs, options);
+    }
+    else
+    {
+    	std::ostringstream msg;
+    	msg << "WARNING: Locations file \'" << options.locationsFile << "\' exists. Skipping merging step.";
+    	printStatus(msg);
     }
 
-    // Step 2: REFERENCE ALIGNMENT FOR ALL LOCATIONS
-    if (options.refAlign)
+    // Placing step 2: REFERENCE ALIGNMENT FOR ALL LOCATIONS
+
+    // Open the FAI file of the reference genome.
+    FaiIndex fai;
+    if (!open(fai, toCString(options.referenceFile)))
     {
-        // Open the FAI file of the reference genome.
-        FaiIndex fai;
-        if (!open(fai, toCString(options.referenceFile)))
-        {
-            std::cerr << "ERROR: Could not open FAI index for " << options.referenceFile << std::endl;
-            return 7;
-        }
-
-        // Load the locations.
-        String<LocationInfo> locs;
-        if (loadLocations(locs, options.sampleID, options.locationsFile, options.minLocScore, options.minAnchorReads, options.maxInsertSize) != 0)
-            return 7;
-
-        // Load the contig file.
-        std::vector<std::pair<CharString, Dna5String> > contigs;
-        if (loadContigs(contigs, locs, options.supercontigFile) != 0)
-            return 7;
-
-        // Open and initialize the output file.
-        std::ofstream vcfStream;
-        if (initVcf(vcfStream, options, fai) != 0)
-            return 7;
-
-        // Compute the reference alignments.
-        if (popins_place_ref_align(vcfStream, locs, contigs, fai, options) != 0)
-            return 7;
+        std::cerr << "ERROR: Could not open FAI index for " << options.referenceFile << std::endl;
+        return 7;
     }
 
-    // Step 3: SPLIT-READ ALIGNMENT PER INDIVIDUAL
-    if (options.splitAlign)
-    {
-        // Open the FAI file of the reference genome.
-        FaiIndex fai;
-        if (!open(fai, toCString(options.referenceFile)))
-        {
-            std::cerr << "ERROR: Could not open FAI index for " << options.referenceFile << std::endl;
-            return 7;
-        }
+    // Load the locations.
+    String<LocationInfo> locs;
+    CharString sID = "";
+    if (loadLocations(locs, sID, options.locationsFile, options.minLocScore, options.minAnchorReads, options.maxInsertSize) != 0)
+        return 7;
 
-        // Do the split read alignment only for the specified sample and return.
-       if (options.sampleID != "")
-       {
-          CharString samplePath = getFileName(options.prefix, options.sampleID);
-          if (loadInputAndSplitReadAlign(samplePath, options, fai) != 0)
-             return 7;
+    // Load the contig file.
+    std::vector<std::pair<CharString, Dna5String> > contigs;
+    if (loadContigs(contigs, locs, options.supercontigFile) != 0)
+        return 7;
 
-          return 0;
-       }
+    // Open and initialize the output file.
+    std::ofstream vcfStream;
+    if (initVcf(vcfStream, options, fai) != 0)
+        return 7;
 
-       // Do the split read alignment only for all samples.
-       String<CharString> sampleIDs = listSubdirectories(options.prefix);
-       for (unsigned i = 0; i < length(sampleIDs); ++i)
-       {
-          CharString samplePath = getFileName(options.prefix, sampleIDs[i]);
-          if (loadInputAndSplitReadAlign(samplePath, options, fai) != 0)
-             return 7;
-       }
-    }
-
-    // Step 4: COMBINE SPLIT-READ ALIGNMENTS FROM ALL INDIVIDUALS
-    if (options.combine)
-    {
-       // Open the output file.
-       std::ofstream vcfStream;
-        if (openVcf(vcfStream, options.outFile) != 0)
-            return 7;
-
-        // Combine the split-read alignments of all individuals and write VCF records.
-        if (popins_place_combine(vcfStream, options.prefix, options.referenceFile, options.outFile) != 0)
-            return 7;
-    }
+    // Compute the reference alignments.
+    if (popins_place_ref_align(vcfStream, locs, contigs, fai, options) != 0)
+        return 7;
 
     return 0;
+}
+
+// ==========================================================================
+// Function popins_place_splitalign()
+// ==========================================================================
+
+int popins_place_splitalign(int argc, char const ** argv)
+{
+    // Parse the command line to get option values.
+    PlacingOptions<SplitAlign> options;
+    ArgumentParser::ParseResult res = parseCommandLine(options, argc, argv);
+    if (res != ArgumentParser::PARSE_OK)
+        return res;
+
+    // Placing step 3: SPLIT-READ ALIGNMENT PER INDIVIDUAL
+
+    // Open the FAI file of the reference genome.
+    FaiIndex fai;
+    if (!open(fai, toCString(options.referenceFile)))
+    {
+        std::cerr << "ERROR: Could not open FAI index for " << options.referenceFile << std::endl;
+        return 7;
+    }
+
+    // Do the split read alignment for the specified sample.
+    CharString samplePath = getFileName(options.prefix, options.sampleID);
+    if (loadInputAndSplitReadAlign(samplePath, options, fai) != 0)
+       return 7;
+
+    return 0;
+}
+
+// ==========================================================================
+// Function popins_place_finish()
+// ==========================================================================
+
+int popins_place_finish(int argc, char const ** argv)
+{
+    // Parse the command line to get option values.
+    PlacingOptions<SplitCombine> options;
+    ArgumentParser::ParseResult res = parseCommandLine(options, argc, argv);
+    if (res != ArgumentParser::PARSE_OK)
+        return res;
+
+	// Placing step 4: COMBINE SPLIT-READ ALIGNMENTS FROM ALL INDIVIDUALS
+
+    // Open the output file.
+    std::ofstream vcfStream;
+     if (openVcf(vcfStream, options.outFile) != 0)
+         return 7;
+
+     // Combine the split-read alignments of all individuals and write VCF records.
+     if (popins_place_combine(vcfStream, options.prefix, options.referenceFile, options.outFile) != 0)
+         return 7;
+
+     return 0;
 }
 
 #endif  // POPINS_PLACE_H
