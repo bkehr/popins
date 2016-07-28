@@ -521,7 +521,7 @@ setupParser(ArgumentParser & parser, GenotypingOptions & options)
     addOption(parser, ArgParseOption("r", "reference", "Name of reference genome file.", ArgParseArgument::INPUT_FILE, "FASTA_FILE"));
 
     addSection(parser, "Algorithm options");
-    addOption(parser, ArgParseOption("m", "model", "Model used for genotyping", ArgParseArgument::STRING, "GENOTYPING_MODEL"));
+    addOption(parser, ArgParseOption("m", "model", "Model used for genotyping.", ArgParseArgument::STRING, "GENOTYPING_MODEL"));
     addOption(parser, ArgParseOption("w", "window", "Region window size.", ArgParseArgument::INTEGER, "INT"));
     addOption(parser, ArgParseOption("rg", "addReadGroup", "Add read group."));
 
@@ -696,8 +696,6 @@ getOptionValues(PlacingOptions<SplitAlign> & options, ArgumentParser & parser)
         getOptionValue(options.prefix, parser, "prefix");
     if (isSet(parser, "contigs"))
         getOptionValue(options.supercontigFile, parser, "contigs");
-    if (isSet(parser, "insertions"))
-        getOptionValue(options.outFile, parser, "insertions");
     if (isSet(parser, "reference"))
         getOptionValue(options.referenceFile, parser, "reference");
 
@@ -766,6 +764,178 @@ getOptionValues(GenotypingOptions & options, ArgumentParser & parser)
     options.useReadCounts = isSet(parser, "readCounts");
 }
 
+ArgumentParser::ParseResult
+checkInput(AssemblyOptions & options)
+{
+	ArgumentParser::ParseResult res = ArgumentParser::PARSE_OK;
+
+	if (options.prefix != "." && !exists(options.prefix))
+	{
+		std::cerr << "ERROR: Path to sample direcotories \'" << options.prefix << "\' does not exist." << std::endl;
+		res = ArgumentParser::PARSE_ERROR;
+	}
+
+	if (!exists(options.mappingFile))
+	{
+		std::cerr << "ERROR: Input BAM file \'" << options.mappingFile << "\' does not exist." << std::endl;
+		res = ArgumentParser::PARSE_ERROR;
+	}
+
+	CharString baiFile = options.mappingFile;
+	baiFile += ".bai";
+	if (!exists(baiFile))
+	{
+		std::cerr << "ERROR: BAM index file \'" << baiFile << "\' does not exist." << std::endl;
+		res = ArgumentParser::PARSE_ERROR;
+	}
+
+	if (options.matepairFile != "" && !exists(options.matepairFile))
+	{
+		std::cerr << "ERROR: Input BAM file \'" << options.matepairFile << "\' does not exist." << std::endl;
+		res = ArgumentParser::PARSE_ERROR;
+	}
+
+	return res;
+}
+
+ArgumentParser::ParseResult
+checkInput(MergingOptions & options)
+{
+	ArgumentParser::ParseResult res = ArgumentParser::PARSE_OK;
+
+	if (options.prefix != "." && !exists(options.prefix))
+	{
+		std::cerr << "ERROR: Path to sample direcotories \'" << options.prefix << "\' does not exist." << std::endl;
+		res = ArgumentParser::PARSE_ERROR;
+	}
+
+	return res;
+}
+
+ArgumentParser::ParseResult
+checkInput(ContigMapOptions & options)
+{
+	ArgumentParser::ParseResult res = ArgumentParser::PARSE_OK;
+
+	if (options.prefix != "." && !exists(options.prefix))
+	{
+		std::cerr << "ERROR: Path to sample direcotories \'" << options.prefix << "\' does not exist." << std::endl;
+		res = ArgumentParser::PARSE_ERROR;
+	}
+
+	if (!exists(options.contigFile))
+	{
+		std::cerr << "ERROR: Contig file \'" << options.contigFile << "\' does not exist." << std::endl;
+		res = ArgumentParser::PARSE_ERROR;
+	}
+
+	return res;
+}
+
+ArgumentParser::ParseResult
+checkInput(PlacingOptions<RefAlign> & options)
+{
+	ArgumentParser::ParseResult res = ArgumentParser::PARSE_OK;
+
+	if (options.prefix != "." && !exists(options.prefix))
+	{
+		std::cerr << "ERROR: Path to sample direcotories \'" << options.prefix << "\' does not exist." << std::endl;
+		res = ArgumentParser::PARSE_ERROR;
+	}
+
+	if (!exists(options.supercontigFile))
+	{
+		std::cerr << "ERROR: Contig file \'" << options.supercontigFile << "\' does not exist." << std::endl;
+		res = ArgumentParser::PARSE_ERROR;
+	}
+
+	if (!exists(options.referenceFile))
+	{
+		std::cerr << "ERROR: Reference genome file \'" << options.referenceFile << "\' does not exist." << std::endl;
+		res = ArgumentParser::PARSE_ERROR;
+	}
+
+	return res;
+}
+
+ArgumentParser::ParseResult
+checkInput(PlacingOptions<SplitAlign> & options)
+{
+	ArgumentParser::ParseResult res = ArgumentParser::PARSE_OK;
+
+	if (options.prefix != "." && !exists(options.prefix))
+	{
+		std::cerr << "ERROR: Path to sample direcotories \'" << options.prefix << "\' does not exist." << std::endl;
+		res = ArgumentParser::PARSE_ERROR;
+	}
+
+	if (!exists(options.supercontigFile))
+	{
+		std::cerr << "ERROR: Contig file \'" << options.supercontigFile << "\' does not exist." << std::endl;
+		res = ArgumentParser::PARSE_ERROR;
+	}
+
+	if (!exists(options.referenceFile))
+	{
+		std::cerr << "ERROR: Reference genome file \'" << options.referenceFile << "\' does not exist." << std::endl;
+		res = ArgumentParser::PARSE_ERROR;
+	}
+
+	return res;
+}
+
+ArgumentParser::ParseResult
+checkInput(PlacingOptions<SplitCombine> & options)
+{
+	ArgumentParser::ParseResult res = ArgumentParser::PARSE_OK;
+
+	if (options.prefix != "." && !exists(options.prefix))
+	{
+		std::cerr << "ERROR: Path to sample direcotories \'" << options.prefix << "\' does not exist." << std::endl;
+		res = ArgumentParser::PARSE_ERROR;
+	}
+
+	if (!exists(options.referenceFile))
+	{
+		std::cerr << "ERROR: Reference genome file \'" << options.referenceFile << "\' does not exist." << std::endl;
+		res = ArgumentParser::PARSE_ERROR;
+	}
+
+	return res;
+}
+
+ArgumentParser::ParseResult
+checkInput(GenotypingOptions & options)
+{
+	ArgumentParser::ParseResult res = ArgumentParser::PARSE_OK;
+
+	if (options.prefix != "." && !exists(options.prefix))
+	{
+		std::cerr << "ERROR: Path to sample direcotories \'" << options.prefix << "\' does not exist." << std::endl;
+		res = ArgumentParser::PARSE_ERROR;
+	}
+
+	if (!exists(options.vcfFile))
+	{
+		std::cerr << "ERROR: Input VCF file \'" << options.vcfFile << "\' does not exist." << std::endl;
+		res = ArgumentParser::PARSE_ERROR;
+	}
+
+	if (!exists(options.supercontigFile))
+	{
+		std::cerr << "ERROR: Contig file \'" << options.supercontigFile << "\' does not exist." << std::endl;
+		res = ArgumentParser::PARSE_ERROR;
+	}
+
+	if (!exists(options.referenceFile))
+	{
+		std::cerr << "ERROR: Reference genome file \'" << options.referenceFile << "\' does not exist." << std::endl;
+		res = ArgumentParser::PARSE_ERROR;
+	}
+
+	return res;
+}
+
 // ==========================================================================
 // Function parseCommandLine()
 // ==========================================================================
@@ -803,6 +973,9 @@ parseCommandLine(TOptions & options, int argc, char const ** argv)
 
     // Collect the option values.
     getOptionValues(options, parser);
+
+    // Check if input files exist.
+    res = checkInput(options);
 
     return res;
 }
