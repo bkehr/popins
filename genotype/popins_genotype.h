@@ -63,17 +63,18 @@ popins_genotype(int argc, char const ** argv)
 
     CharString samplePath = getFileName(options.prefix, options.sampleID);
 
-   // Load the POPINS_SAMPLE_INFO file.
-   SampleInfo sampleInfo;
-   CharString sampleInfoFile = getFileName(samplePath, "POPINS_SAMPLE_INFO");
-   if (readSampleInfo(sampleInfo, sampleInfoFile) != 0)
-      return 1;
+    // Load the POPINS_SAMPLE_INFO file.
+    SampleInfo sampleInfo;
+    CharString sampleInfoFile = getFileName(samplePath, "POPINS_SAMPLE_INFO");
+    if (readSampleInfo(sampleInfo, sampleInfoFile) != 0)
+       return 1;
 
     // Open the input VCF file and prepare output VCF stream.
     VcfFileIn vcfIn(toCString(options.vcfFile));
     CharString outfile = getFileName(samplePath, "insertions.vcf");
+    std::ofstream vcfStream(toCString(outfile));
     VcfFileOut vcfOut(vcfIn);
-    open(vcfOut, std::cout, Vcf());
+    open(vcfOut, vcfStream, Vcf());
 
     appendName(sampleNamesCache(context(vcfOut)), options.sampleID);
 

@@ -146,9 +146,9 @@ Example
     ./popins place-splitalign sample3
     ./popins place-finish
     
-    ./popins genotype sample1 > sample1/insertions.vcf
-    ./popins genotype sample2 > sample2/insertions.vcf
-    ./popins genotype sample3 > sample3/insertions.vcf
+    ./popins genotype sample1
+    ./popins genotype sample2
+    ./popins genotype sample3
     
 
 
