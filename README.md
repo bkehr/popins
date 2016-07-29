@@ -41,7 +41,7 @@ For a short description of each command and an overview of arguments and options
     ./popins <COMMAND> --help
     
 The only input needed is a set of BAM files and the reference genome. Additionally, a sequence collection can be specified to filter out contamination.
-By default, the reference genome is assumed to be present in the current directory and named `genome.fa`, but a different file path can be specified via the options of the place and genotype commands.
+By default, the reference genome is assumed to be present in the current directory and named `genome.fa` together with its index `genome.fa.fai`, but a different file path can be specified via the options of the place and genotype commands.
 
 When analyzing multiple samples simultaneously, the assemble, contigmap, place-splitalign and genotype commands need to be run for each sample separately, whereas the merge and place commands need to be run only once for all samples together.
 
@@ -129,6 +129,7 @@ Example
 
     mkdir popins_example && cd popins_example/
     ln -s /path/to/hg38.fa genome.fa
+    ln -s /path/to/hg38.fa genome.fa.fai
     
     ./popins assemble --sample sample1 /path/to/first_sample.bam
     ./popins assemble --sample sample2 /path/to/second_sample.bam
