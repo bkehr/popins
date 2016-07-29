@@ -380,6 +380,11 @@ popins_place_combine(TStream & vcfStream, CharString & prefix, CharString & refe
             ++progress;
         }
     }
+    while (progress < 50)
+    {
+    	std::cerr << "*" << std::flush;
+    	++progress;
+    }
     std::cerr << std::endl;
 
     msg.str("");

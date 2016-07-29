@@ -427,6 +427,7 @@ popins_place_split_read_align(CharString & outFile,
 
     std::cerr << "0%   10   20   30   40   50   60   70   80   90   100%" << std::endl;
     std::cerr << "|----|----|----|----|----|----|----|----|----|----|" << std::endl;
+    std::cerr << "*" << std::flush;
 
     double fiftieth = length(locs) / 50.0;
     unsigned progress = 0;
@@ -478,6 +479,11 @@ popins_place_split_read_align(CharString & outFile,
 
         ++i;
         ++it;
+    }
+    while (progress < 50)
+    {
+    	std::cout << "*" << std::flush;
+    	++progress;
     }
     std::cerr << std::endl;
 

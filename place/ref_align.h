@@ -1064,6 +1064,7 @@ popins_place_ref_align(TStream & vcfStream,
 
     std::cerr << "0%   10   20   30   40   50   60   70   80   90   100%" << std::endl;
     std::cerr << "|----|----|----|----|----|----|----|----|----|----|" << std::endl;
+    std::cout << "*" << std::flush;
 
     double fiftieth = length(locations) / 50.0;
     unsigned progress = 0;
@@ -1120,7 +1121,12 @@ popins_place_ref_align(TStream & vcfStream,
     if (length(rev) != 0)
         processOverlappingLocs(vcfStream, outGroups, groups, splitAlignLists, rev, contigs, fai, options);
 
-    std::cerr << "*" << std::endl;
+    while (progress < 50)
+    {
+    	std::cerr << "*" << std::flush;
+    	++progress;
+    }
+    std::cerr << std::endl;
     printStatus("Writing locations of contigs that do not align to the reference (per sample).");
 
     // Find locations to exclude from splitAlignLists

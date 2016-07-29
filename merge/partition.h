@@ -78,14 +78,19 @@ partitionContigs(UnionFind<int> & uf,
     printStatus("- Aligning contigs");
     std::cerr << "0%   10   20   30   40   50   60   70   80   90   100%" << std::endl;
     std::cerr << "|----|----|----|----|----|----|----|----|----|----|" << std::endl;
+    std::cerr << "*" << std::flush;
 
-    unsigned fiftieth = std::max(fwdContigCount / 50, 1);
+    double fiftieth = fwdContigCount / 50.0;
+    unsigned progress = 0;
 
     // Iterate over the forward contigs.
     for (int a = 0; a < fwdContigCount; ++a)
     {
-        if (a%fiftieth == 0)
+    	while (progress * fiftieth < a)
+        {
             std::cerr << "*" << std::flush;
+            ++progress;
+        }
 
         // initialization of swift finder
         TFinder swiftFinder(contigs[a].seq, 1000, 1);
@@ -128,6 +133,11 @@ partitionContigs(UnionFind<int> & uf,
             // stop aligning this contig if it is already in a component with more than 100 other contigs
             if (uf._values[findSet(uf, a)] < -100) break;
         }
+    }
+    while (progress < 50)
+    {
+    	std::cerr << "*" << std::flush;
+    	++progress;
     }
     std::cerr << std::endl;
 
