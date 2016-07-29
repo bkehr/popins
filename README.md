@@ -8,7 +8,7 @@ Prerequisites
 -------------
 
 * GCC version >= 4.9 (supports C++14)
-* Seqan core library, version 2.2.0 (https://github.com/seqan/seqan)
+* SeqAn core library, version 2.2.0 (https://github.com/seqan/seqan)
 * bwa (https://github.com/lh3/bwa)
 * velvet (https://github.com/dzerbino/velvet)
 * samtools (https://github.com/samtools/samtools)
