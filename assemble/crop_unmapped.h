@@ -313,6 +313,7 @@ findOtherReads(BamFileOut & matesStream,
             rID = it->first.i1;
             bool hasAligns;
             jumpToRegion(inStream, hasAligns, rID, it->first.i2, maxValue<TPos>(), bamIndex);
+            if (!hasAligns) continue;
             readRecord(record, inStream);
         }
 
