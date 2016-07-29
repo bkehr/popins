@@ -1107,4 +1107,4 @@ mergeLocations(std::fstream & stream, String<Location> & locations, String<Pair<
     return 0;
 }
 
-#endif // #ifndef POPINS_LOCATION_H_
+#endif // POPINS_LOCATION_H_
