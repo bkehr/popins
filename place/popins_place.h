@@ -202,6 +202,13 @@ loadInputAndSplitReadAlign(CharString & samplePath, PlacingOptions<SplitAlign> &
     // Load the locations.
     String<LocationInfo> locs;
     CharString locationsFile = getFileName(samplePath, "locations_unplaced.txt");
+    if (!exists(locationsFile))
+    {
+        std::ostringstream msg;
+        msg << "WARNING: No file \'locations_unplaced.txt\' present for sample \'" << options.sampleID<< "\'.";
+        printStatus(msg);
+        return 0;
+    }
     if (loadLocations(locs, sampleInfo.sample_id, locationsFile, 0.0, 0u, options.maxInsertSize) != 0)
         return 1;
 
