@@ -328,10 +328,10 @@ isComponentOrNode(CharString & name)
     typedef Position<CharString>::Type TPos;
 
     TPos i = 0;
-    while (i < length(name) - 3 && infix(name, i, i+4) != "NODE" && infix(name, i, i+4) != "COMP")
+    while (i + 3 < length(name) && infix(name, i, i+4) != "NODE" && infix(name, i, i+4) != "COMP")
         ++i;
 
-    if (i < length(name) - 3)
+    if (i + 3 < length(name))
         return true;
 
     return false;
