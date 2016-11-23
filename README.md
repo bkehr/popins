@@ -11,7 +11,7 @@ Prerequisites
 * SeqAn core library, version 2.2.0 (https://github.com/seqan/seqan)
 * bwa (https://github.com/lh3/bwa)
 * velvet (https://github.com/dzerbino/velvet)
-* samtools (https://github.com/samtools/samtools)
+* samtools, version >= 1.3 (https://github.com/samtools/samtools)
 * sickle (https://github.com/najoshi/sickle)
 
 PopIns uses the 'bwa mem' alignment algorithm, thus, requires bwa version 0.7.X.
