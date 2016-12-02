@@ -264,12 +264,20 @@ int popins_contigmap(int argc, char const ** argv)
     }
 
     msg.str("");
+    msg << "Reading chromosomes from " << options.referenceFile;
+    printStatus(msg);
+
+    std::set<CharString> chromosomes;
+    if (readChromosomes(chromosomes, options.referenceFile) != 0)
+        return 7;
+
+    msg.str("");
     msg << "Computing contig locations from anchoring reads in " << nonRefNew;
     printStatus(msg);
 
     // Find anchoring locations of contigs for this individual.
     String<Location> locations;
-    findLocations(locations, nonRefNew, options.maxInsertSize);
+    findLocations(locations, nonRefNew, chromosomes, options.maxInsertSize);
     scoreLocations(locations);
     if (writeLocations(locationsFile, locations) != 0) return 7;
 

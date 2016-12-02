@@ -61,6 +61,7 @@ struct ContigMapOptions {
     CharString prefix;
     CharString sampleID;
     CharString contigFile;
+    CharString referenceFile;
 
     bool bestAlignment;
     int maxInsertSize;
@@ -70,8 +71,8 @@ struct ContigMapOptions {
     CharString memory;
 
     ContigMapOptions() :
-       prefix("."), sampleID(""), contigFile("supercontigs.fa"),
-      bestAlignment(false), maxInsertSize(800), deleteNonRefNew(false), threads(1), memory("768M")
+        prefix("."), sampleID(""), contigFile("supercontigs.fa"), referenceFile("genome.fa"),
+        bestAlignment(false), maxInsertSize(800), deleteNonRefNew(false), threads(1), memory("768M")
     {}
 };
 
@@ -344,6 +345,7 @@ setupParser(ArgumentParser & parser, ContigMapOptions & options)
     addSection(parser, "Input/output options");
     addOption(parser, ArgParseOption("p", "prefix", "Path to the sample directories.", ArgParseArgument::STRING, "PATH"));
     addOption(parser, ArgParseOption("c", "contigs", "Name of (super-)contigs file.", ArgParseArgument::INPUT_FILE, "FASTA_FILE"));
+    addOption(parser, ArgParseOption("r", "reference", "Name of reference genome file.", ArgParseArgument::INPUT_FILE, "FASTA_FILE"));
 
     addSection(parser, "Algorithm options");
     addOption(parser, ArgParseOption("b", "best", "Do not use BWA-mem's -a option to output all alignments of a read."));
@@ -354,14 +356,20 @@ setupParser(ArgumentParser & parser, ContigMapOptions & options)
     addOption(parser, ArgParseOption("t", "threads", "Number of threads to use for BWA and samtools sort.", ArgParseArgument::INTEGER, "INT"));
     addOption(parser, ArgParseOption("m", "memory", "Maximum memory per thread for samtools sort; suffix K/M/G recognized.", ArgParseArgument::STRING, "STR"));
 
+    // Set valid values.
+    setMinValue(parser, "threads", "1");
+    setValidValues(parser, "reference", "fa fna fasta");
+    setValidValues(parser, "contigs", "fa fna fasta");
+
+    // Set default values.
     setDefaultValue(parser, "prefix", "\'.\'");
-    setDefaultValue(parser, "c", options.contigFile);
+    setDefaultValue(parser, "contigs", options.contigFile);
+    setDefaultValue(parser, "reference", options.referenceFile);
     setDefaultValue(parser, "best", "false");
     setDefaultValue(parser, "maxInsertSize", options.maxInsertSize);
     setDefaultValue(parser, "noNonRefNew", "false");
     setDefaultValue(parser, "threads", options.threads);
     setDefaultValue(parser, "memory", options.memory);
-    setMinValue(parser, "threads", "1");
 
     // Hide some options from default help.
     setHiddenOptions(parser, true, options);
@@ -647,6 +655,8 @@ getOptionValues(ContigMapOptions & options, ArgumentParser & parser)
         getOptionValue(options.prefix, parser, "prefix");
     if (isSet(parser, "contigs"))
         getOptionValue(options.contigFile, parser, "contigs");
+    if (isSet(parser, "reference"))
+        getOptionValue(options.referenceFile, parser, "reference");
     if (isSet(parser, "best"))
         options.bestAlignment = true;
     if (isSet(parser, "maxInsertSize"))
@@ -826,6 +836,12 @@ checkInput(ContigMapOptions & options)
 	if (!exists(options.contigFile))
 	{
 		std::cerr << "ERROR: Contig file \'" << options.contigFile << "\' does not exist." << std::endl;
+		res = ArgumentParser::PARSE_ERROR;
+	}
+
+	if (!exists(options.referenceFile))
+	{
+		std::cerr << "ERROR: Reference genome file \'" << options.referenceFile << "\' does not exist." << std::endl;
 		res = ArgumentParser::PARSE_ERROR;
 	}
 

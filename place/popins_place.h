@@ -47,6 +47,10 @@ initVcf(TStream & vcfStream, PlacingOptions<TTag> & options, FaiIndex & fai)
         return 1;
     }
 
+    std::set<CharString> chromosomes;
+    if (readChromosomes(chromosomes, options.referenceFile) != 0)
+        return 1;
+
     // Get today's date, e.g. '2016-Apr-15'.
     time_t now = time(0);
     struct tm tstruct;
@@ -64,7 +68,7 @@ initVcf(TStream & vcfStream, PlacingOptions<TTag> & options, FaiIndex & fai)
     for (unsigned rID = 0; rID < numSeqs(fai); ++rID)
     {
         CharString seqName = sequenceName(fai, rID);
-        if (isChromosome(seqName))
+        if (isChromosome(seqName, chromosomes))
             vcfStream << "##contig=<ID=" << seqName << ",length=" << sequenceLength(fai, rID) << ">" << std::endl;
     }
 

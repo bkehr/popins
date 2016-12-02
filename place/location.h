@@ -338,17 +338,9 @@ isComponentOrNode(CharString & name)
 }
 
 inline bool
-isChromosome(CharString & name) // TODO: Allow user to specify sequence names.
+isChromosome(CharString & name, std::set<CharString> & chromosomes)
 {
-    typedef Position<CharString>::Type TPos;
-    TPos i = 0;
-    if (length(name) > 3 && prefix(name, 3) == "chr") i = 3;
-
-    if ((length(name) == i+1 && (isdigit(name[i]) || name[i] == 'X' || name[i] == 'Y')) ||
-            (length(name) == i+2 && isdigit(name[i]) && isdigit(name[i+1])))
-        return true;
-
-    return false;
+	return chromosomes.count(name) == 1;
 }
 
 // ==========================================================================
@@ -563,7 +555,7 @@ listToLocs(String<Location> & locs, String<AnchoringRecord> & list, unsigned max
 // ==========================================================================
 
 int
-findLocations(String<Location> & locations, CharString & nonRefFile, unsigned maxInsertSize)
+findLocations(String<Location> & locations, CharString & nonRefFile, std::set<CharString> & chromosomes, unsigned maxInsertSize)
 {
     typedef Pair<CharString, unsigned> TContigEnd;
     typedef std::map<TContigEnd, unsigned> TMap;
@@ -599,7 +591,7 @@ findLocations(String<Location> & locations, CharString & nonRefFile, unsigned ma
             else i = 3;
         }
 
-        if (isChromosome(record.chr))
+        if (isChromosome(record.chr, chromosomes))
             appendValue(lists[i], record);
         else
             ++anchorsToOther[TContigEnd(record.contig, i%2)];

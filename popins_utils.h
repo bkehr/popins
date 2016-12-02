@@ -2,6 +2,7 @@
 #define POPINS_UILS_H_
 
 #include <seqan/bam_io.h>
+#include <seqan/seq_io.h>
 
 using namespace seqan;
 
@@ -338,6 +339,30 @@ parseInterval(Triple<CharString, unsigned, unsigned> & out, CharString & in)
     out.i1 = prefix(in, colonPos);
     out.i2 = lexicalCast<unsigned>(infix(in, colonPos + 1, dashPos));
     out.i3 = lexicalCast<unsigned>(suffix(in, dashPos + 1));
+
+    return 0;
+}
+
+bool
+readChromosomes(std::set<CharString> & chromosomes, CharString & referenceFile)
+{
+    // Load or build and save the FASTA index.
+    FaiIndex faiIndex;
+    if (!open(faiIndex, toCString(referenceFile)))
+    {
+        if (!build(faiIndex, toCString(referenceFile)))
+        {
+            std::cerr << "ERROR: FASTA index could not be loaded or built.\n";
+            return 1;
+        }
+        if (!save(faiIndex))    // Name is stored from when reading.
+        {
+            std::cerr << "WARNING: FASTA index could not be written to disk.\n";
+        }
+    }
+
+    for (unsigned i = 0; i < length(faiIndex.seqNameStore); ++i)
+        chromosomes.insert(faiIndex.seqNameStore[i]);
 
     return 0;
 }
