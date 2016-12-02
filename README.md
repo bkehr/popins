@@ -168,4 +168,4 @@ Presented at the 64th Annual Meeting of The American Society of Human Genetics, 
 Contact
 -------
 
-For questions and comments contact birte.kehr [ at ] decode.is
+For questions and comments contact birte.kehr [ at ] bihealth.de
