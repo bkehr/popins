@@ -164,10 +164,6 @@ Kehr B., Melsted P., Halldórsson B. V. (2016).
 PopIns: population-scale detection of novel sequence insertions.
 [Bioinformatics, 32(7):961-967](http://bioinformatics.oxfordjournals.org/content/32/7/961.abstract).
 
-Kehr B., Melsted P., Jónasdóttir A., Jónasdóttir A., Sigurðsson A., Gylfason A., Guðbjartsson D., Halldórsson B. V., Stefánsson K. (2014).
-Detecting novel sequence insertions in 3000 individuals from short read sequencing data. (Abstract/Program #38).
-Presented at the 64th Annual Meeting of The American Society of Human Genetics, October 20, 2014, San Diego, CA.
-
 
 Contact
 -------
