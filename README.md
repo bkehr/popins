@@ -156,7 +156,7 @@ Example
 References
 ----------
 
-Kehr B., Helgadóttir A., Melsted P., Jónsson H., Helgason H., Jónasdóttir Ad., Jónasdóttir As.,	Sigurðsson Á., Gylfason A., Halldórsson G. H., Kristmundsdóttir S., Þorgeirsson G., Ólafsson Í., Holm H., Þorsteinsdóttir U., Sulem P., Helgason A., Guðbjartsson D. F., Halldórsson B. V., Stefánsson K. (2017).
+Kehr B., Helgadóttir A., Melsted P., Jónsson H., Helgason H., Jónasdóttir Að., Jónasdóttir As.,	Sigurðsson Á., Gylfason A., Halldórsson G. H., Kristmundsdóttir S., Þorgeirsson G., Ólafsson Í., Holm H., Þorsteinsdóttir U., Sulem P., Helgason A., Guðbjartsson D. F., Halldórsson B. V., Stefánsson K. (2017).
 Diversity in non-repetitive human sequences not found in the reference genome.
 [Nature Genetics,](http://rdcu.be/pDbJ) [doi:10.1038/ng.3801](http://www.nature.com/ng/journal/vaop/ncurrent/full/ng.3801.html).
 
