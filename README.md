@@ -156,9 +156,13 @@ Example
 References
 ----------
 
+Kehr B., Helgadóttir A., Melsted P., Jónsson H., Helgason H., Jónasdóttir Ad., Jónasdóttir As.,	Sigurðsson Á., Gylfason A., Halldórsson G. H., Kristmundsdóttir S., Þorgeirsson G., Ólafsson Í., Holm H., Þorsteinsdóttir U., Sulem P., Helgason A., Guðbjartsson D. F., Halldórsson B. V., Stefánsson K. (2017).
+Diversity in non-repetitive human sequences not found in the reference genome.
+[Nature Genetics,](http://rdcu.be/pDbJ) [doi:10.1038/ng.3801](http://www.nature.com/ng/journal/vaop/ncurrent/full/ng.3801.html).
+
 Kehr B., Melsted P., Halldórsson B. V. (2016).
 PopIns: population-scale detection of novel sequence insertions.
-[Bioinformatics, 32(7):961-967.](http://bioinformatics.oxfordjournals.org/content/32/7/961.abstract)
+[Bioinformatics, 32(7):961-967](http://bioinformatics.oxfordjournals.org/content/32/7/961.abstract).
 
 Kehr B., Melsted P., Jónasdóttir A., Jónasdóttir A., Sigurðsson A., Gylfason A., Guðbjartsson D., Halldórsson B. V., Stefánsson K. (2014).
 Detecting novel sequence insertions in 3000 individuals from short read sequencing data. (Abstract/Program #38).
