@@ -76,6 +76,7 @@ In addition to sample-specific files, a number of output files are written (by d
 
 The assemble command finds reads without high-quality alignment in the input BAM file, quality filters them using SICKLE and assembles them into contigs using VELVET.
 If a reference fasta file is specified, the reads are first remapped to this reference using BWA-MEM and only reads that remain without high-quality alignment after remapping are quality-filtered and assembled.
+Make sure that the reference fasta file is BWA-indexed, i.e. run `bwa index /path/to/reference.fa` before running the assemble command.
 
 
 ### The merge command
