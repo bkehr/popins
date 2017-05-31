@@ -458,7 +458,10 @@ popins_place_split_read_align(CharString & outFile,
         }
         else
         {
-            (*it).loc.chrStart -= maxInsertSize;
+            if ((*it).loc.chrStart > maxInsertSize)
+                (*it).loc.chrStart -= maxInsertSize;
+            else
+                (*it).loc.chrStart = 0;
 
             // Load the genomic region and keep it in forward orientation.
             Dna5String ref = loadInterval(fai, (*it).loc.chr, (*it).loc.chrStart, (*it).loc.chrEnd);
