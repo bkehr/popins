@@ -163,12 +163,18 @@ otherEnd(Location & loc, unsigned readLength, unsigned maxInsertSize)
 
     if (loc.chrOri)
     {
-        rc.chrStart = loc.chrEnd - readLength;
+        if (loc.chrEnd < readLength)
+            loc.chrStart = 0;
+        else
+            rc.chrStart = loc.chrEnd - readLength;
         rc.chrEnd = loc.chrEnd + maxInsertSize;
     }
     else
     {
-        rc.chrStart = loc.chrStart - maxInsertSize;
+        if (loc.chrStart < maxInsertSize)
+            rc.chrStart = 0;
+        else
+            rc.chrStart = loc.chrStart - maxInsertSize;
         rc.chrEnd = loc.chrStart + readLength;
     }
 
