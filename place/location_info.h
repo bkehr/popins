@@ -129,6 +129,8 @@ void
 writeVcf(TStream & outStream, LocationInfo & loc, unsigned groupSize, FaiIndex & fai)
 {
     Dna5String ref = loadInterval(fai, loc.loc.chr, loc.refPos, loc.refPos + 1);
+    if (length(ref) == 0)
+        ref = "N";
 
     outStream << loc.loc.chr;
     outStream << "\t" << loc.refPos + 1;
