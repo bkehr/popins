@@ -254,7 +254,7 @@ setupParser(ArgumentParser & parser, AssemblyOptions & options)
 
     // Set valid and default values.
     setValidValues(parser, "adapters", "HiSeq HiSeqX");
-    setValidValues(parser, "reference", "fa fna fasta");
+    setValidValues(parser, "reference", "fa fna fasta gz");
     setMinValue(parser, "threads", "1");
 
     setDefaultValue(parser, "prefix", "\'.\'");
