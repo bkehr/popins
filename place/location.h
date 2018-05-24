@@ -459,7 +459,8 @@ distanceToContigEnd(BamAlignmentRecord & record,
 inline bool
 readAnchoringRecord(AnchoringRecord & record,
         std::map<Triple<CharString, CharString, unsigned>, unsigned> & goodReads,
-        BamFileIn & stream)
+        BamFileIn & stream,
+        std::set<CharString> & chromosomes)
 {
     BamAlignmentRecord r;
     while (!atEnd(stream))
@@ -474,7 +475,7 @@ readAnchoringRecord(AnchoringRecord & record,
             continue;
 
         CharString rName = getContigName(r, stream);
-        bool isContig = isComponentOrNode(rName);
+        bool isContig = !isChromosome(rName, chromosomes);
 
         if (!isContig && r.mapQ < 20)
             continue;
@@ -577,7 +578,7 @@ findLocations(String<Location> & locations, CharString & nonRefFile, std::set<Ch
     std::map<Triple<CharString, CharString, unsigned>, unsigned> goodReads; // Triple(qName, chrom, beginPos) -> alignEndPos
     while (!atEnd(inStream))
     {
-        if (readAnchoringRecord(record, goodReads, inStream) == 1)
+        if (readAnchoringRecord(record, goodReads, inStream, chromosomes) == 1)
             break;
 
         if (record.chrOri)
