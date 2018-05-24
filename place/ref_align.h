@@ -1070,7 +1070,7 @@ popins_place_ref_align(TStream & vcfStream,
 
     std::cerr << "0%   10   20   30   40   50   60   70   80   90   100%" << std::endl;
     std::cerr << "|----|----|----|----|----|----|----|----|----|----|" << std::endl;
-    std::cout << "*" << std::flush;
+    std::cerr << "*" << std::flush;
 
     double fiftieth = length(locations) / 50.0;
     unsigned progress = 0;
