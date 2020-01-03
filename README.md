@@ -31,6 +31,8 @@ Installation
 
 If everything is setup correctly, this will create the binary 'popins'.
 
+*Note*: Please check that you have used the correct version of SeqAn by running `popins genotype -h`. The last line of the help message needs to be `Seqan version: 2.2.0` .
+
 
 Usage
 -----
