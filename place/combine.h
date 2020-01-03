@@ -274,12 +274,19 @@ chooseBestPlacing(unsigned & refPos, unsigned & contigPos, unsigned & support, P
 // ---------------------------------------------------------------------------------------
 
 template<typename TStream>
-void
+bool
 writeVcf(TStream & outStream, PlacedLocation & loc, unsigned refPos, unsigned contigPos, unsigned support, FaiIndex & fai)
 {
-    Dna5String ref = loadInterval(fai, loc.loc.chr, refPos, refPos + 1);
-    if (length(ref) == 0)
-        ref = "N";
+    unsigned idx = 0;
+    if (!getIdByName(idx, fai, loc.loc.chr))
+    {
+        std::cerr << "ERROR: Could not find " << loc.loc.chr << " in FAI index." << std::endl;
+        return 1;
+    }
+
+    Dna5String ref = "N";
+    if (refPos < sequenceLength(fai, idx))
+        readRegion(ref, fai, idx, refPos, refPos + 1);
 
     outStream << loc.loc.chr;
     outStream << "\t" << refPos + 1;
@@ -301,12 +308,13 @@ writeVcf(TStream & outStream, PlacedLocation & loc, unsigned refPos, unsigned co
     outStream << ";" << "SR=" << support;    // TODO Write more info fields.
 
     outStream << std::endl;
+    return 0;
 }
 
 // ---------------------------------------------------------------------------------------
 
 template<typename TStream>
-void
+bool
 writeVcf(TStream & outStream, PlacedLocation & loc, FaiIndex & fai)
 {
     unsigned refPos;
@@ -315,9 +323,16 @@ writeVcf(TStream & outStream, PlacedLocation & loc, FaiIndex & fai)
     else
         refPos = loc.loc.chrStart;
 
-    Dna5String ref = loadInterval(fai, loc.loc.chr, refPos, refPos + 1);
-    if (length(ref) == 0)
-        ref = "N";
+    unsigned idx = 0;
+    if (!getIdByName(idx, fai, loc.loc.chr))
+    {
+        std::cerr << "ERROR: Could not find " << loc.loc.chr << " in FAI index." << std::endl;
+        return 1;
+    }
+
+    Dna5String ref = "N";
+    if (refPos < sequenceLength(fai, idx))
+        readRegion(ref, fai, idx, refPos, refPos + 1);
 
     outStream << loc.loc.chr;
     outStream << "\t" << refPos + 1;
@@ -338,6 +353,8 @@ writeVcf(TStream & outStream, PlacedLocation & loc, FaiIndex & fai)
         outStream << "\t" << "NOANCHOR";      // TODO Write more info fields.
 
     outStream << std::endl;
+
+    return 0;
 }
 
 // =======================================================================================

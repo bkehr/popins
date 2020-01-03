@@ -104,8 +104,8 @@ appendLocation(String<LocationInfo> & locs, Location & loc)
 // Function loadInterval()
 // ==========================================================================
 
-Dna5String
-loadInterval(FaiIndex & fai, CharString & chrom, unsigned beginPos, unsigned endPos)
+bool
+loadInterval(Dna5String & refInfix, FaiIndex & fai, CharString & chrom, unsigned beginPos, unsigned endPos)
 {
     unsigned idx = 0;
     if (!getIdByName(idx, fai, chrom))
@@ -114,10 +114,12 @@ loadInterval(FaiIndex & fai, CharString & chrom, unsigned beginPos, unsigned end
         return 1;
     }
 
-    Dna5String refInfix;
+    if (beginPos > endPos)
+        beginPos = 0;
+
     readRegion(refInfix, fai, idx, beginPos, endPos);
 
-    return refInfix;
+    return 0;
 }
 
 // ==========================================================================
@@ -125,12 +127,19 @@ loadInterval(FaiIndex & fai, CharString & chrom, unsigned beginPos, unsigned end
 // ==========================================================================
 
 template<typename TStream>
-void
+bool
 writeVcf(TStream & outStream, LocationInfo & loc, unsigned groupSize, FaiIndex & fai)
 {
-    Dna5String ref = loadInterval(fai, loc.loc.chr, loc.refPos, loc.refPos + 1);
-    if (length(ref) == 0)
-        ref = "N";
+    unsigned idx = 0;
+    if (!getIdByName(idx, fai, loc.loc.chr))
+    {
+        std::cerr << "ERROR: Could not find " << loc.loc.chr << " in FAI index." << std::endl;
+        return 1;
+    }
+
+    Dna5String ref = "N";
+    if (loc.refPos < sequenceLength(fai, idx))
+        readRegion(ref, fai, idx, loc.refPos, loc.refPos + 1);
 
     outStream << loc.loc.chr;
     outStream << "\t" << loc.refPos + 1;
@@ -165,6 +174,8 @@ writeVcf(TStream & outStream, LocationInfo & loc, unsigned groupSize, FaiIndex &
     if (loc.insPos == -1)
         outStream << ";RPL";
     outStream << std::endl;
+
+    return 0;
 }
 
 #endif /* POPINS_LOCATION_INFO_H_ */

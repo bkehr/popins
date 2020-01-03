@@ -448,7 +448,9 @@ popins_place_split_read_align(CharString & outFile,
             (*it).loc.chrEnd += maxInsertSize;
 
             // Load the genomic region and reverse complement it.
-            Dna5String r = loadInterval(fai, (*it).loc.chr, (*it).loc.chrStart, (*it).loc.chrEnd);
+            Dna5String r;
+            if (loadInterval(r, fai, (*it).loc.chr, (*it).loc.chrStart, (*it).loc.chrEnd) != 0)
+                return 1;
             ModifiedString<ModifiedString<Dna5String, ModComplementDna5>, ModReverse> ref(r);
 
             // Load the contig prefix/suffix and split align.
@@ -464,7 +466,9 @@ popins_place_split_read_align(CharString & outFile,
                 (*it).loc.chrStart = 0;
 
             // Load the genomic region and keep it in forward orientation.
-            Dna5String ref = loadInterval(fai, (*it).loc.chr, (*it).loc.chrStart, (*it).loc.chrEnd);
+            Dna5String ref;
+            if (loadInterval(ref, fai, (*it).loc.chr, (*it).loc.chrStart, (*it).loc.chrEnd) != 0)
+                return 1;
 
             // Load the contig prefix/suffix and split align.
             highCov = loadContigAndSplitAlign(insPos, bamStream, bai, ref, contigIt->second, (*it).loc, info.avg_cov, readLength);

@@ -617,7 +617,8 @@ alignsToRef(LocationInfo & loc,
 
     if (loc.loc.chrOri)
     {
-        ref = loadInterval(fai, loc.loc.chr, loc.loc.chrStart - options.readLength, loc.loc.chrEnd + options.maxInsertSize);
+        if (loadInterval(ref, fai, loc.loc.chr, loc.loc.chrStart - options.readLength, loc.loc.chrEnd + options.maxInsertSize) != 0)
+            return 1;
 
         if (loc.loc.contigOri)
         {
@@ -682,7 +683,8 @@ alignsToRef(LocationInfo & loc,
     }
     else
     {
-        ref = loadInterval(fai, loc.loc.chr, loc.loc.chrStart - options.maxInsertSize, loc.loc.chrEnd + options.readLength);
+        if (loadInterval(ref, fai, loc.loc.chr, loc.loc.chrStart - options.maxInsertSize, loc.loc.chrEnd + options.readLength) != 0)
+            return 1;
 
         if (loc.loc.contigOri)
         {
@@ -775,7 +777,7 @@ addToLists(SampleLists  & splitAlignLists,
 // ---------------------------------------------------------------------------------------
 
 template<typename TStream>
-void
+bool
 processOtherEnd(TStream & vcfStream,
         SampleLists & splitAlignLists,
         LocationInfo & loc,
@@ -795,17 +797,19 @@ processOtherEnd(TStream & vcfStream,
         if (alignsToRef(rc, contigs, fai, options))
         {
             if (loc.insPos != -1 && loc.loc.chrOri && loc.insPos >= rc.insPos)
-                return;
+                return 0;
             if (loc.insPos != -1 && !loc.loc.chrOri && loc.insPos < rc.insPos)
-                return;
+                return 0;
             if (rc.insPos == -1)
-                return;
+                return 0;
 
-            writeVcf(vcfStream, rc, 0, fai);
+            if (writeVcf(vcfStream, rc, 0, fai) != 0)
+                return 1;
         }
         else
             addToLists(splitAlignLists, rc);
     }
+    return 0;
 }
 
 // =======================================================================================
@@ -861,7 +865,7 @@ findRefAlignedGroups(String<String<LocationInfo> > & refAlignedGroups,
 // ---------------------------------------------------------------------------------------
 
 template<typename TStream1, typename TStream2>
-void
+bool
 processRefAlignedGroups(TStream1 & vcfStream,
         TStream2 & groupStream,
         String<String<LocationInfo> > & groups,
@@ -877,7 +881,8 @@ processRefAlignedGroups(TStream1 & vcfStream,
     {
         if ((*it)[0].insPos != -1)
         {
-            writeVcf(vcfStream, (*it)[0], length(*it), fai);
+            if (writeVcf(vcfStream, (*it)[0], length(*it), fai) != 0)
+                return 1;
             writeGroup(groupStream, *it, true);
         }
         else
@@ -885,10 +890,12 @@ processRefAlignedGroups(TStream1 & vcfStream,
             writeGroup(groupStream, *it, false);
         }
 
-        processOtherEnd(vcfStream, splitAlignLists, (*it)[0], contigs, fai, options);
+        if (processOtherEnd(vcfStream, splitAlignLists, (*it)[0], contigs, fai, options) != 0)
+            return 1;
 
         ++it;
     }
+    return 0;
 }
 
 // ---------------------------------------------------------------------------------------
@@ -953,7 +960,7 @@ findUnalignedGroups(String<String<LocationInfo> > & groups,
 // ---------------------------------------------------------------------------------------
 
 template<typename TStream1, typename TStream2>
-void
+bool
 processUnalignedGroups(TStream1 & vcfStream,
         TStream2 & groupStream,
         String<String<LocationInfo> > & groups,
@@ -969,9 +976,11 @@ processUnalignedGroups(TStream1 & vcfStream,
     {
         addToLists(splitAlignLists, (*it)[0]);
         writeGroup(groupStream, *it, true);
-        processOtherEnd(vcfStream, splitAlignLists, (*it)[0], contigs, fai, options);
+        if (processOtherEnd(vcfStream, splitAlignLists, (*it)[0], contigs, fai, options) != 0)
+            return 1;
         ++it;
     }
+    return 0;
 }
 
 // ---------------------------------------------------------------------------------------
@@ -979,7 +988,7 @@ processUnalignedGroups(TStream1 & vcfStream,
 // ---------------------------------------------------------------------------------------
 
 template<typename TStream1, typename TStream2>
-void
+bool
 processOverlappingLocs(TStream1 & vcfStream,
         TStream2 & groupStream,
         String<String<unsigned> > & groups,
@@ -1007,7 +1016,8 @@ processOverlappingLocs(TStream1 & vcfStream,
     //    std::cout << "refAlignedGroups: " << length(refAlignedGroups) << std::endl;
 
     // Handle the ref-aligned groups.
-    processRefAlignedGroups(vcfStream, groupStream, refAlignedGroups, splitAlignLists, contigs, fai, options);
+    if (processRefAlignedGroups(vcfStream, groupStream, refAlignedGroups, splitAlignLists, contigs, fai, options) != 0)
+        return 1;
     appendGroups(groups, refAlignedGroups);
     clear(refAlignedGroups);
 
@@ -1018,10 +1028,13 @@ processOverlappingLocs(TStream1 & vcfStream,
     clear(unaligned);
 
     // Handle the unaligned groups.
-    processUnalignedGroups(vcfStream, groupStream, unalignedGroups, splitAlignLists, contigs, fai, options);
+    if (processUnalignedGroups(vcfStream, groupStream, unalignedGroups, splitAlignLists, contigs, fai, options) != 0)
+        return 1;
     appendGroups(groups, unalignedGroups);
 
     //    std::cout << "   unlignedGroups: " << length(unalignedGroups) << std::endl;
+
+    return 0;
 }
 
 // =======================================================================================
@@ -1093,7 +1106,8 @@ popins_place_ref_align(TStream & vcfStream,
         {
             if (length(fwd) != 0 && (prevChromFwd != (*it).loc.chr || prevPosFwd + options.groupDist < (*it).loc.chrStart))
             {
-                processOverlappingLocs(vcfStream, outGroups, groups, splitAlignLists, fwd, contigs, fai, options);
+                if (processOverlappingLocs(vcfStream, outGroups, groups, splitAlignLists, fwd, contigs, fai, options) != 0)
+                    return 1;
                 clear(fwd);
             }
             appendValue(fwd, *it);
@@ -1104,7 +1118,8 @@ popins_place_ref_align(TStream & vcfStream,
         {
             if (length(rev) != 0 && (prevChromRev != (*it).loc.chr || prevPosRev + options.groupDist < (*it).loc.chrStart))
             {
-                processOverlappingLocs(vcfStream, outGroups, groups, splitAlignLists, rev, contigs, fai, options);
+                if (processOverlappingLocs(vcfStream, outGroups, groups, splitAlignLists, rev, contigs, fai, options) != 0)
+                    return 1;
                 clear(rev);
             }
             appendValue(rev, *it);
@@ -1122,10 +1137,12 @@ popins_place_ref_align(TStream & vcfStream,
     }
 
     if (length(fwd) != 0)
-        processOverlappingLocs(vcfStream, outGroups, groups, splitAlignLists, fwd, contigs, fai, options);
+        if (processOverlappingLocs(vcfStream, outGroups, groups, splitAlignLists, fwd, contigs, fai, options) != 0)
+            return 1;
 
     if (length(rev) != 0)
-        processOverlappingLocs(vcfStream, outGroups, groups, splitAlignLists, rev, contigs, fai, options);
+        if (processOverlappingLocs(vcfStream, outGroups, groups, splitAlignLists, rev, contigs, fai, options) != 0)
+            return 1;
 
     while (progress < 50)
     {
