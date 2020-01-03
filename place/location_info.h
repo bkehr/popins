@@ -117,7 +117,15 @@ loadInterval(Dna5String & refInfix, FaiIndex & fai, CharString & chrom, unsigned
     if (beginPos > endPos)
         beginPos = 0;
 
-    readRegion(refInfix, fai, idx, beginPos, endPos);
+    SEQAN_TRY
+    {
+        readRegion(refInfix, fai, idx, beginPos, endPos);
+    }
+    SEQAN_CATCH(UnexpectedEnd const &)
+    {
+        std::cout << "WARNING: Could not read region " << chrom << ":" << beginPos << "-" << endPos << " from reference genome using its FAI index." << std::endl;
+        return 1;
+    }
 
     return 0;
 }

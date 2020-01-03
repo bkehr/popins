@@ -617,7 +617,10 @@ alignsToRef(LocationInfo & loc,
 
     if (loc.loc.chrOri)
     {
-        if (loadInterval(ref, fai, loc.loc.chr, loc.loc.chrStart - options.readLength, loc.loc.chrEnd + options.maxInsertSize) != 0)
+        unsigned chrStart = loc.loc.chrStart - options.readLength;
+        if (loc.loc.chrStart < options.readLength)
+            chrStart = 0;
+        if (loadInterval(ref, fai, loc.loc.chr, chrStart, loc.loc.chrEnd + options.maxInsertSize) != 0)
             return 1;
 
         if (loc.loc.contigOri)
@@ -631,7 +634,7 @@ alignsToRef(LocationInfo & loc,
             while (align(contigGaps, refGaps, contigSuffix, ref))
             {
                 loc.insPos = length(contigIt->second) - suffixEndPos + endPosition(contigGaps);
-                loc.refPos = loc.loc.chrStart - options.readLength + endPosition(refGaps) - 1;
+                loc.refPos = chrStart + endPosition(refGaps) - 1;
 
                 if (suffixEndPos - suffixBeginPos - dist > endPosition(contigGaps))
                     return true;
@@ -661,7 +664,7 @@ alignsToRef(LocationInfo & loc,
             while (align(contigGaps, refGaps, contigPrefix, ref))
             {
                 loc.insPos = prefixBeginPos + endPosition(contigGaps);
-                loc.refPos = loc.loc.chrStart - options.readLength + endPosition(refGaps) - 1;
+                loc.refPos = chrStart + endPosition(refGaps) - 1;
 
                 if (prefixEndPos - prefixBeginPos - dist > endPosition(contigGaps))
                     return true;
@@ -683,7 +686,10 @@ alignsToRef(LocationInfo & loc,
     }
     else
     {
-        if (loadInterval(ref, fai, loc.loc.chr, loc.loc.chrStart - options.maxInsertSize, loc.loc.chrEnd + options.readLength) != 0)
+        unsigned chrStart = loc.loc.chrStart - options.maxInsertSize;
+        if (loc.loc.chrStart < options.maxInsertSize)
+             chrStart = 0;
+        if (loadInterval(ref, fai, loc.loc.chr, chrStart, loc.loc.chrEnd + options.readLength) != 0)
             return 1;
 
         if (loc.loc.contigOri)
@@ -696,7 +702,7 @@ alignsToRef(LocationInfo & loc,
             while (align(contigGaps, refGaps, contigSuffix, ref))
             {
                 loc.insPos = suffixBeginPos + beginPosition(contigGaps);
-                loc.refPos = loc.loc.chrStart + beginPosition(refGaps) - options.maxInsertSize;
+                loc.refPos = chrStart + beginPosition(refGaps);
 
                 if (beginPosition(contigGaps) > dist)
                     return true;
@@ -726,7 +732,7 @@ alignsToRef(LocationInfo & loc,
             while (align(contigGaps, refGaps, contigPrefix, ref))
             {
                 loc.insPos = length(contigIt->second) - prefixEndPos + beginPosition(contigGaps);
-                loc.refPos = loc.loc.chrStart + beginPosition(refGaps) - options.maxInsertSize;
+                loc.refPos = chrStart + beginPosition(refGaps);
 
                 if (beginPosition(contigGaps) > dist)
                     return true;
