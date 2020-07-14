@@ -166,7 +166,7 @@ int popins_contigmap(int argc, char const ** argv)
     if (!exists(indexFile))
     {
         std::ostringstream msg;
-        msg << "Indexing contigs int \'" << options.contigFile << "\'using " << BWA;
+        msg << "Indexing contigs in \'" << options.contigFile << "\' using " << BWA;
         printStatus(msg);
 
         cmd.str("");
