@@ -285,7 +285,7 @@ setupParser(ArgumentParser & parser, MergingOptions & options)
     // Setup the options.
     addSection(parser, "Input/output options");
     addOption(parser, ArgParseOption("p", "prefix", "Path to the sample directories.", ArgParseArgument::STRING, "PATH"));
-    addOption(parser, ArgParseOption("f", "contigsFileName", "Name of the contig files to looks for.", ArgParseArgument::STRING, "FASTA_FILE"));
+    addOption(parser, ArgParseOption("f", "contigsFileName", "Name of the contig files to look for.", ArgParseArgument::STRING, "FASTA_FILE"));
     addOption(parser, ArgParseOption("c", "contigs", "Name of supercontigs output file.", ArgParseArgument::OUTPUT_FILE, "FASTA_FILE"));
     addOption(parser, ArgParseOption("s", "skipped", "Write skipped contigs to a file. Default: \\fIdo not write skipped contigs\\fP", ArgParseArgument::OUTPUT_FILE, "FASTA_FILE"));
     addOption(parser, ArgParseOption("v", "verbose", "Enable verbose output of components."));
