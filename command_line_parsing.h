@@ -37,6 +37,7 @@ struct MergingOptions {
     CharString prefix;
     CharString outputFile;
     CharString skippedFile;
+    CharString contigsFileName;
     std::fstream outputStream;
     std::fstream skippedStream;
     bool verbose;
@@ -52,7 +53,7 @@ struct MergingOptions {
     double minEntropy;
 
     MergingOptions() :
-        prefix("."), outputFile("supercontigs.fa"), skippedFile(""), verbose(false),
+        prefix("."), outputFile("supercontigs.fa"), skippedFile(""), contigsFileName("contigs.fa"), verbose(false),
         errorRate(0.01), minimalLength(60), qgramLength(47), matchScore(1), errorPenalty(-5), minScore(90), minTipScore(30), minEntropy(0.75)
     {}
 };
@@ -168,6 +169,7 @@ setHiddenOptions(ArgumentParser & parser, bool hide, MergingOptions &)
    hideOption(parser, "a", hide);
    hideOption(parser, "t", hide);
    hideOption(parser, "v", hide);
+   hideOption(parser, "f", hide);
 }
 
 void
@@ -283,6 +285,7 @@ setupParser(ArgumentParser & parser, MergingOptions & options)
     // Setup the options.
     addSection(parser, "Input/output options");
     addOption(parser, ArgParseOption("p", "prefix", "Path to the sample directories.", ArgParseArgument::STRING, "PATH"));
+    addOption(parser, ArgParseOption("f", "contigsFileName", "Name of the contig files to looks for.", ArgParseArgument::STRING, "FASTA_FILE"));
     addOption(parser, ArgParseOption("c", "contigs", "Name of supercontigs output file.", ArgParseArgument::OUTPUT_FILE, "FASTA_FILE"));
     addOption(parser, ArgParseOption("s", "skipped", "Write skipped contigs to a file. Default: \\fIdo not write skipped contigs\\fP", ArgParseArgument::OUTPUT_FILE, "FASTA_FILE"));
     addOption(parser, ArgParseOption("v", "verbose", "Enable verbose output of components."));
@@ -312,6 +315,7 @@ setupParser(ArgumentParser & parser, MergingOptions & options)
     // Set default values.
     setDefaultValue(parser, "prefix", "\'.\'");
     setDefaultValue(parser, "c", options.outputFile);
+    setDefaultValue(parser, "f", options.contigsFileName);
     setDefaultValue(parser, "y", options.minEntropy);
 
     setDefaultValue(parser, "e", options.errorRate);
@@ -622,6 +626,10 @@ getOptionValues(MergingOptions & options, ArgumentParser & parser)
         getOptionValue(options.prefix, parser, "prefix");
     if (isSet(parser, "contigs"))
         getOptionValue(options.outputFile, parser, "contigs");
+
+    if (isSet(parser, "contigsFileName"))
+        getOptionValue(options.contigsFileName, parser, "contigsFileName");
+
     if (isSet(parser, "skipped"))
         getOptionValue(options.skippedFile, parser, "skipped");
     if (isSet(parser, "verbose"))
@@ -816,6 +824,12 @@ checkInput(MergingOptions & options)
 	if (options.prefix != "." && !exists(options.prefix))
 	{
 		std::cerr << "ERROR: Path to sample direcotories \'" << options.prefix << "\' does not exist." << std::endl;
+		res = ArgumentParser::PARSE_ERROR;
+	}
+
+    if (options.contigsFileName == "")
+	{
+		std::cerr << "ERROR: Name of contig files \'" << options.contigsFileName << "\' should not be empty." << std::endl;
 		res = ArgumentParser::PARSE_ERROR;
 	}
 

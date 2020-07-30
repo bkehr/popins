@@ -111,7 +111,7 @@ bool
 readInputFiles(String<Contig<TSeq> > & contigs, MergingOptions & options)
 {
    // List all files <prefix>/*/contigs.fa
-   CharString filename = "contigs.fa";
+   CharString filename = options.contigsFileName;
    String<Pair<CharString> > contigFiles = listFiles(options.prefix, filename);
 
    // Read the contig files.
