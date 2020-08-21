@@ -37,7 +37,6 @@ hasLowMappingQuality(BamAlignmentRecord & record, int humanSeqs)
     if (record.rID != record.rNextId || abs(record.beginPos - record.pNext) >= 1000 || hasFlagRC(record) == hasFlagNextRC(record))
         return true;
 
-    // Check for non-human chromosome IDs - OUT OF DATE SINCE POPINS-v1.0.1?
     if (record.rID > humanSeqs)
         return false;
 
