@@ -34,11 +34,12 @@ hasLowMappingQuality(BamAlignmentRecord & record, int humanSeqs)
     typedef Iterator<String<CigarElement<> > >::Type TIter;
 
     // Check for mapping location of other read end. If within 1000 bp and opposite orientation, accept the mapping.
-    if (record.rID == record.rNextId && abs(record.beginPos - record.pNext) < 1000 &&
-            hasFlagRC(record) != hasFlagNextRC(record))
-        return false;
+    if (record.rID != record.rNextId || abs(record.beginPos - record.pNext) >= 1000 || hasFlagRC(record) == hasFlagNextRC(record))
+        return true;
 
-    if (record.rID > humanSeqs) return false;
+    // Check for non-human chromosome IDs - OUT OF DATE SINCE POPINS-v1.0.1?
+    if (record.rID > humanSeqs)
+        return false;
 
     // Check for less than 50 bp matches ('M') in cigar string.
     unsigned matches = 0;
@@ -83,11 +84,11 @@ removeLowQuality(BamAlignmentRecord & record, TSize_ qualThresh)
     TSize windowThresh = qualThresh*windowSize;
 
     // Initialize windowQual with first windowSize quality values.
-    TSize windowQual = 0; 
+    TSize windowQual = 0;
     TIter qualEnd = end(record.qual);
     TIter windowEnd = begin(record.qual) + std::min(windowSize, length(record.qual));
     TIter windowBegin = begin(record.qual);
-    for (; windowBegin != windowEnd; ++windowBegin) 
+    for (; windowBegin != windowEnd; ++windowBegin)
         windowQual += *windowBegin - 33;
 
     // Check quality from the left.
@@ -392,7 +393,7 @@ crop_unmapped(double & avgCov,
     TFastqMap firstReads, secondReads;
     TOtherMap otherReads;
 
-    // Open the output fastq files.    
+    // Open the output fastq files.
     SeqFileOut fastqFirstStream(toCString(fastqFiles.i1));
     SeqFileOut fastqSecondStream(toCString(fastqFiles.i2));
     SeqFileOut fastqSingleStream(toCString(fastqFiles.i3));
@@ -425,6 +426,13 @@ crop_unmapped(double & avgCov,
                 appendFastqRecord(fastqFirstStream, fastqSecondStream, firstReads, secondReads, record);
         }
 
+        // Check the mate's unmapped flag. It's important to check this BEFORE testing hasLowMappingQuality(),
+        // since hasLowMappingQuality() assumes both PE reads to be mapped.
+        else if (hasFlagNextUnmapped(record))
+        {
+            writeRecord(matesStream, record);
+        }
+
         // Check for low mapping quality.
         else if (hasLowMappingQuality(record, humanSeqs))
         {
@@ -433,12 +441,6 @@ crop_unmapped(double & avgCov,
                 if (appendFastqRecord(fastqFirstStream, fastqSecondStream, firstReads, secondReads, record) == 0)
                     otherReads[Pair<TPos>(record.rNextId, record.pNext)] = Pair<CharString, bool>(record.qName, hasFlagFirst(record));
             }
-        }
-
-        // Check the mate's unmapped flag.
-        else if (hasFlagNextUnmapped(record))
-        {
-            writeRecord(matesStream, record);
         }
     }
     close(inStream);
@@ -458,7 +460,7 @@ crop_unmapped(double & avgCov,
     msg << "Unmapped reads written to " << fastqFiles.i1 << ", " << fastqFiles.i2 << ", " << fastqFiles.i3;
     printStatus(msg);
 
-    // Find the other read end of the low quality mapping reads and write them to the output bam file. 
+    // Find the other read end of the low quality mapping reads and write them to the output bam file.
     int found = findOtherReads(matesStream, otherReads, mappingBam);
     if (found == -1) return 1;
 
