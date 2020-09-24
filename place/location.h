@@ -460,7 +460,7 @@ inline bool
 readAnchoringRecord(AnchoringRecord & record,
         std::map<Triple<CharString, CharString, unsigned>, unsigned> & goodReads,
         BamFileIn & stream,
-        std::set<CharString> & chromosomes)
+        unsigned nonContigSeqs)
 {
     BamAlignmentRecord r;
     while (!atEnd(stream))
@@ -474,8 +474,7 @@ readAnchoringRecord(AnchoringRecord & record,
         if (!isGoodQuality(r, interval))
             continue;
 
-        CharString rName = getContigName(r, stream);
-        bool isContig = !isChromosome(rName, chromosomes);
+        bool isContig = ( r.rID >= static_cast<int32_t>(nonContigSeqs) ) ? true : false;
 
         if (!isContig && r.mapQ < 20)
             continue;
@@ -483,7 +482,9 @@ readAnchoringRecord(AnchoringRecord & record,
         if (isContig && distanceToContigEnd(r, interval, stream) > 500)
             continue;
 
+        CharString rName = getContigName(r, stream);
         CharString rNextName = contigNames(context(stream))[r.rNextId];
+
         Triple<CharString, CharString, unsigned> nameChrPos = Triple<CharString, CharString, unsigned>(r.qName, rNextName, r.pNext);
         if (goodReads.count(nameChrPos) == 0)
         {
@@ -556,13 +557,15 @@ listToLocs(String<Location> & locs, String<AnchoringRecord> & list, unsigned max
 // ==========================================================================
 
 int
-findLocations(String<Location> & locations, CharString & nonRefFile, std::set<CharString> & chromosomes, unsigned maxInsertSize)
+findLocations(String<Location> & locations, CharString & nonRefFile, std::set<CharString> & chromosomes, unsigned nonContigSeqs, unsigned maxInsertSize)
 {
     typedef Pair<CharString, unsigned> TContigEnd;
     typedef std::map<TContigEnd, unsigned> TMap;
     typedef TMap::iterator TMapIter;
 
     BamFileIn inStream(toCString(nonRefFile));
+
+std::cout << "nonContigSeqs=" << nonContigSeqs << std::endl;
 
     // Read the header and clear it since we don't need it.
     BamHeader header;
@@ -578,7 +581,7 @@ findLocations(String<Location> & locations, CharString & nonRefFile, std::set<Ch
     std::map<Triple<CharString, CharString, unsigned>, unsigned> goodReads; // Triple(qName, chrom, beginPos) -> alignEndPos
     while (!atEnd(inStream))
     {
-        if (readAnchoringRecord(record, goodReads, inStream, chromosomes) == 1)
+        if (readAnchoringRecord(record, goodReads, inStream, nonContigSeqs) == 1)
             break;
 
         if (record.chrOri)

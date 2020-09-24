@@ -153,114 +153,127 @@ int popins_contigmap(int argc, char const ** argv)
         return 7;
     }
 
-    // Create names of temporary files.
-    CharString mappedSam = getFileName(workingDirectory, "contig_mapped_unsorted.sam");
-    CharString mappedBamUnsorted = getFileName(workingDirectory, "contig_mapped_unsorted.bam");
-    CharString mappedBam = getFileName(workingDirectory, "contig_mapped.bam");
-    CharString mergedBam = getFileName(workingDirectory, "merged.bam");
+    unsigned nonContigSeqs = 0;
 
-    std::stringstream cmd;
+    std::ostringstream msg;
 
-    CharString indexFile = options.contigFile;
-    indexFile += ".bwt";
-    if (!exists(indexFile))
+    if (!exists(nonRefNew))
     {
-        std::ostringstream msg;
-        msg << "Indexing contigs in \'" << options.contigFile << "\' using " << BWA;
+        // Create names of temporary files.
+        CharString mappedSam = getFileName(workingDirectory, "contig_mapped_unsorted.sam");
+        CharString mappedBamUnsorted = getFileName(workingDirectory, "contig_mapped_unsorted.bam");
+        CharString mappedBam = getFileName(workingDirectory, "contig_mapped.bam");
+        CharString mergedBam = getFileName(workingDirectory, "merged.bam");
+
+        std::stringstream cmd;
+
+        CharString indexFile = options.contigFile;
+        indexFile += ".bwt";
+        if (!exists(indexFile))
+        {
+            std::ostringstream msg;
+            msg << "Indexing contigs in \'" << options.contigFile << "\' using " << BWA;
+            printStatus(msg);
+
+            cmd.str("");
+            cmd << BWA << " index " << options.contigFile;
+            if (system(cmd.str().c_str()) != 0)
+            {
+                std::cerr << "ERROR while indexing \'" << options.contigFile << "\' using " << BWA << std::endl;
+                return 7;
+            }
+        }
+
+        msg << "Mapping reads to contigs using " << BWA;
         printStatus(msg);
 
+        // Remapping to contigs with bwa.
         cmd.str("");
-        cmd << BWA << " index " << options.contigFile;
+        if (!options.bestAlignment) cmd << BWA << " mem -a ";
+        else cmd << BWA << " mem ";
+        cmd << "-t " << options.threads << " " << options.contigFile << " " << fastqFirst << " " << fastqSecond << " > " << mappedSam;
         if (system(cmd.str().c_str()) != 0)
         {
-            std::cerr << "ERROR while indexing \'" << options.contigFile << "\' using " << BWA << std::endl;
+            std::cerr << "ERROR while running bwa on " << fastqFirst << " and " << fastqSecond << std::endl;
+            return 7;
+        }
+        //remove(toCString(fastqFirst));
+        //remove(toCString(fastqSecond));
+
+        cmd.str("");
+        if (!options.bestAlignment) cmd << BWA << " mem -a ";
+        else cmd << BWA << " mem ";
+        cmd << "-t " << options.threads << " " << options.contigFile << " " << fastqSingle << " | awk '$1 !~ /@/' >> " << mappedSam;
+        if (system(cmd.str().c_str()) != 0)
+        {
+            std::cerr << "ERROR while running bwa on " << fastqSingle << std::endl;
+            return 7;
+        }
+        //remove(toCString(fastqSingle));
+
+        printStatus("Filling in sequences of secondary records in bwa output");
+
+        // Fill in sequences in bwa output.
+        if (fill_sequences(mappedBamUnsorted, mappedSam) != 0)
+        {
+            return 7;
+        }
+        remove(toCString(mappedSam));
+
+        msg.str("");
+        msg << "Sorting " << mappedBamUnsorted << " by read name using " << SAMTOOLS;
+        printStatus(msg);
+
+        // Sort <WD>/contig_mapped.bam by read name
+        cmd.str("");
+        cmd << SAMTOOLS << " sort -n -@ " << options.threads << " -m " << options.memory << " -o " << mappedBam << " " << mappedBamUnsorted;
+        if (system(cmd.str().c_str()) != 0)
+        {
+            std::cerr << "ERROR while sorting " << mappedBamUnsorted << " by read name using " << SAMTOOLS << std::endl;
+            return 7;
+        }
+        remove(toCString(mappedBamUnsorted));
+
+        // Merge non_ref.bam with contig_mapped and set the mates.
+        if (merge_and_set_mate(mergedBam, nonContigSeqs, nonRefBam, mappedBam) != 0)
+            return 7;
+
+        remove(toCString(mappedBam));
+        //remove(toCString(nonRefBam));
+
+        msg.str("");
+        msg << "Sorting " << mergedBam << " using " << SAMTOOLS;
+        printStatus(msg);
+
+        // Sort <WD>/merged.bam by beginPos, output is <WD>/non_ref.bam.
+        cmd.str("");
+        cmd << SAMTOOLS << " sort -@ " << options.threads << " -m " << options.memory << " -o " << nonRefNew << " " << mergedBam;
+        if (system(cmd.str().c_str()) != 0)
+        {
+            std::cerr << "ERROR while sorting " << mergedBam << " by beginPos using " << SAMTOOLS << std::endl;
+            return 7;
+        }
+        remove(toCString(mergedBam));
+
+        msg.str("");
+        msg << "Indexing " << nonRefNew << " by beginPos using " << SAMTOOLS;
+        printStatus(msg);
+
+        // Index <WD>/non_ref_new.bam.
+        cmd.str("");
+        cmd << SAMTOOLS << " index " << nonRefNew;
+        if (system(cmd.str().c_str()) != 0)
+        {
+            std::cerr << "ERROR while indexing " << nonRefNew << " using " << SAMTOOLS << std::endl;
             return 7;
         }
     }
-
-    std::ostringstream msg;
-    msg << "Mapping reads to contigs using " << BWA;
-    printStatus(msg);
-
-    // Remapping to contigs with bwa.
-    cmd.str("");
-    if (!options.bestAlignment) cmd << BWA << " mem -a ";
-    else cmd << BWA << " mem ";
-    cmd << "-t " << options.threads << " " << options.contigFile << " " << fastqFirst << " " << fastqSecond << " > " << mappedSam;
-    if (system(cmd.str().c_str()) != 0)
+    else
     {
-        std::cerr << "ERROR while running bwa on " << fastqFirst << " and " << fastqSecond << std::endl;
-        return 7;
-    }
-    //remove(toCString(fastqFirst));
-    //remove(toCString(fastqSecond));
-
-    cmd.str("");
-    if (!options.bestAlignment) cmd << BWA << " mem -a ";
-    else cmd << BWA << " mem ";
-    cmd << "-t " << options.threads << " " << options.contigFile << " " << fastqSingle << " | awk '$1 !~ /@/' >> " << mappedSam;
-    if (system(cmd.str().c_str()) != 0)
-    {
-        std::cerr << "ERROR while running bwa on " << fastqSingle << std::endl;
-        return 7;
-    }
-    //remove(toCString(fastqSingle));
-
-    printStatus("Filling in sequences of secondary records in bwa output");
-
-    // Fill in sequences in bwa output.
-    if (fill_sequences(mappedBamUnsorted, mappedSam) != 0)
-    {
-        return 7;
-    }
-    remove(toCString(mappedSam));
-
-    msg.str("");
-    msg << "Sorting " << mappedBamUnsorted << " by read name using " << SAMTOOLS;
-    printStatus(msg);
-
-    // Sort <WD>/contig_mapped.bam by read name
-    cmd.str("");
-    cmd << SAMTOOLS << " sort -n -@ " << options.threads << " -m " << options.memory << " -o " << mappedBam << " " << mappedBamUnsorted;
-    if (system(cmd.str().c_str()) != 0)
-    {
-        std::cerr << "ERROR while sorting " << mappedBamUnsorted << " by read name using " << SAMTOOLS << std::endl;
-        return 7;
-    }
-    remove(toCString(mappedBamUnsorted));
-
-    // Merge non_ref.bam with contig_mapped and set the mates.
-    if (merge_and_set_mate(mergedBam, nonRefBam, mappedBam) != 0)
-        return 7;
-
-    remove(toCString(mappedBam));
-    //remove(toCString(nonRefBam));
-
-    msg.str("");
-    msg << "Sorting " << mergedBam << " using " << SAMTOOLS;
-    printStatus(msg);
-
-    // Sort <WD>/merged.bam by beginPos, output is <WD>/non_ref.bam.
-    cmd.str("");
-    cmd << SAMTOOLS << " sort -@ " << options.threads << " -m " << options.memory << " -o " << nonRefNew << " " << mergedBam;
-    if (system(cmd.str().c_str()) != 0)
-    {
-        std::cerr << "ERROR while sorting " << mergedBam << " by beginPos using " << SAMTOOLS << std::endl;
-        return 7;
-    }
-    remove(toCString(mergedBam));
-
-    msg.str("");
-    msg << "Indexing " << nonRefNew << " by beginPos using " << SAMTOOLS;
-    printStatus(msg);
-
-    // Index <WD>/non_ref_new.bam.
-    cmd.str("");
-    cmd << SAMTOOLS << " index " << nonRefNew;
-    if (system(cmd.str().c_str()) != 0)
-    {
-        std::cerr << "ERROR while indexing " << nonRefNew << " using " << SAMTOOLS << std::endl;
-        return 7;
+        BamFileIn nonRefStream(toCString(nonRefBam));
+        BamHeader header;
+        readHeader(header, nonRefStream);
+        nonContigSeqs = length(contigNames(context(nonRefStream)));
     }
 
     msg.str("");
@@ -277,7 +290,7 @@ int popins_contigmap(int argc, char const ** argv)
 
     // Find anchoring locations of contigs for this individual.
     String<Location> locations;
-    findLocations(locations, nonRefNew, chromosomes, options.maxInsertSize);
+    findLocations(locations, nonRefNew, chromosomes, nonContigSeqs, options.maxInsertSize);
     scoreLocations(locations);
     if (writeLocations(locationsFile, locations) != 0) return 7;
 

@@ -322,7 +322,7 @@ compare_qName(CharString & nameA, CharString & nameB)
 // ==========================================================================
 
 bool
-merge_and_set_mate(CharString & mergedBam, CharString & nonRefBam, CharString & remappedBam)
+merge_and_set_mate(CharString & mergedBam, unsigned & nonContigSeqs, CharString & nonRefBam, CharString & remappedBam)
 {
     std::ostringstream msg;
     msg << "Merging bam files " << nonRefBam << " and " << remappedBam;
@@ -336,23 +336,25 @@ merge_and_set_mate(CharString & mergedBam, CharString & nonRefBam, CharString & 
 
     // Prepare a header for the output file.
     BamHeader outHeader;
-    FormattedFileContext<BamFileOut, Owner<> >::Type context;
-    mergeHeaders(outHeader, context, nonRefStream, remappedStream);
+    FormattedFileContext<BamFileOut, Owner<> >::Type bamContext;
+    mergeHeaders(outHeader, bamContext, nonRefStream, remappedStream);
 
     printStatus(" - writing header...");
 
     // Open the output stream and write the header.
-    FormattedFileContext<BamFileOut, Dependent<> >::Type contextDep(context);
-    BamFileOut outStream(contextDep, toCString(mergedBam));
+    FormattedFileContext<BamFileOut, Dependent<> >::Type bamContextDep(bamContext);
+    BamFileOut outStream(bamContextDep, toCString(mergedBam));
     writeHeader(outStream, outHeader);
+
+    nonContigSeqs = length(contigNames(context(nonRefStream)));
 
     printStatus(" - merging read records...");
 
     // Read the first record from each input file. Correct ids in records from remappedStreams for new header.
     BamAlignmentRecord record1, record2;
-    if (!atEnd(nonRefStream)) readRecordAndCorrectRIds(record1, nonRefStream, contigNamesCache(contextDep));
+    if (!atEnd(nonRefStream)) readRecordAndCorrectRIds(record1, nonRefStream, contigNamesCache(bamContextDep));
     else record1.qName = "*";
-    if (!atEnd(remappedStream)) readRecordAndCorrectRIds(record2, remappedStream, contigNamesCache(contextDep));
+    if (!atEnd(remappedStream)) readRecordAndCorrectRIds(record2, remappedStream, contigNamesCache(bamContextDep));
     else record2.qName = "*";
 
     // Iterate both input files, set mate positions in pairs, and write all records to the output file.
@@ -361,7 +363,7 @@ merge_and_set_mate(CharString & mergedBam, CharString & nonRefBam, CharString & 
         while ((compare_qName(record2.qName, record1.qName) < 0 || record1.qName == "*") && record2.qName != "*")
         {
             writeRecord(outStream, record2);
-            if (!atEnd(remappedStream)) readRecordAndCorrectRIds(record2, remappedStream, contigNamesCache(contextDep));
+            if (!atEnd(remappedStream)) readRecordAndCorrectRIds(record2, remappedStream, contigNamesCache(bamContextDep));
             else record2.qName = "*";
         }
 
@@ -372,19 +374,19 @@ merge_and_set_mate(CharString & mergedBam, CharString & nonRefBam, CharString & 
             setMates(record1, record2);
             writeRecord(outStream, record1);
             writeRecord(outStream, record2);
-            if (!atEnd(remappedStream)) readRecordAndCorrectRIds(record2, remappedStream, contigNamesCache(contextDep));
+            if (!atEnd(remappedStream)) readRecordAndCorrectRIds(record2, remappedStream, contigNamesCache(bamContextDep));
             else record2.qName = "*";
         }
         if (incr1)
         {
-            if (!atEnd(nonRefStream)) readRecordAndCorrectRIds(record1, nonRefStream, contigNamesCache(contextDep));
+            if (!atEnd(nonRefStream)) readRecordAndCorrectRIds(record1, nonRefStream, contigNamesCache(bamContextDep));
             else record1.qName = "*";
         }
 
         while ((compare_qName(record1.qName, record2.qName) < 0 || record2.qName == "*") && record1.qName != "*")
         {
             writeRecord(outStream, record1);
-            if (!atEnd(nonRefStream)) readRecordAndCorrectRIds(record1, nonRefStream, contigNamesCache(contextDep));
+            if (!atEnd(nonRefStream)) readRecordAndCorrectRIds(record1, nonRefStream, contigNamesCache(bamContextDep));
             else record1.qName = "*";
         }
     }
@@ -591,7 +593,8 @@ int popins_assemble(int argc, char const ** argv)
                 return 7;
 
             // Set the mate's location and merge non_ref.bam and remapped.bam into a single file.
-            if (merge_and_set_mate(nonRefBam, nonRefBamTemp, remappedBam) != 0) return 7;
+            unsigned nonContigSeqs;
+            if (merge_and_set_mate(nonRefBam, nonContigSeqs, nonRefBamTemp, remappedBam) != 0) return 7;
             remove(toCString(remappedBam));
             remove(toCString(nonRefBamTemp));
         }
@@ -678,8 +681,9 @@ int popins_assemble(int argc, char const ** argv)
                         options.humanSeqs, options.threads, options.memory, prefix) != 0)
                     return 7;
 
-                // Set the mate's location and merge non_ref.bam and remapped.bam into a single file.
-                if (merge_and_set_mate(nonRefMPBam, nonRefBamMPTemp, remappedMPBam) != 0)
+                // Set the mate's location and merge non_ref.bam and remapped.bam into a single file
+                unsigned nonContigSeqs;
+                if (merge_and_set_mate(nonRefMPBam, nonContigSeqs, nonRefBamMPTemp, remappedMPBam) != 0)
                     return 7;
                 remove(toCString(remappedMPBam));
                 remove(toCString(nonRefBamMPTemp));
