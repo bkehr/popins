@@ -77,6 +77,7 @@ initVcf(TStream & vcfStream, PlacingOptions<TTag> & options, FaiIndex & fai)
 
     vcfStream << "##FORMAT=<ID=GT,Number=1,Type=String,Description=\"Genotype\">" << std::endl;
     vcfStream << "##FORMAT=<ID=PL,Number=G,Type=Integer,Description=\"PHRED-scaled genotype likelihoods\">" << std::endl;
+    vcfStream << "##FORMAT=<ID=GQ,Number=1,Type=Integer,Description=\"Genotype Quality\">" << std::endl;
 
     vcfStream << "#CHROM" << "\t" << "POS" << "\t" << "ID" << "\t" << "REF" << "\t" << "ALT";
     vcfStream << "\t" << "QUAL" << "\t" << "FILTER" << "\t" << "INFO" << std::endl;

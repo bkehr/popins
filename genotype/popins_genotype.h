@@ -4,12 +4,22 @@
 #include "../popins_utils.h"
 #include "../command_line_parsing.h"
 #include "variant_caller.h"
+#include <algorithm>    // std::sort
 
 using namespace seqan;
 
 // ==========================================================================
 
 #define LL_THRESHOLD -25.5
+
+int phredLikelihoodsToGenotypeQuality(const int phr0, const int phr1, const int phr2){
+    int pl[] = {phr0, phr1, phr2};
+    int n = sizeof(pl)/sizeof(pl[0]);
+    std::sort(pl, pl+n);
+
+    const int pq = pl[1] - pl[0];
+    return pq;
+}
 
 void
 probsToGtString(std::vector<double> & probs, std::string & gtString)
@@ -42,7 +52,7 @@ probsToGtString(std::vector<double> & probs, std::string & gtString)
     int phr0 = int( -10*lp0 );
     int phr1 = int( -10*lp1 );
     int phr2 = int( -10*lp2 );
-    buff  << phr0 << "," << phr1 << "," << phr2;
+    buff  << phr0 << "," << phr1 << "," << phr2 << ":" << phredLikelihoodsToGenotypeQuality(phr0,phr1,phr2);
     gtString = buff.str();
 }
 
@@ -150,7 +160,7 @@ popins_genotype(int argc, char const ** argv)
         std::string gtString;
         probsToGtString(vC, gtString);
         appendValue(record.genotypeInfos, gtString);
-        record.format = "GT:PL";
+        record.format = "GT:PL:GQ";
         writeRecord(vcfOut, record);
     }
 
