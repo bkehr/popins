@@ -74,6 +74,7 @@ initVcf(TStream & vcfStream, PlacingOptions<TTag> & options, FaiIndex & fai)
     vcfStream << "##INFO=<ID=AR,Number=1,Type=Integer,Description=\"Number of anchoring read pairs.\">" << std::endl;
     vcfStream << "##INFO=<ID=AS,Number=1,Type=Float,Description=\"Anchoring score.\">" << std::endl;
     vcfStream << "##INFO=<ID=GS,Number=1,Type=Integer,Description=\"Number of contigs in the contig group.\">" << std::endl;
+    vcfStream << "##INFO=<ID=NOANCHOR,Number=0,Type=Flag,Description=\"Absence of anchoring read pairs for contig end.\">" << std::endl;
 
     vcfStream << "##FORMAT=<ID=GT,Number=1,Type=String,Description=\"Genotype\">" << std::endl;
     vcfStream << "##FORMAT=<ID=PL,Number=G,Type=Integer,Description=\"PHRED-scaled genotype likelihoods\">" << std::endl;
