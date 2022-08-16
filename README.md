@@ -1,4 +1,4 @@
-![#f03c15](https://via.placeholder.com/15/f03c15/000000?text=+) __Please note that we have published a more scalable successor of PopIns with a new merging step: [PopIns2](https://github.com/kehrlab/PopIns2).__
+__Please note that we have published a more scalable successor of PopIns with a new merging step: [PopIns2](https://github.com/kehrlab/PopIns2).__
 
 popins
 ======
